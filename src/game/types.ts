@@ -185,3 +185,20 @@ export interface GameState {
   powerSupply: number;
   powerDemand: number;
 }
+
+export interface BlueprintItem {
+  type: BuildingId;
+  dx: number;
+  dy: number;
+  dir: Dir;
+  recipe?: string | null;
+  threshold?: number;
+  ratio?: number;
+}
+
+export interface Blueprint {
+  name: string;
+  w: number;
+  h: number;
+  items: BlueprintItem[];
+}

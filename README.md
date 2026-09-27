@@ -47,6 +47,14 @@ You are KORA, the ship AI. The crash left exactly one working industrial 3D prin
 Seven orders unlock buildings and recipes step by step. The last one is the ship itself:
 30 hull plates, 6 engines, 4 nav computers, 14 fuel cells, 6 life-support modules.
 
+### Tools
+
+* **Blueprints:** ⧉ then drag a rectangle to copy buildings (with recipes and settings), tap to paste, ⟳ to rotate, 💾 to save into the blueprint library (menu).
+* **Time:** ⏸ pause and ⏩ 1×/2×/3× (Space, F).
+* **Throughput calculator:** open any item's production chain and pick a target rate; it lists how many miners and machines each step needs, including your upgrades and belt capacity warnings.
+* **Undo:** ↶ removes the last placement or a whole belt drag (Z).
+* **Save transfer:** menu → export/import as code or file to move a game between devices.
+
 ### Controls
 
 * **Touch:** tap to place / select, drag to pan (or to lay belts when the conveyor is selected), pinch to zoom, long-press a building to select it.

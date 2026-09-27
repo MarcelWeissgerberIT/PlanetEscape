@@ -1,10 +1,10 @@
 import { TILE } from './camera';
 import { BUILDINGS } from './data';
 import type { Renderer } from './render';
-import type { Sim } from './sim';
-import type { Building, BuildingId, Dir } from './types';
+import { Sim } from './sim';
+import type { Blueprint, Building, BuildingId, Dir } from './types';
 
-export type Tool = { kind: 'none' } | { kind: 'build'; type: BuildingId } | { kind: 'delete' };
+export type Tool = { kind: 'none' } | { kind: 'build'; type: BuildingId } | { kind: 'delete' } | { kind: 'select' } | { kind: 'paste'; bp: Blueprint };
 
 export interface InputCallbacks {
   onPlace: (type: BuildingId, x: number, y: number, dir: Dir) => boolean;
@@ -16,6 +16,10 @@ export interface InputCallbacks {
   onRotateKey: () => void;
   onSelectTile: (x: number, y: number) => void;
   onUndo: () => void;
+  onAreaSelected: (x0: number, y0: number, x1: number, y1: number) => void;
+  onPaste: (bp: Blueprint, x: number, y: number) => void;
+  onTogglePause: () => void;
+  onCycleSpeed: () => void;
 }
 
 interface PointerInfo {
@@ -47,6 +51,7 @@ export class Input {
   private lastTap: { x: number; y: number; t: number } | null = null;
   private lastTouch = -1e9;
   private lastPointerType = 'mouse';
+  private selStart: [number, number] | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -73,6 +78,12 @@ export class Input {
   }
 
   rotate() {
+    if (this.tool.kind === 'paste') {
+      this.tool = { kind: 'paste', bp: Sim.rotateBlueprint(this.tool.bp) };
+      this.cb.onToolChange(this.tool);
+      this.updateGhost();
+      return;
+    }
     this.dir = ((this.dir + 1) & 3) as Dir;
     this.updateGhost();
   }
@@ -88,11 +99,24 @@ export class Input {
         this.cb.onRotateKey();
         break;
       case 'escape':
+        this.selStart = null;
+        this.renderer.selectRect = null;
         this.setTool({ kind: 'none' });
         this.cb.onSelect(null);
         break;
       case 'z':
         this.cb.onUndo();
+        break;
+      case 'c':
+        this.setTool(this.tool.kind === 'select' ? { kind: 'none' } : { kind: 'select' });
+        break;
+      case ' ':
+        e.preventDefault();
+        this.cb.onTogglePause();
+        break;
+      case '+':
+      case 'f':
+        this.cb.onCycleSpeed();
         break;
       case 'x':
       case 'delete':
@@ -133,6 +157,10 @@ export class Input {
       return;
     }
     this.dragging = true;
+    if (this.tool.kind === 'select' && e.button === 0) {
+      this.selStart = this.cam.screenToTile(e.clientX, e.clientY);
+      this.renderer.selectRect = { x0: this.selStart[0], y0: this.selStart[1], x1: this.selStart[0], y1: this.selStart[1] };
+    }
     if (this.tool.kind === 'build' && this.tool.type === 'conveyor' && e.button === 0) {
       this.layingBelts = true;
       this.lastBeltTile = this.cam.screenToTile(e.clientX, e.clientY);
@@ -185,7 +213,11 @@ export class Input {
       this.updateGhost();
       return;
     }
-    const panButton = p.button === 1 || p.button === 2 || this.tool.kind === 'none' || (this.tool.kind === 'build' && this.tool.type !== 'conveyor') || this.tool.kind === 'delete';
+    if (this.tool.kind === 'select' && this.selStart && p.button === 0) {
+      this.renderer.selectRect = { x0: this.selStart[0], y0: this.selStart[1], x1: this.hoverTile[0], y1: this.hoverTile[1] };
+      return;
+    }
+    const panButton = p.button === 1 || p.button === 2 || this.tool.kind === 'none' || (this.tool.kind === 'build' && this.tool.type !== 'conveyor') || this.tool.kind === 'delete' || this.tool.kind === 'paste';
     if (panButton && this.moved) {
       this.renderer.cancelPan();
       this.cam.x -= dx / this.cam.zoom;
@@ -213,6 +245,15 @@ export class Input {
       this.dragging = false;
       this.layingBelts = false;
       this.lastBeltTile = null;
+      return;
+    }
+    if (this.tool.kind === 'select' && this.selStart) {
+      const [tx, ty] = this.cam.screenToTile(e.clientX, e.clientY);
+      const [sx, sy] = this.selStart;
+      this.selStart = null;
+      this.renderer.selectRect = null;
+      this.dragging = false;
+      this.cb.onAreaSelected(sx, sy, tx, ty);
       return;
     }
     const wasDragging = this.dragging;
@@ -254,6 +295,13 @@ export class Input {
         if (b) this.cb.onSelect(b);
         else if (this.sim.inBounds(tx, ty)) this.cb.onSelectTile(tx, ty);
         break;
+      case 'select':
+        break;
+      case 'paste': {
+        const bp = this.tool.bp;
+        this.cb.onPaste(bp, tx - Math.floor(bp.w / 2), ty - Math.floor(bp.h / 2));
+        break;
+      }
       case 'delete':
         if (b && b.type !== 'core') this.cb.onRemove(b);
         break;
@@ -313,6 +361,18 @@ export class Input {
   }
 
   updateGhost() {
+    if (this.tool.kind === 'paste') {
+      this.renderer.ghost = null;
+      if (!this.hoverTile) {
+        this.renderer.pasteGhost = null;
+        return;
+      }
+      const bp = this.tool.bp;
+      const x = this.hoverTile[0] - Math.floor(bp.w / 2), y = this.hoverTile[1] - Math.floor(bp.h / 2);
+      this.renderer.pasteGhost = { bp, x, y, bad: this.sim.pasteErrors(bp, x, y) };
+      return;
+    }
+    this.renderer.pasteGhost = null;
     if (this.tool.kind !== 'build' || !this.hoverTile) {
       this.renderer.ghost = null;
       return;

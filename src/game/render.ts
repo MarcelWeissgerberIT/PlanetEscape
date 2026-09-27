@@ -2,7 +2,7 @@ import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
 import { BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import type { Sim } from './sim';
-import type { Building, BuildingId, Dir, ItemId } from './types';
+import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
 
 export interface Ghost {
@@ -37,6 +37,9 @@ export class Renderer {
   ghost: Ghost | null = null;
   selected: Building | null = null;
   selectedTile: { x: number; y: number } | null = null;
+  selectRect: { x0: number; y0: number; x1: number; y1: number } | null = null;
+  pasteGhost: { bp: Blueprint; x: number; y: number; bad: Set<number> } | null = null;
+  paused = false;
   deleteMode = false;
   overlay = false;
   ping: { x: number; y: number; w: number; h: number } | null = null;
@@ -149,7 +152,7 @@ export class Renderer {
   // ---------- Frame ----------
 
   draw(dt: number) {
-    this.time += dt;
+    if (!this.paused) this.time += dt;
     const { ctx, cam } = this;
     if (this.panTarget) {
       const k = Math.min(1, dt * 9);
@@ -229,6 +232,18 @@ export class Renderer {
     this.drawParticles(dt);
 
     if (this.ghost) this.drawGhost(this.ghost);
+    if (this.pasteGhost) this.drawPasteGhost(this.pasteGhost);
+    if (this.selectRect) {
+      const r = this.selectRect;
+      const x0 = Math.min(r.x0, r.x1), y0 = Math.min(r.y0, r.y1), x1 = Math.max(r.x0, r.x1), y1 = Math.max(r.y0, r.y1);
+      ctx.fillStyle = 'rgba(192,132,252,0.15)';
+      ctx.fillRect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE);
+      ctx.strokeStyle = '#c084fc';
+      ctx.lineWidth = 2 / cam.zoom;
+      ctx.setLineDash([8 / cam.zoom, 6 / cam.zoom]);
+      ctx.strokeRect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE);
+      ctx.setLineDash([]);
+    }
 
     if (this.selected) {
       const b = this.selected;
@@ -702,6 +717,24 @@ export class Renderer {
     ctx.lineWidth = 2;
     ctx.strokeRect(g.x * TILE + 1, g.y * TILE + 1, sz - 2, sz - 2);
     if (def.rotatable && g.type !== 'solar') this.drawArrow({ id: -1, type: g.type, x: g.x, y: g.y, dir: g.dir }, g.dir, g.valid ? '#22d3ee' : '#ef4444');
+  }
+
+  private drawPasteGhost(g: { bp: Blueprint; x: number; y: number; bad: Set<number> }) {
+    const { ctx } = this;
+    g.bp.items.forEach((i, idx) => {
+      const valid = !g.bad.has(idx);
+      const fake: Building = { id: -1, type: i.type, x: g.x + i.dx, y: g.y + i.dy, dir: i.dir, items: [], pair: 1 };
+      ctx.globalAlpha = 0.6;
+      if (i.type === 'conveyor' || i.type === 'tunnel') this.drawBelt(fake);
+      else this.drawBuilding(fake, 0.6);
+      ctx.globalAlpha = 1;
+      const sz = BUILDINGS[i.type].size * TILE;
+      ctx.fillStyle = valid ? 'rgba(192,132,252,0.15)' : 'rgba(239,68,68,0.35)';
+      ctx.fillRect(fake.x * TILE, fake.y * TILE, sz, sz);
+    });
+    ctx.strokeStyle = '#c084fc';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(g.x * TILE, g.y * TILE, g.bp.w * TILE, g.bp.h * TILE);
   }
 
   // ---------- Overlay (scan mode) ----------

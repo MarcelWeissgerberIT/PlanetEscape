@@ -26,6 +26,8 @@ body { position: fixed; inset: 0; -webkit-user-select: none; user-select: none; 
 #game { position: absolute; inset: 0; display: block; touch-action: none; }
 #ui { position: absolute; inset: 0; pointer-events: none; }
 #ui > * { pointer-events: auto; }
+#ui > .hud-top, #ui > .hud-bottom, #ui > .toasts { pointer-events: none; }
+#ui > .hud-top > *, #ui > .hud-bottom > * > * { pointer-events: auto; }
 .hidden { display: none !important; }
 
 img { -webkit-user-drag: none; }
@@ -120,7 +122,8 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .inv-item { display: inline-flex; align-items: center; gap: 3px; font-size: 12px; white-space: nowrap; }
 .inv-item b { font-variant-numeric: tabular-nums; }
 .inv-empty { color: var(--muted); font-size: 12px; }
-.build-row { display: flex; align-items: stretch; gap: 6px; padding: 0 8px 8px; }
+.build-row { display: flex; align-items: stretch; gap: 6px; padding: 0 8px 8px; pointer-events: none; }
+.build-row > * { pointer-events: auto; }
 .build-bar {
   flex: 1; display: flex; gap: 6px; overflow-x: auto; padding: 6px; scrollbar-width: none; scroll-snap-type: x proximity;
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
@@ -141,7 +144,8 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .build-btn.active { border-color: var(--accent); background: rgba(34, 211, 238, 0.15); }
 .build-btn.locked { opacity: 0.4; filter: grayscale(1); }
 .build-btn.poor:not(.locked) img { opacity: 0.55; }
-.tool-col { display: flex; flex-direction: column; gap: 6px; justify-content: center; }
+.tool-col { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; align-content: center; }
+.tool-col .iconbtn.big { width: 46px; height: 46px; font-size: 20px; }
 
 /* ---------- Info panel ---------- */
 .info-panel {
@@ -337,7 +341,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .btn.mode.primary small { color: rgba(6, 32, 42, 0.8); }
 .title-buttons .menu-row { font-size: 13px; }
 
-.tool-chip { position: absolute; top: calc(var(--sat) + 8px); left: 50%; transform: translateX(-50%); z-index: 22; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border-radius: 999px; background: rgba(34, 211, 238, 0.16); border: 1px solid var(--accent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 12px; white-space: nowrap; max-width: calc(100% - 24px); }
+.tool-chip { position: absolute; top: calc(var(--sat) + 60px); left: 50%; transform: translateX(-50%); z-index: 22; display: flex; align-items: center; gap: 8px; padding: 6px 8px 6px 6px; border-radius: 999px; background: rgba(34, 211, 238, 0.16); border: 1px solid var(--accent); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); font-size: 12px; white-space: nowrap; max-width: calc(100% - 24px); }
 .tool-chip img { width: 26px; height: 26px; border-radius: 6px; }
 .tool-chip .x { width: 26px; height: 26px; border-radius: 50%; background: var(--accent); color: #06202a; display: inline-flex; align-items: center; justify-content: center; font-weight: 800; }
 .iconbtn.dim { opacity: 0.35; }
@@ -346,3 +350,14 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 @media (max-width: 899px) { .tool-chip { top: auto; bottom: calc(154px + var(--sab)); font-size: 11px; } .info-panel:not(.hidden) ~ .tool-chip { display: none; } }
 .mrow.more { color: var(--accent); font-size: 11px; }
 @media (max-width: 899px) { .kora-card .mtext { display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; } }
+
+.tool-chip .mini { width: 28px; height: 28px; border-radius: 50%; background: rgba(255,255,255,0.12); display: inline-flex; align-items: center; justify-content: center; font-size: 15px; }
+.tool-chip .cost { display: inline-flex; align-items: center; gap: 1px; margin-left: 3px; font-size: 11px; }
+.tool-chip .cost.short { color: #fca5a5; }
+.tree-row .rate { color: var(--accent); font-weight: 700; font-size: 12px; }
+.tree-row .need { color: var(--accent-2); font-size: 12px; font-weight: 600; }
+.tree-row .need.ok { color: var(--ok); }
+.tree-row.warn { color: #fbbf24; font-size: 12px; border-left-color: #fbbf24; }
+textarea#importbox { width: 100%; font: 12px ui-monospace, Menlo, monospace; background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 6px 0; resize: vertical; }
+label.btn { text-align: center; }
+.iconbtn.speed { font-size: 14px; font-weight: 800; }

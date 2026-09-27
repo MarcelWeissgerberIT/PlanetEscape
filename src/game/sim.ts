@@ -22,7 +22,7 @@ import {
   MIXER_RATIOS,
   recipesFor,
 } from './data';
-import type { Building, BuildingId, Contract, Dir, GameState, ItemId, RecipeDef, Status, UpgradeId } from './types';
+import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, GameState, ItemId, RecipeDef, Status, UpgradeId } from './types';
 import { DX, DY } from './types';
 
 export type SimEvent =
@@ -827,6 +827,85 @@ export class Sim {
       }
     }
     b.status = 'blocked';
+  }
+
+  // ---------- Blueprints ----------
+
+  /** Copy every building whose top-left lies inside the tile rectangle (core excluded). */
+  capture(x0: number, y0: number, x1: number, y1: number, name = ''): Blueprint | null {
+    const minX = Math.min(x0, x1), maxX = Math.max(x0, x1), minY = Math.min(y0, y1), maxY = Math.max(y0, y1);
+    const items: BlueprintItem[] = [];
+    for (const b of this.state.buildings) {
+      if (b.type === 'core') continue;
+      const s = BUILDINGS[b.type].size;
+      if (b.x < minX || b.y < minY || b.x + s - 1 > maxX || b.y + s - 1 > maxY) continue;
+      items.push({ type: b.type, dx: b.x - minX, dy: b.y - minY, dir: b.dir, recipe: b.recipe ?? null, threshold: b.threshold, ratio: b.ratio });
+    }
+    if (!items.length) return null;
+    // normalise to the bounding box of the copied buildings
+    const bx = Math.min(...items.map((i) => i.dx)), by = Math.min(...items.map((i) => i.dy));
+    for (const i of items) {
+      i.dx -= bx;
+      i.dy -= by;
+    }
+    const w = Math.max(...items.map((i) => i.dx + BUILDINGS[i.type].size));
+    const h = Math.max(...items.map((i) => i.dy + BUILDINGS[i.type].size));
+    return { name, w, h, items };
+  }
+
+  static rotateBlueprint(bp: Blueprint): Blueprint {
+    return {
+      name: bp.name,
+      w: bp.h,
+      h: bp.w,
+      items: bp.items.map((i) => {
+        const s = BUILDINGS[i.type].size;
+        return { ...i, dx: bp.h - i.dy - s, dy: i.dx, dir: (BUILDINGS[i.type].rotatable ? ((i.dir + 1) & 3) : 0) as Dir };
+      }),
+    };
+  }
+
+  static blueprintCost(bp: Blueprint): Partial<Record<ItemId, number>> {
+    const cost: Partial<Record<ItemId, number>> = {};
+    for (const i of bp.items) for (const k in BUILDINGS[i.type].cost) cost[k as ItemId] = (cost[k as ItemId] ?? 0) + BUILDINGS[i.type].cost[k as ItemId]!;
+    return cost;
+  }
+
+  /** Place a blueprint with its top-left at (x,y). Returns how many buildings were placed / skipped. */
+  paste(bp: Blueprint, x: number, y: number): { placed: Building[]; skipped: number; reason: string | null } {
+    const placed: Building[] = [];
+    let skipped = 0;
+    let reason: string | null = null;
+    // belts first so machines find their outputs, then everything else in reading order
+    const order = [...bp.items].sort((a, b) => (a.type === 'conveyor' ? 0 : 1) - (b.type === 'conveyor' ? 0 : 1));
+    for (const i of order) {
+      const err = this.placementError(i.type, x + i.dx, y + i.dy);
+      if (err) {
+        skipped++;
+        if (err === 'err_cost' || !reason) reason = err;
+        continue;
+      }
+      const b = this.place(i.type, x + i.dx, y + i.dy, i.dir);
+      if (!b) {
+        skipped++;
+        continue;
+      }
+      if (i.recipe !== undefined) b.recipe = i.recipe ?? null;
+      if (i.threshold !== undefined) b.threshold = i.threshold;
+      if (i.ratio !== undefined) b.ratio = i.ratio;
+      placed.push(b);
+    }
+    return { placed, skipped, reason };
+  }
+
+  /** Can the whole blueprint be placed here? Used for the ghost colouring. */
+  pasteErrors(bp: Blueprint, x: number, y: number): Set<number> {
+    const bad = new Set<number>();
+    bp.items.forEach((i, idx) => {
+      const err = this.placementError(i.type, x + i.dx, y + i.dy);
+      if (err && err !== 'err_cost') bad.add(idx);
+    });
+    return bad;
   }
 
   // ---------- Diagnostics ----------

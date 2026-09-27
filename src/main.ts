@@ -6,7 +6,7 @@ import { Renderer } from './game/render';
 import * as Save from './game/save';
 import { sfx } from './game/sfx';
 import { Sim } from './game/sim';
-import type { GameState, TerrainId } from './game/types';
+import type { Blueprint, GameState, TerrainId } from './game/types';
 import { levelState, newGame } from './game/world';
 import { t } from './i18n';
 import { Hud } from './ui/hud';
@@ -50,9 +50,14 @@ const cbs = {
   onRotateKey: () => hud.rotateSelected(),
   onSelectTile: (x: number, y: number) => hud.selectTile(x, y),
   onUndo: () => hud.undo(),
+  onAreaSelected: (x0: number, y0: number, x1: number, y1: number) => hud.areaSelected(x0, y0, x1, y1),
+  onPaste: (bp: Blueprint, x: number, y: number) => hud.pasteBlueprint(bp, x, y),
+  onTogglePause: () => hud.togglePause(),
+  onCycleSpeed: () => hud.cycleSpeed(),
 };
 
 let input = new Input(canvas, sim, renderer, cbs);
+let speed = 1;
 
 const hud = new Hud(sim, input, renderer, {
   onNewGame: (seed, options) => {
@@ -71,6 +76,16 @@ const hud = new Hud(sim, input, renderer, {
   },
   onSave: () => Save.save(sim.state),
   onCenter: () => renderer.centerOnCore(),
+  onSpeed: (sp: number) => {
+    speed = sp;
+    renderer.paused = sp === 0;
+  },
+  getSpeed: () => speed,
+  onImport: (state: GameState) => {
+    swapState(state);
+    Save.save(sim.state);
+    start();
+  },
 });
 
 // Debug / automation hook (used by the smoke test).
@@ -111,11 +126,13 @@ function frame(now: number) {
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
   if (playing) {
-    acc += dt;
-    while (acc >= STEP) {
+    acc += dt * speed;
+    let guard = 0;
+    while (acc >= STEP && guard++ < 12) {
       sim.tick(STEP);
       acc -= STEP;
     }
+    if (speed === 0) acc = 0;
     for (const ev of sim.events) {
       switch (ev.type) {
         case 'mission': hud.missionComplete(ev.index); break;

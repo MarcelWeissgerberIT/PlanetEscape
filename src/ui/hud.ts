@@ -1,18 +1,21 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
-import { BUILDINGS, BUILD_ORDER, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_ORDER, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
-import type { Problem, Sim } from '../game/sim';
+import { Sim, type Problem } from '../game/sim';
 import { setSound, sfx, soundEnabled } from '../game/sfx';
-import type { Building, BuildingId, Contract, Dir, GameOptions, ItemId, UpgradeId } from '../game/types';
+import type { Blueprint, Building, BuildingId, Contract, Dir, GameOptions, GameState, ItemId, UpgradeId } from '../game/types';
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
-import { hasSave } from '../game/save';
+import { hasSave, load as loadSave } from '../game/save';
 
 export interface HudCallbacks {
   onNewGame: (seed: number | undefined, options: GameOptions) => void;
   onContinue: () => void;
   onNextLevel: () => void;
+  onSpeed: (speed: number) => void;
+  getSpeed: () => number;
+  onImport: (state: GameState) => void;
   onSave: () => void;
   onCenter: () => void;
 }
@@ -69,6 +72,8 @@ export class Hud {
   private minimapOpen = window.innerWidth > 900;
   private panelOpenedAt = 0;
   private undoStack: { id: number; t: number }[] = [];
+  private clipboard: Blueprint | null = null;
+  private chainRate = 10;
   toolChip: HTMLElement;
 
   constructor(
@@ -93,7 +98,12 @@ export class Hud {
     this.minimapBox.append(this.minimap);
     this.toolChip = el('div', 'tool-chip hidden');
     this.root.append(this.title, this.story, this.top, this.bottom, this.info, this.floating, this.minimapBox, this.toolChip, this.modal, this.toasts);
-    this.toolChip.onclick = () => this.input.setTool({ kind: 'none' });
+    this.toolChip.onclick = (e) => {
+      const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+      if (b?.dataset.act === 'rot') this.input.rotate();
+      else if (b?.dataset.act === 'save') this.saveClipboard();
+      else this.input.setTool({ kind: 'none' });
+    };
     this.renderTitle();
     this.renderBottom();
     this.renderTop();
@@ -410,6 +420,8 @@ export class Hud {
           <div class="pbar"><div class="pfill" style="width:${ratio * 100}%"></div></div>
         </div>
         <button class="pill ${nProblems ? 'warn' : 'ok'}" data-act="diag">${nProblems ? `⚠ ${nProblems}` : '✓'}</button>
+        <button class="iconbtn ${this.cb.getSpeed() === 0 ? 'active' : ''}" data-act="pause" title="${t('pause')} (Space)">${this.cb.getSpeed() === 0 ? '▶' : '⏸'}</button>
+        <button class="iconbtn speed ${this.cb.getSpeed() > 1 ? 'active' : ''}" data-act="speed" title="${t('speed')} (F)">${this.cb.getSpeed() > 1 ? this.cb.getSpeed() + '×' : '⏩'}</button>
         <button class="iconbtn ${this.renderer.overlay ? 'active' : ''}" data-act="overlay" title="${t('overlay')}">◎</button>
         <button class="iconbtn ${openContracts ? 'badge' : ''}" data-act="contracts" title="${t('contracts')}" data-badge="${openContracts}">📋</button>
         <button class="iconbtn" data-act="upgrades" title="${t('upgrades')}">⬆</button>
@@ -425,6 +437,8 @@ export class Hud {
       if (!target) return;
       const act = target.dataset.act;
       if (act === 'missions') this.showMissions();
+      else if (act === 'pause') this.togglePause();
+      else if (act === 'speed') this.cycleSpeed();
       else if (act === 'menu') this.showMenu();
       else if (act === 'center') this.cb.onCenter();
       else if (act === 'diag') this.showDiagnostics();
@@ -480,6 +494,7 @@ export class Hud {
           <button class="iconbtn big" data-act="rotate" title="${t('rotate')} (R)">⟳</button>
           <button class="iconbtn big ${delActive ? 'danger-active' : ''}" data-act="delete" title="${t('delete')} (X)">✕</button>
           <button class="iconbtn big ${this.undoStack.length ? '' : 'dim'}" data-act="undo" title="${t('undo')} (Z)">↶</button>
+          <button class="iconbtn big ${this.tool.kind === 'select' ? 'active' : ''}" data-act="copy" title="${t('copy')} (C)">⧉</button>
         </div>
       </div>`;
     if (bottomHtml === this.lastBottomHtml) return;
@@ -510,6 +525,14 @@ export class Hud {
         this.rotateSelected();
       } else if (act === 'undo') {
         this.undo();
+      } else if (act === 'copy') {
+        if (this.tool.kind === 'select') this.input.setTool({ kind: 'none' });
+        else if (this.clipboard && this.tool.kind !== 'paste') this.showBlueprints();
+        else {
+          this.input.setTool({ kind: 'select' });
+          this.selectBuilding(null);
+          this.toast(t('select_hint'), 3000);
+        }
       } else if (act === 'delete') {
         this.input.setTool(delActive ? { kind: 'none' } : { kind: 'delete' });
         if (!delActive) this.toast(t('delete_mode'), 2500);
@@ -547,7 +570,124 @@ export class Hud {
     } else if (tool.kind === 'delete') {
       this.toolChip.innerHTML = `<span>${t('delete_mode')}</span><span class="x">✕</span>`;
       this.toolChip.classList.remove('hidden');
+    } else if (tool.kind === 'select') {
+      this.toolChip.innerHTML = `<span>⧉ ${t('select_hint')}</span><span class="x">✕</span>`;
+      this.toolChip.classList.remove('hidden');
+    } else if (tool.kind === 'paste') {
+      const cost = Sim.blueprintCost(tool.bp);
+      this.toolChip.innerHTML = `<span>⧉ <b>${tool.bp.name || t('blueprint')}</b> · ${tool.bp.items.length} · ${costHtml(cost, this.sim.state.inventory)}</span><button class="mini" data-act="rot">⟳</button><button class="mini" data-act="save">💾</button><span class="x">✕</span>`;
+      this.toolChip.classList.remove('hidden');
     } else this.toolChip.classList.add('hidden');
+  }
+
+  // ---------- Blueprints ----------
+
+  areaSelected(x0: number, y0: number, x1: number, y1: number) {
+    const bp = this.sim.capture(x0, y0, x1, y1);
+    if (!bp) {
+      this.toast(t('bp_empty'), 2000, 'error');
+      return;
+    }
+    this.clipboard = bp;
+    sfx.select();
+    this.input.setTool({ kind: 'paste', bp });
+    this.toast(t('bp_copied', { n: bp.items.length }), 2500, 'success');
+  }
+
+  pasteBlueprint(bp: Blueprint, x: number, y: number) {
+    const r = this.sim.paste(bp, x, y);
+    for (const b of r.placed) this.recordPlacement(b);
+    if (r.placed.length) sfx.place();
+    if (r.skipped) {
+      sfx.error();
+      this.toast(`${t('bp_skipped', { n: r.skipped })}${r.reason ? ' · ' + t(r.reason as 'err_cost') : ''}`, 2500, 'error');
+    }
+    this.input.updateGhost();
+  }
+
+  private savedBlueprints(): Blueprint[] {
+    try {
+      return JSON.parse(localStorage.getItem('pe_blueprints') ?? '[]') as Blueprint[];
+    } catch {
+      return [];
+    }
+  }
+
+  private storeBlueprints(list: Blueprint[]) {
+    try {
+      localStorage.setItem('pe_blueprints', JSON.stringify(list.slice(0, 24)));
+    } catch {
+      /* ignore */
+    }
+  }
+
+  saveClipboard() {
+    const bp = this.tool.kind === 'paste' ? this.tool.bp : this.clipboard;
+    if (!bp) return;
+    const name = prompt(t('bp_name'), bp.name || `${t('blueprint')} ${this.savedBlueprints().length + 1}`);
+    if (name === null) return;
+    const list = this.savedBlueprints().filter((b) => b.name !== name);
+    list.unshift({ ...bp, name });
+    this.storeBlueprints(list);
+    this.toast(`💾 ${t('saved')}: ${name}`, 2000, 'success');
+  }
+
+  showBlueprints() {
+    const list = this.savedBlueprints();
+    const rows = list
+      .map(
+        (bp, i) => `<div class="prob"><span class="pname"><b>${bp.name}</b><br><small>${bp.items.length} · ${bp.w}×${bp.h} · ${costHtml(Sim.blueprintCost(bp), this.sim.state.inventory)}</small></span>
+        <button class="btn small primary" data-use="${i}">${t('bp_use')}</button><button class="btn small danger" data-del="${i}">✕</button></div>`,
+      )
+      .join('');
+    this.openModal(
+      `<h2>⧉ ${t('blueprints')}</h2>
+      ${this.clipboard ? `<div class="prob"><span class="pname"><b>${t('bp_clipboard')}</b><br><small>${this.clipboard.items.length} · ${this.clipboard.w}×${this.clipboard.h}</small></span><button class="btn small primary" data-act="useclip">${t('bp_use')}</button><button class="btn small" data-act="saveclip">💾</button></div>` : ''}
+      <div class="prob-list">${rows || `<p>${t('bp_none')}</p>`}</div>
+      <button class="btn" data-act="select">⧉ ${t('copy')}</button>
+      <button class="btn primary" data-act="close">${t('close')}</button>`,
+      (target) => {
+        if (target.dataset.use !== undefined) {
+          const bp = list[Number(target.dataset.use)];
+          this.clipboard = bp;
+          this.closeModal();
+          this.input.setTool({ kind: 'paste', bp });
+        } else if (target.dataset.del !== undefined) {
+          list.splice(Number(target.dataset.del), 1);
+          this.storeBlueprints(list);
+          this.showBlueprints();
+        } else if (target.dataset.act === 'useclip' && this.clipboard) {
+          this.closeModal();
+          this.input.setTool({ kind: 'paste', bp: this.clipboard });
+        } else if (target.dataset.act === 'saveclip') {
+          this.saveClipboard();
+          this.showBlueprints();
+        } else if (target.dataset.act === 'select') {
+          this.closeModal();
+          this.input.setTool({ kind: 'select' });
+          this.selectBuilding(null);
+        }
+      },
+    );
+  }
+
+  // ---------- Time control ----------
+
+  togglePause() {
+    const sp = this.cb.getSpeed();
+    this.cb.onSpeed(sp === 0 ? 1 : 0);
+    this.toast(sp === 0 ? `▶ ${t('resume')}` : `⏸ ${t('pause')}`, 1200);
+    this.lastTopHtml = '';
+    this.renderTop();
+  }
+
+  cycleSpeed() {
+    const sp = this.cb.getSpeed();
+    const next = sp === 0 || sp === 3 ? 1 : sp === 1 ? 2 : 3;
+    this.cb.onSpeed(next);
+    this.toast(`⏩ ${next}×`, 1000);
+    this.lastTopHtml = '';
+    this.renderTop();
   }
 
   // ---------- Info panel ----------
@@ -944,24 +1084,56 @@ export class Hud {
     );
   }
 
-  /** Recursive production tree for an item. */
+  /** Recursive production tree for an item, with machine counts for a target rate. */
   showChain(item: ItemId) {
     const st = this.sim.state;
-    const tree = (id: ItemId, depth: number, seen: Set<ItemId>): string => {
+    const sim = this.sim;
+    const rate = this.chainRate;
+    const minerPerMin = (60 / MINE_SECONDS) * sim.factor('miner');
+    const beltPerMin = ((BELT_SPEED * sim.factor('belt')) / BELT_SPACING) * 60;
+    const tree = (id: ItemId, perMin: number, depth: number, seen: Set<ItemId>): string => {
       const r = RECIPES.find((rc) => rc.output === id);
       const producers = st.buildings.filter((b) => (b.type === 'miner' && b.mineItem === id) || (b.recipe && RECIPE_BY_ID[b.recipe]?.output === id)).length;
       const have = st.inventory[id] ?? 0;
-      let line = `<div class="tree-row" style="margin-left:${depth * 18}px">${itemImg(id, 'icon sm')}<b>${tItem(id)}</b>`;
-      if (r) line += ` <small>${t('made_in')} <img class="icon xs" src="${buildingUrl(r.machine)}" alt=""> ${tBuilding(r.machine)} · ${r.seconds}s ${r.outputCount > 1 ? '×' + r.outputCount : ''}</small>`;
-      else if (Object.values(TERRAIN_ITEM).includes(id)) line += ` <small>${t('mined_from')}</small>`;
-      line += `<span class="tree-meta">${producers}× 🏭 · ${have}</span></div>`;
+      let machines = 0;
+      let machineName = '';
+      if (r) {
+        const perMachine = (r.outputCount * 60) / r.seconds * sim.factor('machine');
+        machines = perMin / perMachine;
+        machineName = tBuilding(r.machine);
+      } else if (Object.values(TERRAIN_ITEM).includes(id)) {
+        machines = perMin / minerPerMin;
+        machineName = tBuilding('miner');
+      }
+      let line = `<div class="tree-row" style="margin-left:${depth * 18}px">${itemImg(id, 'icon sm')}<b>${tItem(id)}</b><span class="rate">${perMin.toFixed(1)}/min</span>`;
+      if (r) line += ` <small>${t('made_in')} <img class="icon xs" src="${buildingUrl(r.machine)}" alt=""> ${r.seconds}s ${r.outputCount > 1 ? '×' + r.outputCount : ''}</small>`;
+      else if (machineName) line += ` <small>${t('mined_from')}</small>`;
+      if (machineName) line += `<span class="need ${producers >= Math.ceil(machines) ? 'ok' : ''}">${Math.ceil(machines)}× ${machineName} <small>(${machines.toFixed(2)}) · ${producers} ${t('built')}</small></span>`;
+      line += `<span class="tree-meta">${have}</span></div>`;
+      if (perMin > beltPerMin) line += `<div class="tree-row warn" style="margin-left:${depth * 18 + 18}px">⚠ ${t('belt_limit', { n: beltPerMin.toFixed(0) })}</div>`;
       if (r && !seen.has(id) && depth < 6) {
         seen.add(id);
-        for (const k in r.inputs) line += tree(k as ItemId, depth + 1, seen).replace('<div class="tree-row"', `<div class="tree-row" data-n="${r.inputs[k as ItemId]}"`);
+        for (const k in r.inputs) {
+          const need = (perMin * r.inputs[k as ItemId]!) / r.outputCount;
+          line += tree(k as ItemId, need, depth + 1, seen).replace('<div class="tree-row"', `<div class="tree-row" data-n="${r.inputs[k as ItemId]}"`);
+        }
       }
       return line;
     };
-    this.openModal(`<h2>${t('chain_for')}: ${tItem(item)}</h2><div class="tree">${tree(item, 0, new Set())}</div><button class="btn primary" data-act="close">${t('close')}</button>`);
+    const rates = [5, 10, 20, 30, 60];
+    this.openModal(
+      `<h2>${t('chain_for')}: ${tItem(item)}</h2>
+      <div class="dirs"><span class="lbl">${t('target_rate')}</span>${rates.map((r) => `<button class="chip ${r === rate ? 'active' : ''}" data-rate="${r}">${r}/min</button>`).join('')}</div>
+      <div class="tree">${tree(item, rate, 0, new Set())}</div>
+      <p class="save-hint">${t('calc_hint')}</p>
+      <button class="btn primary" data-act="close">${t('close')}</button>`,
+      (target) => {
+        if (target.dataset.rate) {
+          this.chainRate = Number(target.dataset.rate);
+          this.showChain(item);
+        }
+      },
+    );
   }
 
   showContracts() {
@@ -1030,6 +1202,8 @@ export class Hud {
       <div class="menu-row"><span>${t('playtime')}</span><span>${fmtTime(st.time)}</span></div>
       <div class="menu-row"><span>${t('produced')}</span><span class="wrap">${produced || '–'}</span></div>
       <button class="btn" data-act="save">💾 ${t('save')}</button>
+      <button class="btn" data-act="transfer">⇄ ${t('transfer')}</button>
+      <button class="btn" data-act="blueprints">⧉ ${t('blueprints')}</button>
       <button class="btn" data-act="howto">${t('how_to')}</button>
       <button class="btn danger" data-act="new">${t('new_game')}</button>
       <button class="btn primary" data-act="close">${t('close')}</button>
@@ -1043,6 +1217,8 @@ export class Hud {
           setSound(target.dataset.sound === 'on');
           this.showMenu();
         } else if (target.dataset.act === 'howto') this.showHowTo();
+        else if (target.dataset.act === 'transfer') this.showTransfer();
+        else if (target.dataset.act === 'blueprints') this.showBlueprints();
         else if (target.dataset.act === 'save') {
           this.cb.onSave();
           this.toast(`💾 ${t('saved')}`, 1500, 'success');
@@ -1054,6 +1230,61 @@ export class Hud {
         }
       },
     );
+  }
+
+  /** Export / import the save as text or file so it can move between devices. */
+  showTransfer() {
+    this.cb.onSave();
+    const raw = JSON.stringify(this.sim.state);
+    const encoded = 'PE1.' + btoa(unescape(encodeURIComponent(raw)));
+    this.openModal(
+      `<h2>⇄ ${t('transfer')}</h2>
+      <p>${t('transfer_hint')}</p>
+      <div class="cbtns"><button class="btn small primary" data-act="copy">${t('copy_clip')}</button><button class="btn small" data-act="download">${t('download')}</button></div>
+      <h3>${t('import')}</h3>
+      <textarea id="importbox" rows="4" placeholder="PE1.…"></textarea>
+      <div class="cbtns"><button class="btn small primary" data-act="import">${t('import')}</button><label class="btn small">${t('import_file')}<input id="importfile" type="file" accept=".json,.txt,application/json" hidden></label></div>
+      <button class="btn" data-act="close">${t('close')}</button>`,
+      (target) => {
+        const act = target.dataset.act;
+        if (act === 'copy') {
+          navigator.clipboard?.writeText(encoded).then(() => this.toast(`✓ ${t('copied')}`, 1500, 'success')).catch(() => this.toast(encoded.slice(0, 40) + '…', 3000));
+        } else if (act === 'download') {
+          const a = document.createElement('a');
+          a.href = URL.createObjectURL(new Blob([raw], { type: 'application/json' }));
+          a.download = `planet-escape-${this.sim.state.seed}.json`;
+          a.click();
+          setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+        } else if (act === 'import') {
+          const box = this.modal.querySelector('#importbox') as HTMLTextAreaElement;
+          this.importText(box.value);
+        }
+      },
+    );
+    const file = this.modal.querySelector('#importfile') as HTMLInputElement | null;
+    file?.addEventListener('change', () => {
+      const f = file.files?.[0];
+      if (!f) return;
+      f.text().then((txt) => this.importText(txt));
+    });
+  }
+
+  private importText(txt: string) {
+    try {
+      let raw = txt.trim();
+      if (raw.startsWith('PE1.')) raw = decodeURIComponent(escape(atob(raw.slice(4))));
+      const st = JSON.parse(raw) as GameState;
+      if (!st || !Array.isArray(st.buildings) || !Array.isArray(st.terrain)) throw new Error('bad');
+      // run through the normal loader for migrations
+      localStorage.setItem('pe_save_v1', JSON.stringify(st));
+      const loaded = loadSave();
+      if (!loaded) throw new Error('bad');
+      this.closeModal();
+      this.cb.onImport(loaded);
+      this.toast(`✓ ${t('imported')}`, 2500, 'success');
+    } catch {
+      this.toast(t('import_failed'), 3000, 'error');
+    }
   }
 
   showLaunch() {
