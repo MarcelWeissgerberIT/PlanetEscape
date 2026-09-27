@@ -113,7 +113,7 @@ export interface Building {
   bufL?: ItemId[];
   bufR?: ItemId[];
   threshold?: number;
-  mode?: 'hold' | 'pass'; // lamp: keep the item (stays lit) or let it pass (lit while an item is inside)
+  mode?: 'hold' | 'pass' | 'pulse'; // lamp: hold keeps the item lit, pass forwards it; switch: pulse closes itself after one item
   ratio?: number;
   open?: boolean;
   // tunnel: id of the paired tunnel (entrance <-> exit); `exit` marks the exit end
@@ -153,7 +153,7 @@ export type GameMode = 'story' | 'free';
 
 export interface GameOptions {
   mode: GameMode;
-  mapSize: 'small' | 'medium' | 'large';
+  mapSize: 'small' | 'medium' | 'large' | 'huge' | 'giant';
   infiniteOre: boolean;
   allUnlocked: boolean;
   storms: boolean;
@@ -206,6 +206,7 @@ export interface GameState {
   nextEventAt?: number;
   boostUntil?: number; // overclocked power until this game time
   eventsSeen?: number;
+  note?: { de?: string; en?: string; title?: string }; // shown once when a shared save is imported
 }
 
 export interface BlueprintItem {
@@ -216,7 +217,7 @@ export interface BlueprintItem {
   recipe?: string | null;
   threshold?: number;
   ratio?: number;
-  mode?: 'hold' | 'pass';
+  mode?: 'hold' | 'pass' | 'pulse';
   open?: boolean;
 }
 

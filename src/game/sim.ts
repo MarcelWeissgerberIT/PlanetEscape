@@ -976,7 +976,10 @@ export class Sim {
     }
     if (b.type === 'switch') {
       b.status = b.open === false ? 'closed' : 'ok';
-      if (key && b.open !== false && this.pushDir(b, key, b.dir)) b.output = {};
+      if (key && b.open !== false && this.pushDir(b, key, b.dir)) {
+        b.output = {};
+        if (b.mode === 'pulse') b.open = false; // one item per tap
+      }
       return;
     }
     if (b.type === 'valve') {

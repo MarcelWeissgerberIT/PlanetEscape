@@ -34,7 +34,10 @@ for (let r = 0; r < 3; r++) {
     place('tunnel', bx, by + 1, 1); // entrance
     place('tunnel', bx + 2, by + 1, 1); // exit (auto-paired)
     place('overflow', bx + 3, by + 1, 1); // faces east: forward along the row, right (south) into the cell when the row is backed up
-    place('switch', bx + 3, by + 2, 2).open = false; // X switch above the cell
+    const sx = place('switch', bx + 3, by + 2, 2); // X switch above the cell
+    sx.open = false;
+    sx.mode = 'pulse';
+    sx.recipe = 'iron_plate';
     place('lamp', bx + 3, by + 3, 2); // the pixel (front = down, nothing there)
   }
 }
@@ -49,7 +52,10 @@ for (let c = 0; c < 3; c++) {
     place('conveyor', bx + 1, by + 1, 2); // crosses above the X tunnel
     place('conveyor', bx + 1, by + 2, 2);
     place('overflow', bx + 1, by + 3, 2); // faces south: forward down the column, left (east) into the cell when the column is backed up
-    place('switch', bx + 2, by + 3, 1).open = false; // O switch left of the cell (the next block's first belt continues the column)
+    const so = place('switch', bx + 2, by + 3, 1); // O switch left of the cell (the next block's first belt continues the column)
+    so.open = false;
+    so.mode = 'pulse';
+    so.recipe = 'copper_plate';
   }
 }
 
@@ -76,6 +82,11 @@ for (const b of st.buildings) if (b.type === 'switch') b.open = false;
 for (const b of st.buildings) if (b.type === 'switch') b.output = {};
 st.time = 0;
 st.inventory = { iron_plate: 200, copper_plate: 100, copper_wire: 40, machine_part: 20 };
+st.note = {
+  title: 'Tic Tac Toe',
+  de: 'So spielst du:\n• Die 9 LED-Lampen sind das Brett.\n• X = Eisenplatte: tippe den Schalter ÜBER einer Zelle (Eisen-Symbol). Eine Platte fällt hinein, die Lampe leuchtet grau, der Schalter schließt sich wieder.\n• O = Kupferplatte: tippe den Schalter LINKS neben einer Zelle (Kupfer-Symbol). Die Lampe leuchtet orange.\n• Neues Spiel: Lampe antippen → „Löschen“.\nDie Zeilen und Spalten stehen unter Druck aus den Depots, deshalb kommt jeder Zug sofort. Die Warnungen oben rechts sind die absichtlich gestauten Bänder.',
+  en: 'How to play:\n• The 9 LED lamps are the board.\n• X = iron plate: tap the switch ABOVE a cell (iron icon). One plate drops in, the lamp lights grey, the switch closes again.\n• O = copper plate: tap the switch LEFT of a cell (copper icon). The lamp lights orange.\n• New game: tap a lamp → “Clear”.\nRows and columns are kept pressurised by the depots, so every move is instant. The warnings top right are the intentionally backed-up belts.',
+};
 
 writeFileSync('saves/tic-tac-toe.json', JSON.stringify(st));
 console.log('saves/tic-tac-toe.json written:', st.buildings.length, 'buildings, board at', ox, oy);

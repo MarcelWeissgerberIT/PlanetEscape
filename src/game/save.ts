@@ -1,6 +1,6 @@
 import type { GameState } from './types';
 import { SAVE_VERSION } from './world';
-import { UPGRADE_DEFAULTS } from './data';
+import { BUILDINGS, UPGRADE_DEFAULTS } from './data';
 
 const KEY = 'pe_save_v1';
 
@@ -41,6 +41,9 @@ export function load(): GameState | null {
       st.version = 4;
     }
     if (st.version !== SAVE_VERSION) return null;
+    // saves from a newer or older build may contain building types this build does not know: drop them
+    st.buildings = st.buildings.filter((b) => b && b.type in BUILDINGS);
+    if (!st.buildings.length || st.buildings[0].type !== 'core') return null;
     // additive fields (no version bump needed)
     st.upgrades = { ...UPGRADE_DEFAULTS(), ...st.upgrades };
     st.event ??= null;

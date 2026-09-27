@@ -692,11 +692,17 @@ export class Renderer {
     }
     if (def.kind === 'logic') {
       // configuration badge: filter item (sorter / valve) or ratio (mixer)
-      if ((b.type === 'sorter' || b.type === 'valve') && b.recipe) this.drawItem(b.recipe as ItemId, b.x * TILE + TILE - 13, b.y * TILE + 13, 20);
+      if ((b.type === 'sorter' || b.type === 'valve' || b.type === 'switch') && b.recipe) this.drawItem(b.recipe as ItemId, b.x * TILE + TILE - 13, b.y * TILE + 13, 20);
       else if (b.type === 'sorter' || (b.type === 'valve' && !b.recipe)) this.drawBadge(b.x * TILE + TILE - 13, b.y * TILE + 13, '?', '#f59e0b');
       if (b.type === 'valve' || b.type === 'switch') {
-        ctx.fillStyle = b.open === false ? 'rgba(239,68,68,0.7)' : 'rgba(52,211,153,0.6)';
+        const open = b.open !== false;
+        ctx.fillStyle = open ? 'rgba(52,211,153,0.7)' : 'rgba(239,68,68,0.75)';
         ctx.fillRect(b.x * TILE + 6, b.y * TILE + TILE - 10, TILE - 12, 4);
+        if (b.type === 'switch') {
+          ctx.strokeStyle = open ? '#34d399' : '#ef4444';
+          ctx.lineWidth = 3;
+          ctx.strokeRect(b.x * TILE + 3, b.y * TILE + 3, TILE - 6, TILE - 6);
+        }
       }
       if (b.type === 'mixer') {
         const r = MIXER_RATIOS[b.ratio ?? 0];

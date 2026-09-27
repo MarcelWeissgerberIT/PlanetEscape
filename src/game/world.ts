@@ -2,6 +2,7 @@ import type { Building, GameOptions, GameState, TerrainId } from './types';
 import { BUILD_ORDER, HARD_ORE_FACTOR, LEVELS, MISSIONS, ORE_PER_TILE, RECIPES, STARTING_BUILDINGS, STARTING_RECIPES, UPGRADE_DEFAULTS } from './data';
 
 export const SAVE_VERSION = 4;
+export const MAP_SIZES: Record<GameOptions['mapSize'], number> = { small: 80, medium: 120, large: 160, huge: 200, giant: 240 };
 
 /** Small deterministic PRNG (mulberry32). */
 export function rng(seed: number): () => number {
@@ -99,7 +100,7 @@ export const DEFAULT_OPTIONS: GameOptions = { mode: 'story', mapSize: 'medium', 
 
 export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOptions = DEFAULT_OPTIONS): GameState {
   if (options.mode === 'story') return levelState(null, 0, options);
-  const width = options.mapSize === 'small' ? 80 : options.mapSize === 'large' ? 160 : 120;
+  const width = MAP_SIZES[options.mapSize] ?? 120;
   const height = width;
   const all = options.allUnlocked;
   const terrain = generateTerrain(seed, width, height);

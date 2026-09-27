@@ -8,6 +8,7 @@ import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOpt
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave, load as loadSave } from '../game/save';
+import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 
@@ -192,7 +193,7 @@ export class Hud {
     const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
     const freeView = `
         <div class="title-buttons">
-          <div class="menu-row"><span>${t('map_size')}</span><span>${(['small', 'medium', 'large'] as const).map((sz) => `<button class="chip ${o.mapSize === sz ? 'active' : ''}" data-size="${sz}">${t(`size_${sz}` as 'size_small').split(' ')[0]}</button>`).join('')}</span></div>
+          <div class="menu-row"><span>${t('map_size')}</span><span>${(['small', 'medium', 'large', 'huge', 'giant'] as const).map((sz) => `<button class="chip ${o.mapSize === sz ? 'active' : ''}" data-size="${sz}">${t(`size_${sz}` as 'size_small').split(' ')[0]}</button>`).join('')}</span></div>
           ${opt('infiniteOre', t('infinite_ore'), o.infiniteOre)}
           ${opt('allUnlocked', t('all_unlocked'), o.allUnlocked)}
           ${opt('storms', t('storms_opt'), o.storms)}
@@ -1083,7 +1084,9 @@ export class Hud {
           <div class="dirs"><span class="lbl">${t('lamp_mode')}</span><button class="chip ${(b.mode ?? 'hold') === 'hold' ? 'active' : ''}" data-mode="hold">${t('lamp_hold')}</button><button class="chip ${b.mode === 'pass' ? 'active' : ''}" data-mode="pass">${t('lamp_pass')}</button></div>
           ${b.mode === 'pass' ? dirPicker : ''}${picker(t('lamp_filter'))}`;
       } else if (b.type === 'switch') {
-        body = `${statusLine()}<div class="dirs"><span class="lbl">${t('switch_state')}</span><button class="chip ${b.open !== false ? 'active' : ''}" data-open="1">${t('switch_on')}</button><button class="chip ${b.open === false ? 'active' : ''}" data-open="0">${t('switch_off')}</button></div>${dirPicker}`;
+        body = `${statusLine()}<div class="dirs"><span class="lbl">${t('switch_state')}</span><button class="chip ${b.open !== false ? 'active' : ''}" data-open="1">${t('switch_on')}</button><button class="chip ${b.open === false ? 'active' : ''}" data-open="0">${t('switch_off')}</button></div>
+          <div class="dirs"><span class="lbl">${t('switch_pulse')}</span><button class="chip ${b.mode === 'pulse' ? 'active' : ''}" data-mode="pulse">${t('on')}</button><button class="chip ${b.mode !== 'pulse' ? 'active' : ''}" data-mode="hold">${t('off')}</button></div>
+          <p class="save-hint">${t('switch_hint')}</p>${dirPicker}`;
       }
       else if (b.type === 'valve') {
         const have = b.recipe ? (st.inventory[b.recipe as ItemId] ?? 0) : 0;
@@ -1149,7 +1152,7 @@ export class Hud {
         return;
       }
       if (target.dataset.mode !== undefined) {
-        b.mode = target.dataset.mode as 'hold' | 'pass';
+        b.mode = target.dataset.mode as 'hold' | 'pass' | 'pulse';
         sfx.select();
         this.showInfo(b);
         return;
@@ -1190,6 +1193,18 @@ export class Hud {
   }
 
   // ---------- Modals ----------
+
+  /** A note the author of a shared save left (how to play it). */
+  showNote() {
+    const n = this.sim.state.note;
+    if (!n) return;
+    const text = (getLang() === 'de' ? n.de : n.en) ?? n.en ?? n.de ?? '';
+    this.openModal(
+      `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${n.title ?? t('save_note')}</small></div></div>
+      <p style="white-space:pre-line">${text}</p>
+      <button class="btn primary" data-act="close">${t('ok')}</button>`,
+    );
+  }
 
   /** Styled replacement for window.confirm. */
   confirmModal(text: string, okLabel = t('ok')): Promise<boolean> {
@@ -1462,10 +1477,12 @@ export class Hud {
       <div class="menu-row"><span>${t('mode')}</span><span>${st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}/${MISSIONS.length}` : t('mode_free')}</span></div>
       <div class="menu-row"><span>${t('seed')}</span><span class="mono">${st.seed}</span></div>
       <div class="menu-row"><span>${t('playtime')}</span><span>${fmtTime(st.time)}</span></div>
+      <div class="menu-row"><span>Build</span><span class="mono">${__BUILD__}</span></div>
       <div class="menu-row"><span>${t('produced')}</span><span class="wrap">${produced || '–'}</span></div>
       <button class="btn" data-act="save">${icon('save', 'sm')} ${t('save')}</button>
       <button class="btn" data-act="transfer">${icon('transfer', 'sm')} ${t('transfer')}</button>
       <button class="btn" data-act="blueprints">${icon('blueprint', 'sm')} ${t('blueprints')}</button>
+      ${st.note ? `<button class="btn" data-act="note">${t('save_note')}</button>` : ''}
       <button class="btn" data-act="howto">${t('how_to')}</button>
       <a class="btn" href="./ai/" style="text-decoration:none;text-align:center">${t('ai_page')} →</a>
       <button class="btn danger" data-act="new">${t('new_game')}</button>
@@ -1483,6 +1500,7 @@ export class Hud {
           setAmbient(target.dataset.ambient === 'on');
           this.showMenu();
         } else if (target.dataset.act === 'howto') this.showHowTo();
+        else if (target.dataset.act === 'note') this.showNote();
         else if (target.dataset.act === 'transfer') this.showTransfer();
         else if (target.dataset.act === 'blueprints') this.showBlueprints();
         else if (target.dataset.act === 'save') {
@@ -1509,7 +1527,7 @@ export class Hud {
       <div class="cbtns"><button class="btn small primary" data-act="copy">${t('copy_clip')}</button><button class="btn small" data-act="download">${t('download')}</button></div>
       <h3>${t('import')}</h3>
       <textarea id="importbox" rows="4" placeholder="PE1.…"></textarea>
-      <div class="cbtns"><button class="btn small primary" data-act="import">${t('import')}</button><label class="btn small">${t('import_file')}<input id="importfile" type="file" accept=".json,.txt,application/json" hidden></label></div>
+      <div class="cbtns"><button class="btn small primary" data-act="import">${t('import')}</button><button class="btn small" data-act="pickfile">${t('import_file')}</button><input id="importfile" class="file-hidden" type="file" accept=".json,.txt,application/json,text/plain"></div>
       <button class="btn" data-act="close">${t('close')}</button>`,
       (target) => {
         const act = target.dataset.act;
@@ -1528,6 +1546,7 @@ export class Hud {
       },
     );
     const file = this.modal.querySelector('#importfile') as HTMLInputElement | null;
+    (this.modal.querySelector('[data-act="pickfile"]') as HTMLButtonElement | null)?.addEventListener('click', () => file?.click());
     file?.addEventListener('change', () => {
       const f = file.files?.[0];
       if (!f) return;
@@ -1544,12 +1563,14 @@ export class Hud {
       // run through the normal loader for migrations
       localStorage.setItem('pe_save_v1', JSON.stringify(st));
       const loaded = loadSave();
-      if (!loaded) throw new Error('bad');
+      if (!loaded) throw new Error('version');
       this.closeModal();
       this.cb.onImport(loaded);
       this.toast(`✓ ${t('imported')}`, 2500, 'success');
-    } catch {
-      this.toast(t('import_failed'), 3000, 'error');
+      if (loaded.note) setTimeout(() => this.showNote(), 400);
+    } catch (e) {
+      const why = e instanceof SyntaxError ? 'JSON' : (e as Error)?.message === 'version' ? `v${SAVE_VERSION}` : String((e as Error)?.message ?? e).slice(0, 60);
+      this.toast(`${t('import_failed')} (${why})`, 4000, 'error');
     }
   }
 

@@ -1,5 +1,5 @@
 // Minimal offline cache: network first for the app shell, cache first for assets.
-const VERSION = 'pe-v1';
+const VERSION = 'pe-v2';
 self.addEventListener('install', (e) => {
   self.skipWaiting();
 });

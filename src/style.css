@@ -433,3 +433,4 @@ label.btn { text-align: center; }
 .toast.action { pointer-events: auto; display: flex; align-items: center; gap: 10px; }
 .toast.action .btn.small { margin: 0; padding: 5px 10px; font-size: 12px; }
 .btn.small-line { font-size: 13px; padding: 6px 12px; margin-top: -2px; color: var(--muted); }
+.file-hidden { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
