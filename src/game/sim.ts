@@ -31,6 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
+import { ORE_PER_TILE } from './data';
 
 export type SimEvent =
   | { type: 'mission'; index: number }
@@ -172,9 +173,12 @@ export class Sim {
   }
 
   /** Returns null if placement is valid, otherwise a reason key. */
+  /** Level editor: everything unlocked, nothing costs anything. */
+  creative = false;
+
   placementError(type: BuildingId, x: number, y: number): string | null {
     const def = BUILDINGS[type];
-    if (!this.state.unlockedBuildings.includes(type)) return 'err_locked';
+    if (!this.creative && !this.state.unlockedBuildings.includes(type)) return 'err_locked';
     for (let dy = 0; dy < def.size; dy++) {
       for (let dx = 0; dx < def.size; dx++) {
         if (!this.inBounds(x + dx, y + dy)) return 'err_bounds';
@@ -185,14 +189,48 @@ export class Sim {
       }
     }
     if (def.placeOn === 'deposit' && !this.isDeposit(x, y)) return 'err_deposit';
-    if (!this.canAfford(type)) return 'err_cost';
+    if (!this.creative && !this.canAfford(type)) return 'err_cost';
     return null;
+  }
+
+  /** Editor brush: set the terrain of a square of tiles around (x,y). Tiles under buildings are skipped. */
+  paintTerrain(x: number, y: number, terrain: TerrainId, brush = 1): { x: number; y: number }[] {
+    const st = this.state;
+    const r = Math.floor(brush / 2);
+    const changed: { x: number; y: number }[] = [];
+    for (let dy = -r; dy <= r; dy++)
+      for (let dx = -r; dx <= r; dx++) {
+        const tx = x + dx, ty = y + dy;
+        if (!this.inBounds(tx, ty) || this.at(tx, ty)) continue;
+        const i = ty * st.width + tx;
+        if (st.terrain[i] === terrain && (terrain === 'ground' || terrain === 'rock' || st.ore[i] > 0)) continue;
+        st.terrain[i] = terrain;
+        st.ore[i] = terrain === 'ground' || terrain === 'rock' ? 0 : ORE_PER_TILE[1];
+        changed.push({ x: tx, y: ty });
+      }
+    return changed;
+  }
+
+  /** Editor: move the core so that its top-left lands on (x,y); needs free ground under all 9 tiles. */
+  moveCore(x: number, y: number): boolean {
+    const core = this.state.buildings[0];
+    for (let dy = 0; dy < 3; dy++)
+      for (let dx = 0; dx < 3; dx++) {
+        const tx = x + dx, ty = y + dy;
+        if (!this.inBounds(tx, ty) || this.terrain(tx, ty) !== 'ground') return false;
+        const b = this.at(tx, ty);
+        if (b && b !== core) return false;
+      }
+    core.x = x;
+    core.y = y;
+    this.rebuildGrid();
+    return true;
   }
 
   place(type: BuildingId, x: number, y: number, dir: Dir): Building | null {
     if (this.placementError(type, x, y)) return null;
     const def = BUILDINGS[type];
-    for (const k in def.cost) this.addInv(k as ItemId, -def.cost[k as ItemId]!);
+    if (!this.creative) for (const k in def.cost) this.addInv(k as ItemId, -def.cost[k as ItemId]!);
     const b: Building = { id: this.state.nextId++, type, x, y, dir: def.rotatable ? dir : 0 };
     if (type === 'conveyor' || type === 'tunnel') b.items = [];
     if (def.kind === 'machine') {
@@ -303,7 +341,7 @@ export class Sim {
     if (b.type === 'core') return;
     const def = BUILDINGS[b.type];
     // full refund incl. buffered items (player friendly)
-    for (const k in def.cost) this.addInv(k as ItemId, def.cost[k as ItemId]!);
+    if (!this.creative) for (const k in def.cost) this.addInv(k as ItemId, def.cost[k as ItemId]!);
     const dump = (rec?: Partial<Record<ItemId, number>>) => {
       if (!rec) return;
       for (const k in rec) this.addInv(k as ItemId, rec[k as ItemId] ?? 0);

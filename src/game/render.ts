@@ -40,6 +40,7 @@ export class Renderer {
   selectRect: { x0: number; y0: number; x1: number; y1: number } | null = null;
   pasteGhost: { bp: Blueprint; x: number; y: number; bad: Set<number> } | null = null;
   beltPreview: { x: number; y: number; dir: Dir; ok: boolean }[] | null = null;
+  paintGhost: { x: number; y: number; brush: number } | null = null;
   paused = false;
   deleteMode = false;
   overlay = false;
@@ -344,6 +345,15 @@ export class Renderer {
     if (this.ghost) this.drawGhost(this.ghost);
     if (this.pasteGhost) this.drawPasteGhost(this.pasteGhost);
     if (this.beltPreview) this.drawBeltPreview(this.beltPreview);
+    if (this.paintGhost) {
+      const g = this.paintGhost;
+      const r = Math.floor(g.brush / 2);
+      ctx.strokeStyle = '#f59e0b';
+      ctx.lineWidth = 2 / cam.zoom;
+      ctx.setLineDash([6 / cam.zoom, 4 / cam.zoom]);
+      ctx.strokeRect((g.x - r) * TILE + 1, (g.y - r) * TILE + 1, g.brush * TILE - 2, g.brush * TILE - 2);
+      ctx.setLineDash([]);
+    }
     if (this.selectRect) {
       const r = this.selectRect;
       const x0 = Math.min(r.x0, r.x1), y0 = Math.min(r.y0, r.y1), x1 = Math.max(r.x0, r.x1), y1 = Math.max(r.y0, r.y1);

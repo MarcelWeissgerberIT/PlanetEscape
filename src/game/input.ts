@@ -2,7 +2,7 @@ import { TILE } from './camera';
 import { BUILDINGS } from './data';
 import type { Renderer } from './render';
 import { Sim } from './sim';
-import type { Blueprint, Building, BuildingId, Dir } from './types';
+import type { Blueprint, Building, BuildingId, Dir, TerrainId } from './types';
 
 export interface BeltStep {
   x: number;
@@ -11,7 +11,7 @@ export interface BeltStep {
   ok: boolean;
 }
 
-export type Tool = { kind: 'none' } | { kind: 'build'; type: BuildingId } | { kind: 'delete' } | { kind: 'select' } | { kind: 'paste'; bp: Blueprint };
+export type Tool = { kind: 'none' } | { kind: 'build'; type: BuildingId } | { kind: 'delete' } | { kind: 'select' } | { kind: 'paste'; bp: Blueprint } | { kind: 'paint'; terrain: TerrainId | 'core'; brush: number };
 
 export interface InputCallbacks {
   onPlace: (type: BuildingId, x: number, y: number, dir: Dir) => boolean;
@@ -29,6 +29,7 @@ export interface InputCallbacks {
   onCycleSpeed: () => void;
   onBeltLine: (placed: number) => void;
   onBeltTapHint: () => void;
+  onPaint: (x: number, y: number) => void;
 }
 
 interface PointerInfo {
@@ -61,6 +62,8 @@ export class Input {
   private lastPointerType = 'mouse';
   private selStart: [number, number] | null = null;
   private beltStart: [number, number] | null = null;
+  private painting = false;
+  private lastPaint: [number, number] | null = null;
   private beltPath: BeltStep[] = [];
 
   constructor(
@@ -175,6 +178,7 @@ export class Input {
       this.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
       this.pinchMid = [(a.x + b.x) / 2, (a.y + b.y) / 2];
       this.layingBelts = false;
+      this.painting = false;
       this.beltPath = [];
       this.renderer.beltPreview = null;
       this.renderer.ghost = null;
@@ -184,6 +188,12 @@ export class Input {
     if (this.tool.kind === 'select' && e.button === 0) {
       this.selStart = this.cam.screenToTile(e.clientX, e.clientY);
       this.renderer.selectRect = { x0: this.selStart[0], y0: this.selStart[1], x1: this.selStart[0], y1: this.selStart[1] };
+    }
+    if (this.tool.kind === 'paint' && e.button === 0) {
+      this.painting = true;
+      const [px, py] = this.cam.screenToTile(e.clientX, e.clientY);
+      this.lastPaint = [px, py];
+      this.cb.onPaint(px, py);
     }
     if (this.tool.kind === 'build' && this.tool.type === 'conveyor' && e.button === 0) {
       // a belt line starts on free ground or on a belt; dragging from a machine, deposit or rock pans instead
@@ -239,6 +249,15 @@ export class Input {
     }
     if (!this.dragging) return;
 
+    if (this.painting) {
+      const [px, py] = this.hoverTile;
+      if (!this.lastPaint || this.lastPaint[0] !== px || this.lastPaint[1] !== py) {
+        this.lastPaint = [px, py];
+        this.cb.onPaint(px, py);
+      }
+      this.updateGhost();
+      return;
+    }
     if (this.layingBelts && this.moved) {
       // belt line editor: preview an L-shaped line from the start tile to the pointer, placed on release
       this.beltPath = this.beltStart ? this.planBeltLine(this.beltStart, this.hoverTile) : [];
@@ -250,7 +269,7 @@ export class Input {
       this.renderer.selectRect = { x0: this.selStart[0], y0: this.selStart[1], x1: this.hoverTile[0], y1: this.hoverTile[1] };
       return;
     }
-    const panButton = p.button === 1 || p.button === 2 || this.tool.kind === 'none' || (this.tool.kind === 'build' && (this.tool.type !== 'conveyor' || !this.layingBelts)) || this.tool.kind === 'delete' || this.tool.kind === 'paste';
+    const panButton = p.button === 1 || p.button === 2 || this.tool.kind === 'none' || (this.tool.kind === 'paint' && p.button !== 0) || (this.tool.kind === 'build' && (this.tool.type !== 'conveyor' || !this.layingBelts)) || this.tool.kind === 'delete' || this.tool.kind === 'paste';
     if (panButton && this.moved) {
       this.renderer.cancelPan();
       this.cam.x -= dx / this.cam.zoom;
@@ -286,6 +305,15 @@ export class Input {
       this.renderer.selectRect = null;
       this.dragging = false;
       this.cb.onAreaSelected(sx, sy, tx, ty);
+      return;
+    }
+    const wasPainting = this.painting;
+    this.painting = false;
+    this.lastPaint = null;
+    if (wasPainting) {
+      this.dragging = false;
+      if (e.pointerType !== 'mouse') this.hoverTile = null;
+      this.updateGhost();
       return;
     }
     const wasDragging = this.dragging;
@@ -445,6 +473,12 @@ export class Input {
   }
 
   updateGhost() {
+    this.renderer.paintGhost = this.tool.kind === 'paint' && this.hoverTile ? { x: this.hoverTile[0], y: this.hoverTile[1], brush: this.tool.terrain === 'core' ? 3 : this.tool.brush } : null;
+    if (this.tool.kind === 'paint') {
+      this.renderer.ghost = null;
+      this.renderer.pasteGhost = null;
+      return;
+    }
     if (this.tool.kind === 'paste') {
       this.renderer.ghost = null;
       if (!this.hoverTile) {

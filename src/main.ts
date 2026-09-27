@@ -57,6 +57,7 @@ const cbs = {
   onCycleSpeed: () => hud.cycleSpeed(),
   onBeltLine: (n: number) => hud.beltLineLaid(n),
   onBeltTapHint: () => hud.toast(t('belt_tap_hint'), 2600),
+  onPaint: (x: number, y: number) => hud.paintAt(x, y),
 };
 
 let input = new Input(canvas, sim, renderer, cbs);
@@ -88,6 +89,13 @@ const hud = new Hud(sim, input, renderer, {
     swapState(state);
     Save.save(sim.state);
     start();
+  },
+  onNewEditor: (w: number, h: number, random: boolean, seed?: number) => {
+    Save.clear();
+    swapState(newGame(seed ?? Math.floor(Math.random() * 1e9), { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: true, storms: false }, { w, h, blank: !random }));
+    Save.save(sim.state);
+    start();
+    hud.setEditor(true);
   },
   onPlayChapter: (chapter: number) => {
     Save.clear();

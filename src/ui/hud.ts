@@ -4,7 +4,7 @@ import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
 import { ambientEnabled, setAmbient, setSound, sfx, soundEnabled, startAmbient } from '../game/sfx';
-import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, UpgradeId } from '../game/types';
+import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, TerrainId, UpgradeId } from '../game/types';
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave, load as loadSave } from '../game/save';
@@ -22,6 +22,7 @@ export interface HudCallbacks {
   onSave: () => void;
   onCenter: () => void;
   onPlayChapter: (chapter: number) => void;
+  onNewEditor: (w: number, h: number, random: boolean, seed?: number) => void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] {
@@ -73,6 +74,9 @@ export class Hud {
   private koraMsg = '';
   private koraMsgT = 0;
   private koraAction: { label: string; run: () => void } | null = null;
+  editor = false;
+  private editorTab: 'terrain' | 'build' = 'terrain';
+  private brush = 1;
   private problemSince = new Map<number, number>(); // building id -> game time the problem was first seen
   private powerLowSince = -1;
   private lastHintAt = -1e9;
@@ -84,6 +88,9 @@ export class Hud {
   private clipboard: Blueprint | null = null;
   private chainRate = 10;
   toolChip: HTMLElement;
+  tip: HTMLElement;
+  private tipTimer: number | null = null;
+  private tipSuppressClick = false;
 
   constructor(
     public sim: Sim,
@@ -117,7 +124,9 @@ export class Hud {
     };
     this.minimapBox.append(this.minimap, zoomBar);
     this.toolChip = el('div', 'tool-chip hidden');
-    this.root.append(this.title, this.story, this.top, this.bottom, this.info, this.floating, this.minimapBox, this.toolChip, this.modal, this.toasts);
+    this.tip = el('div', 'tip hidden');
+    this.root.append(this.title, this.story, this.top, this.bottom, this.info, this.floating, this.minimapBox, this.toolChip, this.tip, this.modal, this.toasts);
+    this.installTips();
     this.toolChip.onclick = (e) => {
       const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
       if (b?.dataset.act === 'rot') this.input.rotate();
@@ -188,6 +197,7 @@ export class Hud {
             <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
             <button class="btn ghost" data-act="howto">${t('how_to')}</button>
           </div>
+          <button class="btn ghost small-line" data-act="editor">✎ ${t('editor')}</button>
           <a class="btn ghost ai-link" href="./ai/">${t('ai_page')} →</a>
         </div>`;
     const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
@@ -263,6 +273,7 @@ export class Hud {
         void this.confirmNewGame().then((yes) => yes && this.cb.onNewGame(seed, { ...this.freeOptions, mode: 'free' }));
       } else if (act === 'howto') this.showHowTo();
       else if (act === 'chapters') this.showChapters();
+      else if (act === 'editor') this.showEditorSetup();
     };
   }
 
@@ -276,6 +287,84 @@ export class Hud {
     const p = loadProgress();
     const total = Object.values(p.stars).reduce((a, c) => a + c, 0);
     return total ? `★ ${total}/${LEVELS.length * 3}` : '';
+  }
+
+  // ---------- Level editor ----------
+
+  /** Title screen: choose size and start of a new editable map. */
+  showEditorSetup() {
+    let random = false;
+    const render = () => {
+      this.openModal(
+        `<h2>✎ ${t('editor')}</h2><p>${t('editor_desc')}</p>
+        <div class="menu-row"><span>${t('ed_width')}</span><input id="edw" class="text-input num" type="number" min="24" max="320" value="96"></div>
+        <div class="menu-row"><span>${t('ed_height')}</span><input id="edh" class="text-input num" type="number" min="24" max="320" value="96"></div>
+        <div class="menu-row"><span>${t('ed_start')}</span><span><button class="chip ${random ? '' : 'active'}" data-rand="0">${t('ed_blank')}</button><button class="chip ${random ? 'active' : ''}" data-rand="1">${t('ed_random')}</button></span></div>
+        <div class="row2"><button class="btn" data-act="close">${t('cancel')}</button><button class="btn primary" data-act="go">${t('ed_open')}</button></div>`,
+        (target) => {
+          if (target.dataset.rand !== undefined) {
+            random = target.dataset.rand === '1';
+            const w = (this.modal.querySelector('#edw') as HTMLInputElement).value, h = (this.modal.querySelector('#edh') as HTMLInputElement).value;
+            render();
+            (this.modal.querySelector('#edw') as HTMLInputElement).value = w;
+            (this.modal.querySelector('#edh') as HTMLInputElement).value = h;
+          } else if (target.dataset.act === 'go') {
+            const w = Number((this.modal.querySelector('#edw') as HTMLInputElement).value) || 96;
+            const h = Number((this.modal.querySelector('#edh') as HTMLInputElement).value) || 96;
+            this.closeModal();
+            void this.confirmNewGame().then((yes) => yes && this.cb.onNewEditor(w, h, random));
+          }
+        },
+      );
+    };
+    render();
+  }
+
+  setEditor(on: boolean) {
+    this.editor = on;
+    this.sim.creative = on;
+    this.editorTab = 'terrain';
+    this.input.setTool({ kind: 'none' });
+    this.selectBuilding(null);
+    this.lastBottomHtml = '';
+    this.lastTopHtml = '';
+    this.renderBottom();
+    this.renderTop();
+    this.toast(on ? `✎ ${t('ed_on')}` : `▶ ${t('ed_off')}`, 3500, on ? '' : 'success');
+    this.cb.onSave();
+  }
+
+  /** Brush stroke from the input layer (paint tool). */
+  paintAt(x: number, y: number) {
+    if (this.tool.kind !== 'paint' || !this.editor) return;
+    if (this.tool.terrain === 'core') {
+      if (this.sim.moveCore(x - 1, y - 1)) sfx.select();
+      return;
+    }
+    const changed = this.sim.paintTerrain(x, y, this.tool.terrain, this.tool.brush);
+    for (const c of changed) this.renderer.terrainChanged(c.x, c.y);
+  }
+
+  /** Editor: the note players see when they load this level. */
+  editNote() {
+    const n = this.sim.state.note ?? {};
+    const lang = getLang();
+    this.openModal(
+      `<h2>${t('ed_note')}</h2>
+      <input id="note-title" class="text-input" type="text" maxlength="40" placeholder="${t('ed_note_title')}" value="${(n.title ?? '').replace(/"/g, '&quot;')}">
+      <textarea id="note-text" class="text-input" rows="6" placeholder="${t('ed_note_text')}">${(lang === 'de' ? n.de : n.en) ?? ''}</textarea>
+      <div class="row2"><button class="btn" data-act="close">${t('cancel')}</button><button class="btn primary" data-act="savenote">${t('ok')}</button></div>`,
+      (target) => {
+        if (target.dataset.act === 'savenote') {
+          const title = (this.modal.querySelector('#note-title') as HTMLInputElement).value.trim();
+          const text = (this.modal.querySelector('#note-text') as HTMLTextAreaElement).value.trim();
+          const note = { ...(this.sim.state.note ?? {}), title: title || undefined, [lang]: text || undefined };
+          this.sim.state.note = text || note.de || note.en ? note : undefined;
+          this.closeModal();
+          this.cb.onSave();
+        }
+      },
+    );
   }
 
   /** Chapter select: replay any chapter reached so far, with stars and best times. */
@@ -478,6 +567,7 @@ export class Hud {
         ${this.koraMsg && this.koraMsgT > 0 && this.koraAction ? `<div class="mact"><span class="btn small primary" data-act="kora-action">${this.koraAction.label}</span></div>` : ''}
         <div class="mrows">${builds}${rows}</div>`;
     } else body = `<div class="mtitle">🚀 ${t('launch_title')}</div>`;
+    if (this.editor) body = `<div class="mtitle"><span class="mnum">✎ ${t('editor')}</span> ${st.width}×${st.height}</div><div class="mtext">${t('ed_hint')}</div>`;
     if (!tut && m && st.options.mode === 'free') {
       const p = Math.round(this.sim.shipProgress() * 100);
       body += `<div class="mtext">${t('ship_progress')}: ${p}%</div>`;
@@ -620,8 +710,8 @@ export class Hud {
     const hint: BuildingId | null = tutStep === 0 ? 'miner' : tutStep === 1 ? 'conveyor' : tutStep === 3 ? 'smelter' : tutStep === 5 ? 'printer' : null;
     const buildHtml = BUILD_ORDER.map((id) => {
       const def = BUILDINGS[id];
-      const unlocked = st.unlockedBuildings.includes(id);
-      const affordable = this.sim.canAfford(id);
+      const unlocked = this.editor || st.unlockedBuildings.includes(id);
+      const affordable = this.editor || this.sim.canAfford(id);
       const active = this.tool.kind === 'build' && this.tool.type === id;
       return `<button class="build-btn ${active ? 'active' : ''} ${unlocked ? '' : 'locked'} ${affordable ? '' : 'poor'} ${hint === id ? 'hint' : ''}" data-build="${id}" ${unlocked ? '' : 'disabled'}>
           <img src="${buildingUrl(id)}" alt="" draggable="false">
@@ -631,10 +721,25 @@ export class Hud {
         </button>`;
     }).join('');
     const delActive = this.tool.kind === 'delete';
+    const paintTool = this.tool.kind === 'paint' ? this.tool : null;
+    const terrains: (TerrainId | 'core')[] = ['ground', 'rock', 'iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'core'];
+    const paletteHtml = terrains
+      .map((tr) => {
+        const active = paintTool?.terrain === tr;
+        const label = tr === 'ground' ? t('ed_ground') : tr === 'rock' ? t('ed_rock') : tr === 'core' ? t('ed_core') : tItem(TERRAIN_ITEM[tr]!);
+        const img = tr === 'ground' ? '' : tr === 'core' ? `<img src="${buildingUrl('core')}" alt="" draggable="false">` : `<img src="${terrainUrl(tr)}" alt="" draggable="false">`;
+        return `<button class="build-btn ${active ? 'active' : ''} ${tr === 'ground' ? 'ground' : ''}" data-paint="${tr}">${img || '<span class="swatch"></span>'}<span class="bname">${label}</span></button>`;
+      })
+      .join('');
+    const brushHtml = [1, 3, 5, 9].map((b) => `<button class="chip ${this.brush === b ? 'active' : ''}" data-brush="${b}">${b}×${b}</button>`).join('');
+    const editorBar = this.editor
+      ? `<div class="ed-tabs"><button class="chip ${this.editorTab === 'terrain' ? 'active' : ''}" data-tab="terrain">${t('ed_terrain')}</button><button class="chip ${this.editorTab === 'build' ? 'active' : ''}" data-tab="build">${t('ed_buildings')}</button><span class="ed-badge">✎ ${t('editor')}</span>${this.editorTab === 'terrain' ? `<span class="ed-brush">${t('ed_brush')} ${brushHtml}</span>` : ''}<button class="chip play" data-act="edplay">▶ ${t('ed_play')}</button></div>`
+      : '';
     const bottomHtml = `
-      <div class="inv-strip">${invHtml || `<span class="inv-empty">${t('inventory')}</span>`}</div>
+      ${editorBar}
+      <div class="inv-strip">${this.editor ? `<span class="inv-empty">∞ ${t('ed_free')}</span>` : invHtml || `<span class="inv-empty">${t('inventory')}</span>`}</div>
       <div class="build-row">
-        <div class="build-bar">${buildHtml}</div>
+        <div class="build-bar">${this.editor && this.editorTab === 'terrain' ? paletteHtml : buildHtml}</div>
         <div class="tool-col">
           <button class="iconbtn big" data-act="rotate" title="${t('rotate')} (R)">${icon('rotate')}</button>
           <button class="iconbtn big ${delActive ? 'danger-active' : ''}" data-act="delete" title="${t('delete')} (X)">${icon('close')}</button>
@@ -651,6 +756,32 @@ export class Hud {
     this.bottom.onclick = (e) => {
       const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
       if (!target) return;
+      if (target.dataset.paint) {
+        const tr = target.dataset.paint as TerrainId | 'core';
+        if (paintTool?.terrain === tr) this.input.setTool({ kind: 'none' });
+        else this.input.setTool({ kind: 'paint', terrain: tr, brush: this.brush });
+        this.selectBuilding(null);
+        sfx.select();
+        return;
+      }
+      if (target.dataset.brush) {
+        this.brush = Number(target.dataset.brush);
+        if (paintTool) this.input.setTool({ kind: 'paint', terrain: paintTool.terrain, brush: this.brush });
+        this.lastBottomHtml = '';
+        this.renderBottom();
+        return;
+      }
+      if (target.dataset.tab) {
+        this.editorTab = target.dataset.tab as 'terrain' | 'build';
+        this.input.setTool({ kind: 'none' });
+        this.lastBottomHtml = '';
+        this.renderBottom();
+        return;
+      }
+      if (target.dataset.act === 'edplay') {
+        this.setEditor(false);
+        return;
+      }
       const build = target.dataset.build as BuildingId | undefined;
       if (build) {
         if (this.tool.kind === 'build' && this.tool.type === build) this.input.setTool({ kind: 'none' });
@@ -717,6 +848,9 @@ export class Hud {
       this.toolChip.classList.remove('hidden');
     } else if (tool.kind === 'select') {
       this.toolChip.innerHTML = `<span>${icon('copy', 'sm')} ${t('select_hint')}</span><span class="x">${icon('close', 'sm')}</span>`;
+      this.toolChip.classList.remove('hidden');
+    } else if (tool.kind === 'paint') {
+      this.toolChip.innerHTML = `<span>✎ ${tool.terrain === 'core' ? t('ed_core_hint') : t('ed_paint_hint')}</span><span class="x">${icon('close', 'sm')}</span>`;
       this.toolChip.classList.remove('hidden');
     } else if (tool.kind === 'paste') {
       const cost = Sim.blueprintCost(tool.bp);
@@ -1084,7 +1218,7 @@ export class Hud {
           <div class="dirs"><span class="lbl">${t('lamp_mode')}</span><button class="chip ${(b.mode ?? 'hold') === 'hold' ? 'active' : ''}" data-mode="hold">${t('lamp_hold')}</button><button class="chip ${b.mode === 'pass' ? 'active' : ''}" data-mode="pass">${t('lamp_pass')}</button></div>
           ${b.mode === 'pass' ? dirPicker : ''}${picker(t('lamp_filter'))}`;
       } else if (b.type === 'switch') {
-        body = `${statusLine()}<div class="dirs"><span class="lbl">${t('switch_state')}</span><button class="chip ${b.open !== false ? 'active' : ''}" data-open="1">${t('switch_on')}</button><button class="chip ${b.open === false ? 'active' : ''}" data-open="0">${t('switch_off')}</button></div>
+        body = `<div class="lbl">${b.open === false ? t('switch_off') : t('switch_on')}</div><div class="dirs"><span class="lbl">${t('switch_state')}</span><button class="chip ${b.open !== false ? 'active' : ''}" data-open="1">${t('switch_on')}</button><button class="chip ${b.open === false ? 'active' : ''}" data-open="0">${t('switch_off')}</button></div>
           <div class="dirs"><span class="lbl">${t('switch_pulse')}</span><button class="chip ${b.mode === 'pulse' ? 'active' : ''}" data-mode="pulse">${t('on')}</button><button class="chip ${b.mode !== 'pulse' ? 'active' : ''}" data-mode="hold">${t('off')}</button></div>
           <p class="save-hint">${t('switch_hint')}</p>${dirPicker}`;
       }
@@ -1204,6 +1338,113 @@ export class Hud {
       <p style="white-space:pre-line">${text}</p>
       <button class="btn primary" data-act="close">${t('ok')}</button>`,
     );
+  }
+
+  // ---------- Explanations: hover (mouse) or long press (touch) on a build button / inventory item ----------
+
+  private installTips() {
+    const target = (e: Event) => (e.target as HTMLElement).closest('.build-btn, .inv-item') as HTMLElement | null;
+    const clear = () => {
+      if (this.tipTimer) clearTimeout(this.tipTimer);
+      this.tipTimer = null;
+    };
+    this.bottom.addEventListener('pointerdown', (e) => {
+      const b = target(e);
+      clear();
+      if (!b || e.pointerType === 'mouse') return;
+      this.tipTimer = window.setTimeout(() => {
+        this.tipSuppressClick = true;
+        this.showTip(b);
+        if (navigator.vibrate) navigator.vibrate(12);
+      }, 700);
+    });
+    this.bottom.addEventListener('pointerover', (e) => {
+      const b = target(e);
+      if (!b || e.pointerType !== 'mouse') return;
+      clear();
+      this.tipTimer = window.setTimeout(() => this.showTip(b), 550);
+    });
+    this.bottom.addEventListener('pointerout', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      clear();
+      this.hideTip();
+    });
+    // pointercancel is not in this list: Chrome cancels the pointer on a long press (context menu), which is exactly the gesture we want
+    for (const ev of ['pointerup', 'pointerleave']) this.bottom.addEventListener(ev, () => clear());
+    this.bottom.addEventListener('contextmenu', (e) => e.preventDefault());
+    this.bottom.addEventListener('scroll', () => clear(), true);
+    // the tap that follows a long press must not select the tool; any other tap closes the tip
+    this.bottom.addEventListener('click', (e) => {
+      if (this.tipSuppressClick) {
+        e.stopPropagation();
+        e.preventDefault();
+        this.tipSuppressClick = false;
+        return;
+      }
+      this.hideTip();
+    }, true);
+    this.root.addEventListener('pointerdown', (e) => {
+      if (!(e.target as HTMLElement).closest('.tip')) this.hideTip();
+    }, true);
+    this.tip.onclick = (e) => {
+      const c = (e.target as HTMLElement).closest('[data-chain]') as HTMLElement | null;
+      if (c) {
+        this.hideTip();
+        this.showChain(c.dataset.chain as ItemId);
+      }
+    };
+  }
+
+  private showTip(btn: HTMLElement) {
+    const build = btn.dataset.build as BuildingId | undefined;
+    const item = btn.dataset.chain as ItemId | undefined;
+    const html = build ? this.buildingTipHtml(build) : item ? this.itemTipHtml(item) : '';
+    if (!html) return;
+    this.tip.innerHTML = html;
+    this.tip.classList.remove('hidden');
+    const r = btn.getBoundingClientRect();
+    const w = Math.min(340, window.innerWidth - 16);
+    this.tip.style.width = `${w}px`;
+    const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
+    this.tip.style.left = `${left}px`;
+    this.tip.style.top = '';
+    this.tip.style.bottom = `${window.innerHeight - r.top + 8}px`;
+  }
+
+  hideTip() {
+    this.tip.classList.add('hidden');
+  }
+
+  private recipeRow(r: (typeof RECIPES)[number]): string {
+    const ins = Object.entries(r.inputs).map(([k, n]) => `${itemImg(k as ItemId, 'icon xs')}${n}`).join(' + ');
+    return `<div class="tip-recipe">${ins} → ${itemImg(r.output, 'icon xs')}${r.outputCount > 1 ? r.outputCount : ''} <small>${r.seconds}s</small></div>`;
+  }
+
+  private buildingTipHtml(id: BuildingId): string {
+    const def = BUILDINGS[id];
+    const st = this.sim.state;
+    const recipes = def.kind === 'machine' ? RECIPES.filter((r) => r.machine === id) : [];
+    const cost = Object.keys(def.cost).length ? costHtml(def.cost, st.inventory) : '–';
+    const power = def.power ? `<span class="${def.power < 0 ? 'ok' : ''}">⚡ ${def.power < 0 ? '+' : '−'}${Math.abs(def.power)}</span>` : '';
+    const rate = def.kind === 'miner' ? `${Math.round((60 / MINE_SECONDS) * this.sim.factor('miner'))}/min` : def.kind === 'conveyor' ? `${Math.round(this.sim.beltCapacity())}/min` : '';
+    return `<div class="tip-head"><img src="${buildingUrl(id)}" alt=""><div><b>${tBuilding(id)}</b><small>${def.size}×${def.size} ${power} ${rate ? '· ' + rate : ''}</small></div></div>
+      <p>${tBuildingDesc(id)}</p>
+      <div class="tip-line"><span>${t('cost')}</span>${cost}</div>
+      ${recipes.length ? `<div class="tip-line"><span>${t('recipes')}</span></div>${recipes.map((r) => this.recipeRow(r)).join('')}` : ''}
+      <small class="dim">${t('tip_hint')}</small>`;
+  }
+
+  private itemTipHtml(id: ItemId): string {
+    const made = RECIPES.filter((r) => r.output === id);
+    const used = RECIPES.filter((r) => id in r.inputs);
+    const terrain = (Object.keys(TERRAIN_ITEM) as TerrainId[]).find((k) => TERRAIN_ITEM[k] === id);
+    const usedIn = used.map((r) => `${itemImg(r.output, 'icon xs')}`).join(' ');
+    const costOf = BUILD_ORDER.filter((b) => id in BUILDINGS[b].cost).map((b) => tBuilding(b)).join(', ');
+    return `<div class="tip-head">${itemImg(id, 'icon')}<div><b>${tItem(id)}</b><small>${SHIP_PARTS[id] ? `🚀 ${t('ship_part')} · ${SHIP_PARTS[id]}` : ''}</small></div></div>
+      ${terrain ? `<p>${t('tip_mined', { m: tBuilding('miner') })}</p>` : made.map((r) => `<div class="tip-line"><span>${tBuilding(r.machine)}</span></div>${this.recipeRow(r)}`).join('')}
+      ${usedIn ? `<div class="tip-line"><span>${t('tip_used_in')}</span><span>${usedIn}</span></div>` : ''}
+      ${costOf ? `<div class="tip-line"><span>${t('tip_builds')}</span><span class="wrap">${costOf}</span></div>` : ''}
+      <button class="btn small" data-chain="${id}">${t('chains')}</button>`;
   }
 
   /** Styled replacement for window.confirm. */
@@ -1482,7 +1723,8 @@ export class Hud {
       <button class="btn" data-act="save">${icon('save', 'sm')} ${t('save')}</button>
       <button class="btn" data-act="transfer">${icon('transfer', 'sm')} ${t('transfer')}</button>
       <button class="btn" data-act="blueprints">${icon('blueprint', 'sm')} ${t('blueprints')}</button>
-      ${st.note ? `<button class="btn" data-act="note">${t('save_note')}</button>` : ''}
+      ${st.note && !this.editor ? `<button class="btn" data-act="note">${t('save_note')}</button>` : ''}
+      ${st.options.mode === 'free' ? (this.editor ? `<button class="btn" data-act="ednote">✎ ${t('ed_note')}</button><button class="btn primary" data-act="edtoggle">▶ ${t('ed_play')}</button>` : `<button class="btn" data-act="edtoggle">✎ ${t('editor')}</button>`) : ''}
       <button class="btn" data-act="howto">${t('how_to')}</button>
       <a class="btn" href="./ai/" style="text-decoration:none;text-align:center">${t('ai_page')} →</a>
       <button class="btn danger" data-act="new">${t('new_game')}</button>
@@ -1501,6 +1743,10 @@ export class Hud {
           this.showMenu();
         } else if (target.dataset.act === 'howto') this.showHowTo();
         else if (target.dataset.act === 'note') this.showNote();
+        else if (target.dataset.act === 'edtoggle') {
+          this.closeModal();
+          this.setEditor(!this.editor);
+        } else if (target.dataset.act === 'ednote') this.editNote();
         else if (target.dataset.act === 'transfer') this.showTransfer();
         else if (target.dataset.act === 'blueprints') this.showBlueprints();
         else if (target.dataset.act === 'save') {
@@ -1766,6 +2012,9 @@ export class Hud {
 
   /** Called ~4x per second. */
   refresh(dt = 0.25) {
+    // phones: keep the tool chip just above the (variable height) bottom HUD
+    if (window.innerWidth < 900) this.toolChip.style.bottom = `${this.bottom.offsetHeight + 8}px`;
+    else this.toolChip.style.bottom = '';
     if (this.koraMsgT > 0) {
       this.koraMsgT -= dt;
       if (this.koraMsgT <= 0) this.koraAction = null;

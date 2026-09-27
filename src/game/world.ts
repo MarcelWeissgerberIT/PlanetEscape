@@ -98,12 +98,12 @@ export function generateTerrain(seed: number, w: number, h: number, params?: Ter
 
 export const DEFAULT_OPTIONS: GameOptions = { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
 
-export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOptions = DEFAULT_OPTIONS): GameState {
+export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOptions = DEFAULT_OPTIONS, custom?: { w: number; h: number; blank: boolean }): GameState {
   if (options.mode === 'story') return levelState(null, 0, options);
-  const width = MAP_SIZES[options.mapSize] ?? 120;
-  const height = width;
+  const width = custom ? Math.max(24, Math.min(320, Math.round(custom.w))) : (MAP_SIZES[options.mapSize] ?? 120);
+  const height = custom ? Math.max(24, Math.min(320, Math.round(custom.h))) : width;
   const all = options.allUnlocked;
-  const terrain = generateTerrain(seed, width, height);
+  const terrain: TerrainId[] = custom?.blank ? new Array(width * height).fill('ground') : generateTerrain(seed, width, height);
   const r2 = rng(seed ^ 0x5bd1e995);
   const hard = options.difficulty === 'hard';
   const ore = terrain.map((t) => (t === 'ground' || t === 'rock' ? 0 : Math.round((ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0])) * (hard ? HARD_ORE_FACTOR : 1))));

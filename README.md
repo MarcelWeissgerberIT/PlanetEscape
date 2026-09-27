@@ -78,7 +78,9 @@ Seven orders unlock buildings and recipes step by step. The last one is the ship
 * **Endgame score** (speed, ship parts, lean factory, contracts) with best scores; **hard mode** for free play (half the material, thinner deposits, more storms, 1.5× score).
 * **Ambient soundscape**: procedural wind, drone and a factory hum that grows with activity (toggle in the menu).
 * **Displays & games inside the game**: the *LED lamp* is one pixel (lights in the colour of the item it holds, hold or pass mode, optional filter) and the *switch* a hand-operated gate you flip by tapping. Blueprint presets ship a 3×3 tic-tac-toe board and 5×7 / 8×8 displays; two item types are X and O.
-* **Large maps**: pre-rendered terrain cache and low-detail rendering when zoomed out keep 160×160 maps smooth.
+* **Level editor**: from the title screen. Blank or random maps up to 320×320, paint deposits and rock with brushes, move the core, pre-build for free, leave a note that players see when they load your level, export it as a save.
+* **Explanations on demand**: hover (mouse) or long-press (touch) any build button or inventory item for a card with description, cost, power, recipes and where an item is used.
+* **Large maps**: sizes up to 240×240 (320 in the editor); pre-rendered terrain cache and low-detail rendering when zoomed out keep them smooth.
 
 ## MCP server: let an AI play / KI spielt mit
 
