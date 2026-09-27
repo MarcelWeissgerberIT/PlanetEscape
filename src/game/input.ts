@@ -4,6 +4,13 @@ import type { Renderer } from './render';
 import { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir } from './types';
 
+export interface BeltStep {
+  x: number;
+  y: number;
+  dir: Dir;
+  ok: boolean;
+}
+
 export type Tool = { kind: 'none' } | { kind: 'build'; type: BuildingId } | { kind: 'delete' } | { kind: 'select' } | { kind: 'paste'; bp: Blueprint };
 
 export interface InputCallbacks {
@@ -42,7 +49,6 @@ export class Input {
   private pointers = new Map<number, PointerInfo>();
   private dragging = false;
   private layingBelts = false;
-  private lastBeltTile: [number, number] | null = null;
   private pinchDist = 0;
   private pinchMid: [number, number] = [0, 0];
   private hoverTile: [number, number] | null = null;
@@ -52,6 +58,8 @@ export class Input {
   private lastTouch = -1e9;
   private lastPointerType = 'mouse';
   private selStart: [number, number] | null = null;
+  private beltStart: [number, number] | null = null;
+  private beltPath: BeltStep[] = [];
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -75,6 +83,13 @@ export class Input {
     this.updateGhost();
     this.renderer.deleteMode = tool.kind === 'delete';
     this.cb.onToolChange(tool);
+  }
+
+  /** Pipette: make `b`'s type (and direction) the active build tool. */
+  pickTool(b: Building) {
+    if (b.type === 'core' || !this.sim.state.unlockedBuildings.includes(b.type)) return;
+    this.dir = b.dir;
+    this.setTool({ kind: 'build', type: b.type });
   }
 
   rotate() {
@@ -107,6 +122,12 @@ export class Input {
       case 'z':
         this.cb.onUndo();
         break;
+      case 'q': {
+        // pipette: pick up the building under the cursor as the current tool
+        const b = this.hoverTile ? this.sim.at(this.hoverTile[0], this.hoverTile[1]) : null;
+        if (b) this.pickTool(b);
+        break;
+      }
       case 'c':
         this.setTool(this.tool.kind === 'select' ? { kind: 'none' } : { kind: 'select' });
         break;
@@ -152,7 +173,8 @@ export class Input {
       this.pinchDist = Math.hypot(a.x - b.x, a.y - b.y);
       this.pinchMid = [(a.x + b.x) / 2, (a.y + b.y) / 2];
       this.layingBelts = false;
-      this.lastBeltTile = null;
+      this.beltPath = [];
+      this.renderer.beltPreview = null;
       this.renderer.ghost = null;
       return;
     }
@@ -163,7 +185,8 @@ export class Input {
     }
     if (this.tool.kind === 'build' && this.tool.type === 'conveyor' && e.button === 0) {
       this.layingBelts = true;
-      this.lastBeltTile = this.cam.screenToTile(e.clientX, e.clientY);
+      this.beltStart = this.cam.screenToTile(e.clientX, e.clientY);
+      this.beltPath = [];
     }
     // long press in pan mode on touch = remove (mobile convenience)
     if (e.pointerType === 'touch' && this.tool.kind === 'none') {
@@ -209,8 +232,10 @@ export class Input {
     if (!this.dragging) return;
 
     if (this.layingBelts && this.moved) {
-      this.layBeltTo(this.hoverTile);
-      this.updateGhost();
+      // belt line editor: preview an L-shaped line from the start tile to the pointer, placed on release
+      this.beltPath = this.beltStart ? this.planBeltLine(this.beltStart, this.hoverTile) : [];
+      this.renderer.beltPreview = this.beltPath;
+      this.renderer.ghost = null;
       return;
     }
     if (this.tool.kind === 'select' && this.selStart && p.button === 0) {
@@ -244,7 +269,6 @@ export class Input {
       // finished a pinch; do not treat as tap
       this.dragging = false;
       this.layingBelts = false;
-      this.lastBeltTile = null;
       return;
     }
     if (this.tool.kind === 'select' && this.selStart) {
@@ -260,10 +284,18 @@ export class Input {
     this.dragging = false;
     const wasLaying = this.layingBelts;
     this.layingBelts = false;
-    this.lastBeltTile = null;
     if (!wasDragging) return;
     if (this.moved && !wasLaying) return; // pan
-    if (wasLaying && this.moved) return; // belts already laid during drag
+    if (wasLaying && this.moved) {
+      // commit the previewed belt line
+      this.commitBeltLine(this.beltPath);
+      this.beltPath = [];
+      this.beltStart = null;
+      this.renderer.beltPreview = null;
+      if (e.pointerType !== 'mouse') this.hoverTile = null;
+      this.updateGhost();
+      return;
+    }
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     // tap
     const [tx, ty] = this.cam.screenToTile(e.clientX, e.clientY);
@@ -335,29 +367,62 @@ export class Input {
     return [tx - off, ty - off];
   }
 
-  private layBeltTo(tile: [number, number] | null) {
-    if (!tile || !this.lastBeltTile) return;
-    let [lx, ly] = this.lastBeltTile;
-    const [tx, ty] = tile;
-    if (lx === tx && ly === ty) return;
-    // walk in single steps (Manhattan) so fast drags still create a continuous line
-    let guard = 0;
-    while ((lx !== tx || ly !== ty) && guard++ < 64) {
-      let dir: Dir;
-      if (Math.abs(tx - lx) >= Math.abs(ty - ly)) dir = tx > lx ? 1 : 3;
-      else dir = ty > ly ? 2 : 0;
-      this.dir = dir;
-      // set/rotate the belt we are leaving to point toward the next tile
-      const here = this.sim.at(lx, ly);
-      if (here?.type === 'conveyor') this.sim.rotate(here, dir);
-      else if (!here && !this.sim.placementError('conveyor', lx, ly)) this.cb.onPlace('conveyor', lx, ly, dir);
-      lx += dir === 1 ? 1 : dir === 3 ? -1 : 0;
-      ly += dir === 2 ? 1 : dir === 0 ? -1 : 0;
-      const next = this.sim.at(lx, ly);
-      if (next?.type === 'conveyor') this.sim.rotate(next, dir);
-      else if (!next && !this.sim.placementError('conveyor', lx, ly)) this.cb.onPlace('conveyor', lx, ly, dir);
+  /**
+   * Plan an L-shaped belt line between two tiles. Both bends (horizontal-first, vertical-first) are
+   * tried and the one with fewer blocked tiles wins; the line stops at the first tile that cannot
+   * take a belt. Existing belts on the line are re-pointed instead of blocking it.
+   */
+  planBeltLine(from: [number, number], to: [number, number]): BeltStep[] {
+    const [x0, y0] = from, [x1, y1] = to;
+    const build = (horizontalFirst: boolean): BeltStep[] => {
+      const tiles: { x: number; y: number }[] = [];
+      let x = x0, y = y0;
+      tiles.push({ x, y });
+      const stepX = () => { while (x !== x1) { x += Math.sign(x1 - x); tiles.push({ x, y }); } };
+      const stepY = () => { while (y !== y1) { y += Math.sign(y1 - y); tiles.push({ x, y }); } };
+      if (horizontalFirst) { stepX(); stepY(); } else { stepY(); stepX(); }
+      const out: BeltStep[] = [];
+      let plates = this.sim.state.inventory.iron_plate ?? 0;
+      for (let i = 0; i < tiles.length; i++) {
+        const t = tiles[i];
+        const n = tiles[i + 1];
+        let dir: Dir = out.length ? out[out.length - 1].dir : this.dir;
+        if (n) dir = n.x > t.x ? 1 : n.x < t.x ? 3 : n.y > t.y ? 2 : 0;
+        const here = this.sim.at(t.x, t.y);
+        let ok: boolean;
+        if (here?.type === 'conveyor') ok = true;
+        else if (here) ok = false;
+        else {
+          const err = this.sim.placementError('conveyor', t.x, t.y);
+          ok = !err || err === 'err_cost';
+          if (ok) {
+            if (plates <= 0) ok = false;
+            else plates--;
+          }
+        }
+        if (!ok) break;
+        out.push({ x: t.x, y: t.y, dir, ok });
+      }
+      // a straight line has no second variant
+      return out;
+    };
+    const a = build(true), b = build(false);
+    return b.length > a.length ? b : a;
+  }
+
+  /** Place / re-point the belts of a planned line. */
+  private commitBeltLine(path: BeltStep[]) {
+    let placed = 0;
+    for (const p of path) {
+      const here = this.sim.at(p.x, p.y);
+      if (here?.type === 'conveyor') {
+        if (here.dir !== p.dir) this.sim.rotate(here, p.dir);
+        continue;
+      }
+      if (!here && !this.sim.placementError('conveyor', p.x, p.y) && this.cb.onPlace('conveyor', p.x, p.y, p.dir)) placed++;
     }
-    this.lastBeltTile = [tx, ty];
+    if (path.length) this.dir = path[path.length - 1].dir;
+    void placed;
   }
 
   updateGhost() {

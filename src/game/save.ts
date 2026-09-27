@@ -1,5 +1,6 @@
 import type { GameState } from './types';
 import { SAVE_VERSION } from './world';
+import { UPGRADE_DEFAULTS } from './data';
 
 const KEY = 'pe_save_v1';
 
@@ -24,7 +25,7 @@ export function load(): GameState | null {
     if (st.version === 2) {
       const r = () => 300 + Math.random() * 100;
       st.ore = st.terrain.map((t) => (t === 'ground' ? 0 : Math.round(r())));
-      st.upgrades = { belt: 0, miner: 0, machine: 0, power: 0 };
+      st.upgrades = UPGRADE_DEFAULTS();
       st.contracts = [];
       st.contractsDone = 0;
       st.nextContractAt = st.time + 120;
@@ -40,6 +41,13 @@ export function load(): GameState | null {
       st.version = 4;
     }
     if (st.version !== SAVE_VERSION) return null;
+    // additive fields (no version bump needed)
+    st.upgrades = { ...UPGRADE_DEFAULTS(), ...st.upgrades };
+    st.event ??= null;
+    st.nextEventAt ??= st.time + 400;
+    st.boostUntil ??= 0;
+    st.eventsSeen ??= 0;
+    st.chapterStart ??= 0;
     return st;
   } catch {
     return null;

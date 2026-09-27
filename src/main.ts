@@ -4,10 +4,10 @@ import { BUILD_ORDER, ITEM_ORDER } from './game/data';
 import { Input } from './game/input';
 import { Renderer } from './game/render';
 import * as Save from './game/save';
-import { sfx } from './game/sfx';
+import { setActivity, sfx } from './game/sfx';
 import { Sim } from './game/sim';
 import type { Blueprint, GameState, TerrainId } from './game/types';
-import { levelState, newGame } from './game/world';
+import { chapterState, levelState, newGame } from './game/world';
 import { t } from './i18n';
 import { Hud } from './ui/hud';
 
@@ -86,6 +86,13 @@ const hud = new Hud(sim, input, renderer, {
     Save.save(sim.state);
     start();
   },
+  onPlayChapter: (chapter: number) => {
+    Save.clear();
+    swapState(chapterState(chapter, { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true }));
+    Save.save(sim.state);
+    start();
+    hud.chapterStart();
+  },
 });
 
 // Debug / automation hook (used by the smoke test).
@@ -150,6 +157,9 @@ function frame(now: number) {
         case 'contract_done': hud.contractDone(); break;
         case 'contract_failed': hud.contractFailed(); break;
         case 'storm': hud.storm(ev.on); break;
+        case 'event': hud.eventOffer(ev.event); break;
+        case 'event_done': hud.eventDone(ev.event, ev.choice, sim.state.time >= ev.event.until); break;
+        case 'meteor': hud.meteorLanded(ev.x, ev.y); break;
       }
     }
     sim.events.length = 0;
@@ -157,6 +167,9 @@ function frame(now: number) {
     if (hudTimer > 0.25) {
       hudTimer = 0;
       hud.refresh();
+      let working = 0;
+      for (const b of sim.state.buildings) if (b.working && b.type !== 'miner') working++;
+      setActivity(speed === 0 ? 0 : working);
     }
     saveTimer += dt;
     if (saveTimer > 8) {

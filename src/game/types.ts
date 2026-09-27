@@ -125,7 +125,7 @@ export interface Building {
   rateT?: number;
 }
 
-export type UpgradeId = 'belt' | 'miner' | 'machine' | 'power';
+export type UpgradeId = 'belt' | 'miner' | 'machine' | 'power' | 'yield' | 'buffer' | 'printer';
 
 export interface Contract {
   id: number;
@@ -154,6 +154,19 @@ export interface GameOptions {
   infiniteOre: boolean;
   allUnlocked: boolean;
   storms: boolean;
+  difficulty?: 'normal' | 'hard'; // free play only; hard = less material, thinner deposits, more storms
+}
+
+export type EventKind = 'meteorite' | 'wreck' | 'power_surge';
+
+/** A one-off situation KORA reports; the player picks option a or b (b happens by default when ignored). */
+export interface GameEvent {
+  id: number;
+  kind: EventKind;
+  until: number; // game time when it resolves on its own
+  x?: number; // meteorite impact site
+  y?: number;
+  terrain?: TerrainId;
 }
 
 export interface GameState {
@@ -185,6 +198,11 @@ export interface GameState {
   launched: boolean;
   powerSupply: number;
   powerDemand: number;
+  chapterStart?: number; // game time when the current story chapter began (for the star rating)
+  event?: GameEvent | null;
+  nextEventAt?: number;
+  boostUntil?: number; // overclocked power until this game time
+  eventsSeen?: number;
 }
 
 export interface BlueprintItem {

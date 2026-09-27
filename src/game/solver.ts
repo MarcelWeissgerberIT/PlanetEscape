@@ -1,6 +1,6 @@
 // Automatic planner: routes belts and builds whole production chains.
 // DOM-free so it can run in the game, in tests and in the MCP server.
-import { BELT_SPACING, BELT_SPEED, BUILDINGS, MINE_SECONDS, RECIPES, TERRAIN_ITEM } from './data';
+import { BUILDINGS, MINE_SECONDS, RECIPES, TERRAIN_ITEM } from './data';
 import type { Sim } from './sim';
 import type { Building, BuildingId, Dir, ItemId, TerrainId } from './types';
 import { DX, DY } from './types';
@@ -306,7 +306,7 @@ export function minerRate(sim: Sim): number {
 }
 
 export function beltCapacity(sim: Sim): number {
-  return ((BELT_SPEED * sim.factor('belt')) / BELT_SPACING) * 60;
+  return sim.beltCapacity();
 }
 
 /**

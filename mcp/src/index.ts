@@ -7,7 +7,7 @@ import { BUILDINGS, BUILD_ORDER, LEVELS, MISSIONS, RECIPES, RECIPE_BY_ID, SHIP_P
 import { Sim } from '../../src/game/sim';
 import { beltCapacity, buildChain, machineRate, minerRate, routeBelt, layPath, solveOrder, type SolverLog } from '../../src/game/solver';
 import type { Building, BuildingId, Dir, GameOptions, GameState, ItemId, TerrainId } from '../../src/game/types';
-import { levelState, newGame } from '../../src/game/world';
+import { chapterState, newGame } from '../../src/game/world';
 
 const server = new McpServer({ name: 'planet-escape-mcp-server', version: '1.0.0' });
 
@@ -163,20 +163,8 @@ Returns the game summary (see pe_get_state).`,
   },
   async ({ mode, chapter, seed, mapSize, allUnlocked, infiniteOre, storms }) => {
     const options: GameOptions = { mode, mapSize, allUnlocked, infiniteOre, storms };
-    if (mode === 'story') {
-      let st: GameState | null = null;
-      const target = (chapter ?? 1) - 1;
-      for (let i = 0; i <= target; i++) {
-        st = levelState(st, i, options);
-        if (i < target) {
-          // grant the unlocks of the chapters we skip
-          const m = MISSIONS[i];
-          for (const u of m.unlocks) if (!st.unlockedBuildings.includes(u)) st.unlockedBuildings.push(u);
-          for (const r of m.unlockRecipes) if (!st.unlockedRecipes.includes(r)) st.unlockedRecipes.push(r);
-        }
-      }
-      sim = new Sim(st!);
-    } else sim = new Sim(newGame(seed ?? Math.floor(Math.random() * 1e9), options));
+    if (mode === 'story') sim = new Sim(chapterState(chapter ?? 1, options));
+    else sim = new Sim(newGame(seed ?? Math.floor(Math.random() * 1e9), options));
     sim.state.introSeen = true;
     sim.state.tutorialStep = -1;
     eventLog = [];

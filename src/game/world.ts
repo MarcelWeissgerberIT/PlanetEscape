@@ -1,5 +1,5 @@
 import type { Building, GameOptions, GameState, TerrainId } from './types';
-import { BUILD_ORDER, LEVELS, MISSIONS, ORE_PER_TILE, RECIPES, STARTING_BUILDINGS, STARTING_RECIPES } from './data';
+import { BUILD_ORDER, HARD_ORE_FACTOR, LEVELS, MISSIONS, ORE_PER_TILE, RECIPES, STARTING_BUILDINGS, STARTING_RECIPES, UPGRADE_DEFAULTS } from './data';
 
 export const SAVE_VERSION = 4;
 
@@ -104,7 +104,8 @@ export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOpt
   const all = options.allUnlocked;
   const terrain = generateTerrain(seed, width, height);
   const r2 = rng(seed ^ 0x5bd1e995);
-  const ore = terrain.map((t) => (t === 'ground' || t === 'rock' ? 0 : Math.round(ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0]))));
+  const hard = options.difficulty === 'hard';
+  const ore = terrain.map((t) => (t === 'ground' || t === 'rock' ? 0 : Math.round((ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0])) * (hard ? HARD_ORE_FACTOR : 1))));
   const core: Building = { id: 1, type: 'core', x: Math.floor(width / 2) - 1, y: Math.floor(height / 2) - 1, dir: 0 };
   return {
     version: SAVE_VERSION,
@@ -115,15 +116,19 @@ export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOpt
     terrain,
     buildings: [core],
     nextId: 2,
-    inventory: all ? { iron_plate: 400, copper_plate: 200, copper_wire: 100, glass: 60, machine_part: 80, precision_part: 30, steel_frame: 60, circuit: 40 } : { iron_plate: 120, copper_plate: 30 },
+    inventory: all ? { iron_plate: 400, copper_plate: 200, copper_wire: 100, glass: 60, machine_part: 80, precision_part: 30, steel_frame: 60, circuit: 40 } : hard ? { iron_plate: 70, copper_plate: 15 } : { iron_plate: 120, copper_plate: 30 },
     delivered: {},
     missionIndex: all ? MISSIONS.length - 1 : 0,
     ship: {},
     ore,
-    upgrades: { belt: 0, miner: 0, machine: 0, power: 0 },
+    upgrades: UPGRADE_DEFAULTS(),
     contracts: [],
     contractsDone: 0,
     nextContractAt: 300,
+    event: null,
+    nextEventAt: 420,
+    boostUntil: 0,
+    eventsSeen: 0,
     storm: 0,
     nextStormAt: 600,
     tutorialStep: -1,
@@ -136,6 +141,23 @@ export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOpt
     powerSupply: 10,
     powerDemand: 0,
   };
+}
+
+/** Jump straight into story chapter `chapter` (1-based) with everything the earlier chapters unlock. */
+export function chapterState(chapter: number, options: GameOptions = DEFAULT_OPTIONS): GameState {
+  let st: GameState | null = null;
+  const target = Math.max(0, Math.min(LEVELS.length - 1, chapter - 1));
+  for (let i = 0; i <= target; i++) {
+    st = levelState(st, i, options);
+    if (i < target) {
+      const m = MISSIONS[i];
+      for (const u of m.unlocks) if (!st.unlockedBuildings.includes(u)) st.unlockedBuildings.push(u);
+      for (const r of m.unlockRecipes) if (!st.unlockedRecipes.includes(r)) st.unlockedRecipes.push(r);
+    }
+  }
+  st!.introSeen = true;
+  st!.tutorialStep = -1;
+  return st!;
 }
 
 /** A story chapter: a fixed small map. Unlocks, upgrades and stats carry over from `prev`. */
@@ -162,10 +184,15 @@ export function levelState(prev: GameState | null, level: number, options: GameO
     missionIndex: level,
     ship: {},
     ore,
-    upgrades: prev ? { ...prev.upgrades } : { belt: 0, miner: 0, machine: 0, power: 0 },
+    upgrades: { ...UPGRADE_DEFAULTS(), ...(prev?.upgrades ?? {}) },
     contracts: [],
     contractsDone: prev?.contractsDone ?? 0,
     nextContractAt: def.contracts ? 240 : 1e12,
+    event: null,
+    nextEventAt: def.contracts ? (prev?.time ?? 0) + 360 : 1e12,
+    boostUntil: 0,
+    eventsSeen: prev?.eventsSeen ?? 0,
+    chapterStart: prev?.time ?? 0,
     storm: 0,
     nextStormAt: def.storms ? 420 : 1e12,
     tutorialStep: prev ? prev.tutorialStep : 0,

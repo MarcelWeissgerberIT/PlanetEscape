@@ -14,6 +14,13 @@ import {
   TERRAIN_ITEM,
   TUNNEL_RANGE,
   CONTRACT_INTERVAL,
+  BOOST_FACTOR,
+  BOOST_SECONDS,
+  EVENT_DECIDE_SECONDS,
+  EVENT_INTERVAL,
+  EVENT_MIN_MISSION,
+  HARD_STORM_FACTOR,
+  METEOR_ORE,
   CONTRACT_ITEMS,
   STORM_INTERVAL,
   STORM_SECONDS,
@@ -22,7 +29,7 @@ import {
   MIXER_RATIOS,
   recipesFor,
 } from './data';
-import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, GameState, ItemId, RecipeDef, Status, UpgradeId } from './types';
+import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
 
 export type SimEvent =
@@ -34,7 +41,10 @@ export type SimEvent =
   | { type: 'contract_offer'; contract: Contract }
   | { type: 'contract_done'; contract: Contract }
   | { type: 'contract_failed'; contract: Contract }
-  | { type: 'storm'; on: boolean };
+  | { type: 'storm'; on: boolean }
+  | { type: 'event'; event: GameEvent }
+  | { type: 'event_done'; event: GameEvent; choice: 'a' | 'b' }
+  | { type: 'meteor'; x: number; y: number };
 
 export interface Problem {
   building: Building;
@@ -68,9 +78,15 @@ export class Sim {
     return def.cost(lvl + 1);
   }
 
+  /** Research tree: is the prerequisite track far enough? */
+  upgradeUnlocked(id: UpgradeId): boolean {
+    const req = UPGRADE_BY_ID[id].requires;
+    return !req || (this.state.upgrades[req.id] ?? 0) >= req.level;
+  }
+
   canUpgrade(id: UpgradeId): boolean {
     const cost = this.upgradeCost(id);
-    if (!cost) return false;
+    if (!cost || !this.upgradeUnlocked(id)) return false;
     for (const k in cost) if ((this.state.inventory[k as ItemId] ?? 0) < cost[k as ItemId]!) return false;
     return true;
   }
@@ -81,6 +97,10 @@ export class Sim {
     for (const k in cost) this.addInv(k as ItemId, -cost[k as ItemId]!);
     this.state.upgrades[id] = (this.state.upgrades[id] ?? 0) + 1;
     return true;
+  }
+
+  storageCap(): number {
+    return Math.round(STORAGE_CAP * this.factor('buffer'));
   }
 
   /** Remaining ore under a miner (sum of its tile). */
@@ -378,7 +398,7 @@ export class Sim {
       case 'storage': {
         if (this.isOutputSide(b, from)) return false;
         const total = Object.values(b.store!).reduce((a, c) => a + (c ?? 0), 0);
-        if (total >= STORAGE_CAP) return false;
+        if (total >= this.storageCap()) return false;
         b.store![item] = (b.store![item] ?? 0) + 1;
         return true;
       }
@@ -478,6 +498,7 @@ export class Sim {
         else supply += -p;
       } else if (p > 0 && !(b.type === 'miner' && b.status === 'depleted')) demand += p;
     }
+    if ((st.boostUntil ?? 0) > st.time) supply *= BOOST_FACTOR; // overclocked after a power surge event
     st.powerSupply = Math.round(supply);
     st.powerDemand = demand;
     const ratio = demand <= supply ? 1 : supply / demand;
@@ -536,7 +557,8 @@ export class Sim {
         this.events.push({ type: 'storm', on: false });
       }
     } else if (st.time >= st.nextStormAt) {
-      st.nextStormAt = st.time + STORM_INTERVAL[0] + Math.random() * (STORM_INTERVAL[1] - STORM_INTERVAL[0]);
+      const hard = st.options.difficulty === 'hard' ? HARD_STORM_FACTOR : 1;
+      st.nextStormAt = st.time + (STORM_INTERVAL[0] + Math.random() * (STORM_INTERVAL[1] - STORM_INTERVAL[0])) * hard;
       if (st.options.storms && this.countBuildings('solar') > 0) {
         st.storm = STORM_SECONDS;
         this.events.push({ type: 'storm', on: true });
@@ -555,6 +577,18 @@ export class Sim {
         if (c.accepted) this.events.push({ type: 'contract_failed', contract: c });
       }
     }
+    // events: KORA reports a situation and waits for a decision
+    if (st.event) {
+      if (st.time >= st.event.until) this.resolveEvent('b');
+    } else if (st.time >= (st.nextEventAt ?? Infinity) && st.missionIndex >= EVENT_MIN_MISSION && !st.launched) {
+      st.nextEventAt = st.time + EVENT_INTERVAL[0] + Math.random() * (EVENT_INTERVAL[1] - EVENT_INTERVAL[0]);
+      const ev = this.makeEvent();
+      if (ev) {
+        st.event = ev;
+        st.eventsSeen = (st.eventsSeen ?? 0) + 1;
+        this.events.push({ type: 'event', event: ev });
+      }
+    }
     if (st.time >= st.nextContractAt && st.missionIndex >= 1 && st.contracts.length < 2) {
       st.nextContractAt = st.time + CONTRACT_INTERVAL;
       const pool = CONTRACT_ITEMS.filter((c) => st.missionIndex >= c.minMission);
@@ -566,6 +600,104 @@ export class Sim {
         this.events.push({ type: 'contract_offer', contract: c });
       }
     }
+  }
+
+  // ---------- Events ----------
+
+  private makeEvent(): GameEvent | null {
+    const st = this.state;
+    const kinds: EventKind[] = ['wreck', 'meteorite'];
+    if (this.countBuildings('solar') > 0) kinds.push('power_surge');
+    const kind = kinds[Math.floor(Math.random() * kinds.length)];
+    const ev: GameEvent = { id: st.nextId++, kind, until: st.time + EVENT_DECIDE_SECONDS };
+    if (kind === 'meteorite') {
+      const spot = this.meteorSite();
+      if (!spot) return null;
+      const types: TerrainId[] = ['iron_ore', 'copper_ore'];
+      if (st.unlockedRecipes.includes('glass')) types.push('quartz');
+      if (st.unlockedRecipes.includes('water')) types.push('ice');
+      ev.x = spot.x;
+      ev.y = spot.y;
+      ev.terrain = types[Math.floor(Math.random() * types.length)];
+    }
+    return ev;
+  }
+
+  /** A free 3×3 patch of ground 8–22 tiles from the core. */
+  private meteorSite(): { x: number; y: number } | null {
+    const st = this.state;
+    const core = st.buildings[0];
+    for (let tries = 0; tries < 60; tries++) {
+      const a = Math.random() * Math.PI * 2, d = 8 + Math.random() * 14;
+      const x: number = Math.round(core.x + 1 + Math.cos(a) * d);
+      const y: number = Math.round(core.y + 1 + Math.sin(a) * d);
+      let ok = true;
+      for (let dy = -1; dy <= 1 && ok; dy++) for (let dx = -1; dx <= 1; dx++) if (!this.inBounds(x + dx, y + dy) || this.terrain(x + dx, y + dy) !== 'ground' || this.at(x + dx, y + dy)) { ok = false; break; }
+      if (ok) return { x, y };
+    }
+    return null;
+  }
+
+  /** Can option a be taken right now? (Overclocking costs copper plates.) */
+  eventOptionAvailable(ev: GameEvent, choice: 'a' | 'b'): boolean {
+    if (ev.kind === 'power_surge' && choice === 'a') return (this.state.inventory.copper_plate ?? 0) >= 12;
+    return true;
+  }
+
+  /** Apply the player's decision for the pending event. */
+  resolveEvent(choice: 'a' | 'b') {
+    const st = this.state;
+    const ev = st.event;
+    if (!ev) return;
+    if (!this.eventOptionAvailable(ev, choice)) choice = 'b';
+    st.event = null;
+    switch (ev.kind) {
+      case 'meteorite':
+        if (choice === 'a' && ev.x !== undefined && ev.y !== undefined && ev.terrain) {
+          // it lands: a fresh deposit blob appears on free ground
+          const ex: number = ev.x, ey: number = ev.y;
+          for (let dy = -1; dy <= 1; dy++)
+            for (let dx = -1; dx <= 1; dx++) {
+              if (Math.abs(dx) + Math.abs(dy) > 2) continue;
+              const x = ex + dx, y = ey + dy;
+              if (!this.inBounds(x, y) || this.terrain(x, y) !== 'ground' || this.at(x, y)) continue;
+              const idx = y * st.width + x;
+              st.terrain[idx] = ev.terrain;
+              st.ore[idx] = Math.round(METEOR_ORE[0] + Math.random() * (METEOR_ORE[1] - METEOR_ORE[0]));
+            }
+          this.events.push({ type: 'meteor', x: ev.x, y: ev.y });
+        } else this.addInv('iron_plate', 20);
+        break;
+      case 'wreck':
+        if (choice === 'a') {
+          this.addInv('iron_plate', 24);
+          this.addInv('copper_plate', 12);
+        } else this.addInv('machine_part', 6);
+        break;
+      case 'power_surge':
+        if (choice === 'a') {
+          this.addInv('copper_plate', -12);
+          st.boostUntil = st.time + BOOST_SECONDS;
+        } else if (st.options.storms) {
+          st.storm = Math.max(st.storm, 45);
+          this.events.push({ type: 'storm', on: true });
+        }
+        break;
+    }
+    this.events.push({ type: 'event_done', event: ev, choice });
+  }
+
+  /** End-of-game score: fast, lean and complete factories score highest. */
+  score(): { total: number; time: number; parts: number; thrift: number; contracts: number; hard: boolean } {
+    const st = this.state;
+    let parts = 0;
+    for (const k in SHIP_PARTS) parts += Math.min(st.ship[k as ItemId] ?? 0, SHIP_PARTS[k as ItemId]!) * 50;
+    const time = Math.max(0, 6000 - Math.floor(st.time / 2));
+    const thrift = Math.max(0, 2500 - st.buildings.length * 5);
+    const contracts = st.contractsDone * 100;
+    const hard = st.options.difficulty === 'hard';
+    const total = Math.round((time + parts + thrift + contracts) * (hard ? 1.5 : 1));
+    return { total, time, parts, thrift, contracts, hard };
   }
 
   acceptContract(c: Contract) {
@@ -609,8 +741,25 @@ export class Sim {
   private tickBelt(b: Building, dt: number) {
     const nx = b.x + DX[b.dir], ny = b.y + DY[b.dir];
     const next = this.at(nx, ny);
-    this.moveItems(b, dt, (item) => !!next && this.accept(next, item, b.dir));
+    let delivered = 0;
+    this.moveItems(b, dt, (item) => {
+      const ok = !!next && this.accept(next, item, b.dir);
+      if (ok) delivered++;
+      return ok;
+    });
     if (b.status === 'jammed' && (!next || !this.canReceiveFrom(next, b.dir))) b.status = 'dead_end';
+    // throughput is only measured where a belt hands over to a machine, depot or the core (overlay tag)
+    if (next && next.type !== 'conveyor') this.countRate(b, dt, delivered);
+    else if (b.rate !== undefined) {
+      b.rate = undefined;
+      b.rateT = undefined;
+      b.produced = undefined;
+    }
+  }
+
+  /** Items per minute a belt can carry at the current upgrade level. */
+  beltCapacity(): number {
+    return ((BELT_SPEED * this.factor('belt')) / BELT_SPACING) * 60;
   }
 
   private tickTunnel(b: Building, dt: number) {
@@ -667,7 +816,8 @@ export class Sim {
           b.progress -= 1;
           b.output![item] = (b.output![item] ?? 0) + 1;
           produced = 1;
-          if (!this.state.options.infiniteOre) this.state.ore[idx]--;
+          // deposit yield research: only a fraction of the mined units is taken from the ground
+          if (!this.state.options.infiniteOre && Math.random() < 1 / this.factor('yield')) this.state.ore[idx]--;
           this.bump(this.state.stats.produced, item, 1);
           if (this.state.ore[idx] <= 0) {
             this.state.terrain[idx] = 'ground';
@@ -714,7 +864,8 @@ export class Sim {
     b.working = true;
     b.missing = undefined;
     b.status = ratio < 1 ? 'low_power' : 'ok';
-    b.progress += (dt * ratio * this.factor('machine')) / r.seconds;
+    const fast = b.type === 'printer' || b.type === 'fabricator' ? this.factor('printer') : 1;
+    b.progress += (dt * ratio * this.factor('machine') * fast) / r.seconds;
     if (b.progress >= 1) {
       b.progress = 0;
       b.output![r.output] = outN + r.outputCount;
@@ -744,7 +895,7 @@ export class Sim {
         return;
       }
     }
-    if (Object.values(store).reduce((a, c) => a + (c ?? 0), 0) >= STORAGE_CAP) b.status = 'blocked';
+    if (Object.values(store).reduce((a, c) => a + (c ?? 0), 0) >= this.storageCap()) b.status = 'blocked';
   }
 
   private tickSplitter(b: Building) {

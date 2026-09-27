@@ -1,6 +1,6 @@
 import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
-import { BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
+import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -39,6 +39,7 @@ export class Renderer {
   selectedTile: { x: number; y: number } | null = null;
   selectRect: { x0: number; y0: number; x1: number; y1: number } | null = null;
   pasteGhost: { bp: Blueprint; x: number; y: number; bad: Set<number> } | null = null;
+  beltPreview: { x: number; y: number; dir: Dir; ok: boolean }[] | null = null;
   paused = false;
   deleteMode = false;
   overlay = false;
@@ -52,6 +53,15 @@ export class Renderer {
   private stormDust: { x: number; y: number; l: number; s: number }[] = [];
   private mini: HTMLCanvasElement | null = null;
   private miniT = 0;
+  /** Low-resolution pre-rendered terrain used when zoomed out (large maps: one drawImage instead of thousands). */
+  private terrainCache: HTMLCanvasElement | null = null;
+  private cacheComplete = false;
+  private cacheT = 0;
+  private dirtyTiles: { x: number; y: number }[] = [];
+  lowDetail = false;
+  static readonly CACHE_PX = 12;
+  static readonly CACHE_ZOOM = 0.45;
+  static readonly LOW_ZOOM = 0.3;
 
   constructor(public canvas: HTMLCanvasElement, public sim: Sim) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
@@ -134,10 +144,93 @@ export class Renderer {
     this.particles.push({ x: core.x * TILE + sz / 2 + (Math.random() - 0.5) * 60, y: core.y * TILE + sz / 2, vx: 0, vy: -40, life: 1.1, max: 1.1, size: 22, item });
   }
 
+  /** Repaint one tile of the terrain cache (deposit alpha changes as it empties, meteorites add deposits). */
+  private paintCacheTile(cc: CanvasRenderingContext2D, x: number, y: number): boolean {
+    const s = this.sim.state;
+    const P = Renderer.CACHE_PX;
+    const i = y * s.width + x;
+    const t = s.terrain[i];
+    cc.save();
+    cc.beginPath();
+    cc.rect(x * P, y * P, P, P);
+    cc.clip();
+    cc.fillStyle = '#373d45';
+    cc.fillRect(x * P, y * P, P, P);
+    if (this.ground) {
+      // draw the ground pattern at the cache scale so it matches the live rendering
+      cc.save();
+      cc.scale(P / TILE, P / TILE);
+      cc.fillStyle = this.ground;
+      cc.fillRect(x * TILE, y * TILE, TILE, TILE);
+      cc.restore();
+    }
+    let complete = true;
+    if (t !== 'ground') {
+      const img = terrainSprite(t);
+      if (t === 'rock') {
+        if (ready(img)) cc.drawImage(img, x * P, y * P, P, P);
+        else {
+          complete = false;
+          cc.fillStyle = '#2a2d33';
+          cc.fillRect(x * P + 1, y * P + 1, P - 2, P - 2);
+        }
+      } else {
+        const frac = Math.min(1, (s.ore[i] ?? ORE_PER_TILE[1]) / ORE_PER_TILE[1]);
+        cc.globalAlpha = 0.4 + 0.6 * frac;
+        if (ready(img)) cc.drawImage(img, x * P, y * P, P, P);
+        else {
+          complete = false;
+          cc.fillStyle = ITEMS[TERRAIN_ITEM[t]!].color;
+          cc.fillRect(x * P + 2, y * P + 2, P - 4, P - 4);
+        }
+        cc.globalAlpha = 1;
+      }
+    }
+    cc.restore();
+    return complete;
+  }
+
+  private buildTerrainCache() {
+    const s = this.sim.state;
+    const P = Renderer.CACHE_PX;
+    const c = this.terrainCache ?? document.createElement('canvas');
+    c.width = s.width * P;
+    c.height = s.height * P;
+    const cc = c.getContext('2d')!;
+    let complete = true;
+    for (let y = 0; y < s.height; y++) for (let x = 0; x < s.width; x++) if (!this.paintCacheTile(cc, x, y)) complete = false;
+    this.terrainCache = c;
+    this.cacheComplete = complete;
+    this.dirtyTiles = [];
+  }
+
+  private flushDirtyTiles() {
+    if (!this.terrainCache || !this.dirtyTiles.length) return;
+    const cc = this.terrainCache.getContext('2d')!;
+    for (const d of this.dirtyTiles) if (this.sim.inBounds(d.x, d.y)) this.paintCacheTile(cc, d.x, d.y);
+    this.dirtyTiles = [];
+  }
+
+  /** Mark terrain tiles as changed (depletion, meteorite). */
+  terrainChanged(x: number, y: number, r = 0) {
+    for (let dy = -r; dy <= r; dy++) for (let dx = -r; dx <= r; dx++) this.dirtyTiles.push({ x: x + dx, y: y + dy });
+  }
+
   fxDepleted(x: number, y: number) {
+    this.terrainChanged(x, y);
     for (let i = 0; i < 10; i++) {
       this.particles.push({ x: x * TILE + TILE / 2, y: y * TILE + TILE / 2, vx: (Math.random() - 0.5) * 60, vy: -20 - Math.random() * 40, life: 0.8, max: 0.8, size: 4 + Math.random() * 4, color: 'rgba(160,150,140,0.7)' });
     }
+  }
+
+  fxMeteor(x: number, y: number) {
+    for (let i = 0; i < 90; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 60 + Math.random() * 260;
+      this.particles.push({ x: (x + 0.5) * TILE, y: (y + 0.5) * TILE, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 80, life: 0, max: 0.8 + Math.random() * 0.8, size: 3 + Math.random() * 6, color: i % 3 ? '#f59e0b' : '#fde68a', grav: 300 });
+    }
+    this.ping = { x: x - 1, y: y - 1, w: 3, h: 3 };
+    this.terrainChanged(x, y, 1);
+    setTimeout(() => (this.ping = null), 2500);
   }
 
   fxUpgrade() {
@@ -175,11 +268,29 @@ export class Renderer {
     const x0 = Math.max(0, tx0), y0 = Math.max(0, ty0);
     const x1 = Math.min(s.width - 1, tx1 + 1), y1 = Math.min(s.height - 1, ty1 + 1);
 
+    this.lowDetail = cam.zoom < Renderer.LOW_ZOOM;
+    const useCache = cam.zoom < Renderer.CACHE_ZOOM;
+    if (useCache) {
+      // zoomed out: one pre-rendered image instead of a sprite per tile
+      this.cacheT += dt;
+      if (!this.terrainCache || (!this.cacheComplete && this.cacheT > 2)) {
+        this.cacheT = 0;
+        this.buildTerrainCache();
+      }
+      this.flushDirtyTiles();
+      const P = Renderer.CACHE_PX;
+      ctx.imageSmoothingEnabled = true;
+      ctx.drawImage(this.terrainCache!, x0 * P, y0 * P, (x1 - x0 + 1) * P, (y1 - y0 + 1) * P, x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE);
+    } else {
+      // depletion changes are painted into the cache lazily; remember them meanwhile
+      if (this.dirtyTiles.length > 400) this.terrainCache = null;
+    }
+
     ctx.fillStyle = this.ground ?? '#373d45';
-    ctx.fillRect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE);
+    if (!useCache) ctx.fillRect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE);
 
     // terrain features
-    for (let y = y0; y <= y1; y++) {
+    for (let y = useCache ? y1 + 1 : y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
         const i = y * s.width + x;
         const t = s.terrain[i];
@@ -224,7 +335,7 @@ export class Renderer {
       visible.push(b);
     }
     for (const b of visible) if (b.type === 'conveyor' || b.type === 'tunnel') this.drawBelt(b);
-    for (const b of visible) if (b.type === 'conveyor' || (b.type === 'tunnel' && b.exit)) this.drawBeltItems(b);
+    if (!this.lowDetail) for (const b of visible) if (b.type === 'conveyor' || (b.type === 'tunnel' && b.exit)) this.drawBeltItems(b);
     for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel') this.drawBuilding(b);
 
     if (this.overlay) this.drawOverlay(visible, dt);
@@ -233,6 +344,7 @@ export class Renderer {
 
     if (this.ghost) this.drawGhost(this.ghost);
     if (this.pasteGhost) this.drawPasteGhost(this.pasteGhost);
+    if (this.beltPreview) this.drawBeltPreview(this.beltPreview);
     if (this.selectRect) {
       const r = this.selectRect;
       const x0 = Math.min(r.x0, r.x1), y0 = Math.min(r.y0, r.y1), x1 = Math.max(r.x0, r.x1), y1 = Math.max(r.y0, r.y1);
@@ -317,6 +429,18 @@ export class Renderer {
   private drawBelt(b: Building) {
     const { ctx } = this;
     const cx = b.x * TILE + TILE / 2, cy = b.y * TILE + TILE / 2;
+    if (this.lowDetail) {
+      // far zoom: a flat strip with a darker moving lane; no textures, no items
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate((b.dir * Math.PI) / 2);
+      ctx.fillStyle = b.type === 'tunnel' ? '#3b4a5a' : '#4b5563';
+      ctx.fillRect(-TILE / 2, -TILE * 0.36, TILE, TILE * 0.72);
+      ctx.fillStyle = b.status === 'jammed' || b.status === 'dead_end' ? '#7f1d1d' : '#1f2937';
+      ctx.fillRect(-TILE / 2, -TILE * 0.13, TILE, TILE * 0.26);
+      ctx.restore();
+      return;
+    }
     const straight = buildingSprite('conveyor');
     const tunnelImg = buildingSprite('tunnel');
     const input = b.type === 'conveyor' ? this.beltInput(b) : 'back';
@@ -526,7 +650,8 @@ export class Renderer {
 
     // working animations
     if (b.working) {
-      if (b.type === 'miner') this.animDrill(cx, cy);
+      if (this.lowDetail) { /* no animations when zoomed far out */ }
+      else if (b.type === 'miner') this.animDrill(cx, cy);
       else if (b.type === 'smelter') this.animGlow(cx, cy, sz * 0.18, '#fb923c');
       else if (b.type === 'refinery') this.animGlow(cx, cy, sz * 0.14, '#4ade80');
       else if (b.type === 'assembler' || b.type === 'fabricator' || b.type === 'printer') this.animSparks(b, cx, cy);
@@ -719,6 +844,46 @@ export class Renderer {
     if (def.rotatable && g.type !== 'solar') this.drawArrow({ id: -1, type: g.type, x: g.x, y: g.y, dir: g.dir }, g.dir, g.valid ? '#22d3ee' : '#ef4444');
   }
 
+  /** The belt line editor: translucent belts along the planned line plus a count/cost tag at its end. */
+  private drawBeltPreview(path: { x: number; y: number; dir: Dir; ok: boolean }[]) {
+    if (!path.length) return;
+    const { ctx } = this;
+    let newBelts = 0;
+    for (const p of path) {
+      const existing = this.sim.at(p.x, p.y);
+      if (!existing) newBelts++;
+      ctx.globalAlpha = 0.75;
+      this.drawBelt({ id: -1, type: 'conveyor', x: p.x, y: p.y, dir: p.dir, items: [] });
+      ctx.globalAlpha = 1;
+      ctx.fillStyle = existing ? 'rgba(251,191,36,0.2)' : 'rgba(34,211,238,0.18)';
+      ctx.fillRect(p.x * TILE, p.y * TILE, TILE, TILE);
+    }
+    const last = path[path.length - 1];
+    ctx.strokeStyle = '#22d3ee';
+    ctx.lineWidth = 2;
+    ctx.strokeRect(path[0].x * TILE + 1, path[0].y * TILE + 1, TILE - 2, TILE - 2);
+    this.drawArrow({ id: -1, type: 'conveyor', x: last.x, y: last.y, dir: last.dir }, last.dir, '#22d3ee');
+    const plates = this.sim.state.inventory.iron_plate ?? 0;
+    this.drawTag(last.x * TILE + TILE / 2, last.y * TILE - 8, `${path.length} ▸ ${newBelts}/${plates}`, newBelts > plates ? '#ef4444' : '#22d3ee');
+  }
+
+  /** Small hologram text tag centred above (x, y). */
+  drawTag(x: number, y: number, text: string, color: string) {
+    const { ctx } = this;
+    ctx.font = 'bold 13px system-ui, sans-serif';
+    const w = ctx.measureText(text).width + 12;
+    ctx.fillStyle = 'rgba(8,12,18,0.85)';
+    roundRect(ctx, x - w / 2, y - 22, w, 22, 6);
+    ctx.fill();
+    ctx.strokeStyle = color;
+    ctx.lineWidth = 1.5;
+    ctx.stroke();
+    ctx.fillStyle = color;
+    ctx.textAlign = 'center';
+    ctx.textBaseline = 'middle';
+    ctx.fillText(text, x, y - 10);
+  }
+
   private drawPasteGhost(g: { bp: Blueprint; x: number; y: number; bad: Set<number> }) {
     const { ctx } = this;
     g.bp.items.forEach((i, idx) => {
@@ -814,14 +979,34 @@ export class Renderer {
       ctx.textBaseline = 'middle';
       ctx.fillText(text, cx - tw / 2 + (item ? 25 : 4), top - 10);
     }
-    // belts: tint by carried item
+    // belts: tint by utilisation (how full the belt is), item colour on the edge
+    const perTile = 1 / BELT_SPACING; // items a tile can hold
     for (const b of visible) {
-      if (b.type !== 'conveyor' || !b.items?.length) continue;
-      const it = b.items[b.items.length - 1].item;
-      ctx.fillStyle = ITEMS[it].color;
-      ctx.globalAlpha = 0.22;
+      if (b.type !== 'conveyor') continue;
+      const n = b.items?.length ?? 0;
+      if (!n) continue;
+      const util = Math.min(1, n / perTile);
+      const jam = b.status === 'jammed' || b.status === 'dead_end';
+      ctx.fillStyle = jam ? '#ef4444' : util < 0.5 ? '#22c55e' : util < 0.85 ? '#f59e0b' : '#ef4444';
+      ctx.globalAlpha = 0.16 + util * 0.2;
       ctx.fillRect(b.x * TILE + 4, b.y * TILE + 4, TILE - 8, TILE - 8);
+      ctx.globalAlpha = 0.9;
+      ctx.fillStyle = ITEMS[b.items![n - 1].item].color;
+      ctx.fillRect(b.x * TILE + 4, b.y * TILE + TILE - 8, TILE - 8, 4);
       ctx.globalAlpha = 1;
+    }
+    // throughput tags on belt lines: one per belt that feeds a machine / the core (measured items per minute)
+    if (cam.zoom >= 0.55) {
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      for (const b of visible) {
+        if (b.type !== 'conveyor' || b.rate === undefined) continue;
+        const nx = b.x + DX[b.dir], ny = b.y + DY[b.dir];
+        const target = this.sim.at(nx, ny);
+        if (!target || target.type === 'conveyor') continue;
+        const cap = this.sim.beltCapacity();
+        const pct = Math.min(999, Math.round((100 * b.rate) / cap));
+        this.drawTag(b.x * TILE + TILE / 2, b.y * TILE + TILE - 2, `${b.rate.toFixed(0)}/min · ${pct}%`, pct >= 95 ? '#f59e0b' : '#22d3ee');
+      }
     }
   }
 

@@ -152,6 +152,7 @@ export interface UpgradeDef {
   maxLevel: number;
   cost: (level: number) => Partial<Record<ItemId, number>>; // cost to reach `level` (1-based)
   factor: (level: number) => number; // multiplier at `level`
+  requires?: { id: UpgradeId; level: number }; // research tree: prerequisite track and level
 }
 
 export const UPGRADES: UpgradeDef[] = [
@@ -159,7 +160,22 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'miner', maxLevel: 3, cost: (l) => ({ machine_part: 8 * l, iron_plate: 20 * l }), factor: (l) => 1 + 0.3 * l },
   { id: 'machine', maxLevel: 3, cost: (l) => (l < 3 ? { machine_part: 10 * l, circuit: 6 * l } : { precision_part: 10, circuit: 20 }), factor: (l) => 1 + 0.25 * l },
   { id: 'power', maxLevel: 3, cost: (l) => ({ machine_part: 6 * l, glass: 8 * l }), factor: (l) => 1 + 0.4 * l },
+  // second tier of the research tree
+  { id: 'yield', maxLevel: 3, cost: (l) => ({ machine_part: 8 * l, glass: 6 * l }), factor: (l) => 1 + 0.5 * l, requires: { id: 'miner', level: 1 } },
+  { id: 'buffer', maxLevel: 2, cost: (l) => ({ steel_frame: 6 * l, machine_part: 6 * l }), factor: (l) => 1 + 0.5 * l, requires: { id: 'machine', level: 1 } },
+  { id: 'printer', maxLevel: 2, cost: (l) => ({ precision_part: 6 * l, circuit: 8 * l }), factor: (l) => 1 + 0.3 * l, requires: { id: 'machine', level: 2 } },
 ];
+export const UPGRADE_DEFAULTS = (): Record<UpgradeId, number> => Object.fromEntries(UPGRADES.map((u) => [u.id, 0])) as Record<UpgradeId, number>;
+
+// ---------- Events: KORA reports a situation, the player decides ----------
+export const EVENT_INTERVAL: [number, number] = [360, 720]; // seconds between events
+export const EVENT_DECIDE_SECONDS = 90;
+export const EVENT_MIN_MISSION = 2;
+export const METEOR_ORE: [number, number] = [140, 260];
+export const BOOST_SECONDS = 120;
+export const BOOST_FACTOR = 1.5;
+export const HARD_ORE_FACTOR = 0.6;
+export const HARD_STORM_FACTOR = 0.6;
 export const UPGRADE_BY_ID: Record<UpgradeId, UpgradeDef> = Object.fromEntries(UPGRADES.map((u) => [u.id, u])) as Record<UpgradeId, UpgradeDef>;
 
 // ---------- Contracts: optional timed side orders from KORA ----------
@@ -192,14 +208,15 @@ export interface LevelDef {
   storms: boolean;
   contracts: boolean;
   inventory: Partial<Record<ItemId, number>>;
+  par: number; // seconds for a three-star finish
 }
 
 export const LEVELS: LevelDef[] = [
-  { seed: 1101, size: 36, basics: [{ type: 'iron_ore', dist: 5, r: 2.2 }], extraTypes: [], extra: 0, rocks: 0, storms: false, contracts: false, inventory: { iron_plate: 60, copper_plate: 10 } },
-  { seed: 1202, size: 40, basics: [{ type: 'iron_ore', dist: 6, r: 2.4 }, { type: 'copper_ore', dist: 7, r: 2.2 }], extraTypes: [], extra: 0, rocks: 0, storms: false, contracts: false, inventory: { iron_plate: 90, copper_plate: 20 } },
-  { seed: 1303, size: 44, basics: [{ type: 'iron_ore', dist: 6, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.4 }, { type: 'iron_ore', dist: 12, r: 2.2 }], extraTypes: [], extra: 0, rocks: 3, storms: false, contracts: false, inventory: { iron_plate: 160, copper_plate: 70, machine_part: 8 } },
-  { seed: 1404, size: 52, basics: [{ type: 'iron_ore', dist: 7, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.0 }, { type: 'iron_ore', dist: 14, r: 2.4 }], extraTypes: ['copper_ore'], extra: 1, rocks: 6, storms: false, contracts: true, inventory: { iron_plate: 120, copper_plate: 50, machine_part: 24 } },
-  { seed: 1505, size: 60, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 11, r: 2.4 }, { type: 'iron_ore', dist: 15, r: 2.4 }, { type: 'copper_ore', dist: 17, r: 2.2 }], extraTypes: ['quartz', 'iron_ore'], extra: 2, rocks: 10, storms: false, contracts: true, inventory: { iron_plate: 150, copper_plate: 60, machine_part: 36, copper_wire: 30, steel_frame: 12 } },
-  { seed: 1606, size: 72, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.4 }, { type: 'ice', dist: 12, r: 2.4 }, { type: 'oil', dist: 15, r: 2.0 }, { type: 'iron_ore', dist: 18, r: 2.6 }], extraTypes: ['copper_ore', 'ice', 'quartz'], extra: 3, rocks: 16, storms: true, contracts: true, inventory: { iron_plate: 180, copper_plate: 70, machine_part: 48, copper_wire: 30, steel_frame: 24, circuit: 24, glass: 24 } },
-  { seed: 1707, size: 96, basics: [{ type: 'iron_ore', dist: 7, r: 3.0 }, { type: 'copper_ore', dist: 9, r: 2.8 }, { type: 'quartz', dist: 12, r: 2.6 }, { type: 'ice', dist: 13, r: 2.6 }, { type: 'oil', dist: 15, r: 2.4 }, { type: 'iron_ore', dist: 19, r: 3.0 }, { type: 'copper_ore', dist: 21, r: 2.6 }], extraTypes: ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'], extra: 10, rocks: 30, storms: true, contracts: true, inventory: { iron_plate: 240, copper_plate: 90, machine_part: 70, copper_wire: 40, steel_frame: 40, circuit: 40, glass: 40, precision_part: 24 } },
+  { seed: 1101, size: 36, basics: [{ type: 'iron_ore', dist: 5, r: 2.2 }], extraTypes: [], extra: 0, rocks: 0, storms: false, contracts: false, inventory: { iron_plate: 60, copper_plate: 10 }, par: 240 },
+  { seed: 1202, size: 40, basics: [{ type: 'iron_ore', dist: 6, r: 2.4 }, { type: 'copper_ore', dist: 7, r: 2.2 }], extraTypes: [], extra: 0, rocks: 0, storms: false, contracts: false, inventory: { iron_plate: 90, copper_plate: 20 }, par: 420 },
+  { seed: 1303, size: 44, basics: [{ type: 'iron_ore', dist: 6, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.4 }, { type: 'iron_ore', dist: 12, r: 2.2 }], extraTypes: [], extra: 0, rocks: 3, storms: false, contracts: false, inventory: { iron_plate: 160, copper_plate: 70, machine_part: 8 }, par: 600 },
+  { seed: 1404, size: 52, basics: [{ type: 'iron_ore', dist: 7, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.0 }, { type: 'iron_ore', dist: 14, r: 2.4 }], extraTypes: ['copper_ore'], extra: 1, rocks: 6, storms: false, contracts: true, inventory: { iron_plate: 120, copper_plate: 50, machine_part: 24 }, par: 780 },
+  { seed: 1505, size: 60, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 11, r: 2.4 }, { type: 'iron_ore', dist: 15, r: 2.4 }, { type: 'copper_ore', dist: 17, r: 2.2 }], extraTypes: ['quartz', 'iron_ore'], extra: 2, rocks: 10, storms: false, contracts: true, inventory: { iron_plate: 150, copper_plate: 60, machine_part: 36, copper_wire: 30, steel_frame: 12 }, par: 960 },
+  { seed: 1606, size: 72, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.4 }, { type: 'ice', dist: 12, r: 2.4 }, { type: 'oil', dist: 15, r: 2.0 }, { type: 'iron_ore', dist: 18, r: 2.6 }], extraTypes: ['copper_ore', 'ice', 'quartz'], extra: 3, rocks: 16, storms: true, contracts: true, inventory: { iron_plate: 180, copper_plate: 70, machine_part: 48, copper_wire: 30, steel_frame: 24, circuit: 24, glass: 24 }, par: 1260 },
+  { seed: 1707, size: 96, basics: [{ type: 'iron_ore', dist: 7, r: 3.0 }, { type: 'copper_ore', dist: 9, r: 2.8 }, { type: 'quartz', dist: 12, r: 2.6 }, { type: 'ice', dist: 13, r: 2.6 }, { type: 'oil', dist: 15, r: 2.4 }, { type: 'iron_ore', dist: 19, r: 3.0 }, { type: 'copper_ore', dist: 21, r: 2.6 }], extraTypes: ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'], extra: 10, rocks: 30, storms: true, contracts: true, inventory: { iron_plate: 240, copper_plate: 90, machine_part: 70, copper_wire: 40, steel_frame: 40, circuit: 40, glass: 40, precision_part: 24 }, par: 1800 },
 ];

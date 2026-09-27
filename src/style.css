@@ -361,3 +361,25 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 textarea#importbox { width: 100%; font: 12px ui-monospace, Menlo, monospace; background: rgba(255,255,255,0.05); color: var(--text); border: 1px solid var(--line); border-radius: 10px; padding: 8px; margin: 6px 0; resize: vertical; }
 label.btn { text-align: center; }
 .iconbtn.speed { font-size: 14px; font-weight: 800; }
+.mact { margin-top: 6px; }
+.mact .btn.small { display: inline-block; padding: 4px 10px; font-size: 12px; margin: 0; }
+.row2 { display: flex; gap: 8px; }
+.row2 .btn { flex: 1; }
+.chapter-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 10px; max-height: 50vh; overflow: auto; }
+.chapter-row { display: flex; align-items: center; gap: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.chapter-row.locked { opacity: 0.55; }
+.chapter-row .cnum { width: 28px; height: 28px; border-radius: 50%; background: var(--accent); color: #06202a; font-weight: 800; display: grid; place-items: center; flex: 0 0 auto; }
+.chapter-row .cbody { flex: 1; min-width: 0; }
+.chapter-row .cbody small { display: block; color: var(--muted); font-size: 11px; }
+.chapter-row .cstars { color: #64748b; letter-spacing: 1px; font-size: 15px; }
+.chapter-row .cstars.gold, .stars-big.gold { color: #fbbf24; }
+.chapter-row .btn.small { margin: 0; }
+.stars-big { font-size: 30px; letter-spacing: 3px; color: #cbd5e1; text-align: center; margin: 4px 0; }
+.stars-line { text-align: center; }
+.upgrade.locked { opacity: 0.6; }
+.pips { display: inline-flex; gap: 3px; margin-left: 4px; vertical-align: middle; }
+.pips i { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.12); border: 1px solid var(--line); }
+.pips i.on { background: var(--accent); border-color: transparent; }
+.score-box { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin: 8px 0; text-align: left; }
+.score-total { font-size: 18px; text-align: center; margin-bottom: 6px; }
+.score-total .rec { color: #fbbf24; font-size: 13px; font-weight: 700; }

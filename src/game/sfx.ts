@@ -14,6 +14,8 @@ export function soundEnabled() {
 
 export function setSound(on: boolean) {
   enabled = on;
+  if (!on) stopAmbient();
+  else if (ambientOn) setTimeout(startAmbient, 0);
   try {
     localStorage.setItem('pe_sound', on ? 'on' : 'off');
   } catch {
@@ -45,6 +47,132 @@ function tone(freq: number, dur: number, type: OscillatorType, vol = 0.08, slide
   o.connect(g).connect(c.destination);
   o.start();
   o.stop(c.currentTime + dur);
+}
+
+// ---------- Ambient soundscape (procedural: wind, drone, factory hum) ----------
+let ambientOn = true;
+try {
+  ambientOn = localStorage.getItem('pe_ambient') !== 'off';
+} catch {
+  /* ignore */
+}
+let amb: { master: GainNode; hum: GainNode; nodes: AudioScheduledSourceNode[] } | null = null;
+
+export function ambientEnabled() {
+  return ambientOn;
+}
+
+export function setAmbient(on: boolean) {
+  ambientOn = on;
+  try {
+    localStorage.setItem('pe_ambient', on ? 'on' : 'off');
+  } catch {
+    /* ignore */
+  }
+  if (on) startAmbient();
+  else stopAmbient();
+}
+
+/** Start the soundscape (must follow a user gesture so the AudioContext may run). */
+export function startAmbient() {
+  if (!ambientOn || amb) return;
+  const c = ac();
+  if (!c) return;
+  const master = c.createGain();
+  master.gain.setValueAtTime(0.0001, c.currentTime);
+  master.gain.exponentialRampToValueAtTime(1, c.currentTime + 4);
+  master.connect(c.destination);
+  const nodes: AudioScheduledSourceNode[] = [];
+  // wind: looping brown noise through a low-pass filter, slowly swelling
+  const len = c.sampleRate * 3;
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const d = buf.getChannelData(0);
+  let last = 0;
+  for (let i = 0; i < len; i++) {
+    const w = Math.random() * 2 - 1;
+    last = (last + 0.02 * w) / 1.02;
+    d[i] = last * 3.5;
+  }
+  const noise = c.createBufferSource();
+  noise.buffer = buf;
+  noise.loop = true;
+  const lp = c.createBiquadFilter();
+  lp.type = 'lowpass';
+  lp.frequency.value = 260;
+  const windGain = c.createGain();
+  windGain.gain.value = 0.05;
+  const windLfo = c.createOscillator();
+  windLfo.frequency.value = 0.07;
+  const windDepth = c.createGain();
+  windDepth.gain.value = 0.03;
+  windLfo.connect(windDepth).connect(windGain.gain);
+  noise.connect(lp).connect(windGain).connect(master);
+  noise.start();
+  windLfo.start();
+  nodes.push(noise, windLfo);
+  // drone: two low sines a fifth apart with a slow beat
+  const drone = c.createGain();
+  drone.gain.value = 0.03;
+  for (const [f, det] of [
+    [55, 0],
+    [82.4, 2],
+    [110.5, -3],
+  ]) {
+    const o = c.createOscillator();
+    o.type = 'sine';
+    o.frequency.value = f;
+    o.detune.value = det;
+    o.connect(drone);
+    o.start();
+    nodes.push(o);
+  }
+  const trem = c.createOscillator();
+  trem.frequency.value = 0.11;
+  const tremDepth = c.createGain();
+  tremDepth.gain.value = 0.012;
+  trem.connect(tremDepth).connect(drone.gain);
+  trem.start();
+  nodes.push(trem);
+  drone.connect(master);
+  // factory hum: grows with the number of working machines (see setActivity)
+  const hum = c.createGain();
+  hum.gain.value = 0;
+  const humOsc = c.createOscillator();
+  humOsc.type = 'sawtooth';
+  humOsc.frequency.value = 50;
+  const humLp = c.createBiquadFilter();
+  humLp.type = 'lowpass';
+  humLp.frequency.value = 180;
+  humOsc.connect(humLp).connect(hum).connect(master);
+  humOsc.start();
+  nodes.push(humOsc);
+  amb = { master, hum, nodes };
+}
+
+export function stopAmbient() {
+  if (!amb || !ctx) return;
+  const a = amb;
+  amb = null;
+  a.master.gain.cancelScheduledValues(ctx.currentTime);
+  a.master.gain.setValueAtTime(a.master.gain.value, ctx.currentTime);
+  a.master.gain.exponentialRampToValueAtTime(0.0001, ctx.currentTime + 1.5);
+  setTimeout(() => {
+    for (const n of a.nodes) {
+      try {
+        n.stop();
+      } catch {
+        /* ignore */
+      }
+    }
+    a.master.disconnect();
+  }, 1600);
+}
+
+/** How busy the factory is: 0..n working machines -> hum level. */
+export function setActivity(working: number) {
+  if (!amb || !ctx) return;
+  const target = Math.min(0.035, working * 0.0025);
+  amb.hum.gain.setTargetAtTime(target, ctx.currentTime, 0.8);
 }
 
 export const sfx = {

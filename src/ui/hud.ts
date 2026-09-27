@@ -3,11 +3,12 @@ import { BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_ORDER, ITEM_ORDER, LEVELS, M
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
-import { setSound, sfx, soundEnabled } from '../game/sfx';
-import type { Blueprint, Building, BuildingId, Contract, Dir, GameOptions, GameState, ItemId, UpgradeId } from '../game/types';
+import { ambientEnabled, setAmbient, setSound, sfx, soundEnabled, startAmbient } from '../game/sfx';
+import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, UpgradeId } from '../game/types';
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave, load as loadSave } from '../game/save';
+import { chaptersUnlocked, loadProgress, recordChapter, recordScore, starString } from '../game/progress';
 
 export interface HudCallbacks {
   onNewGame: (seed: number | undefined, options: GameOptions) => void;
@@ -18,6 +19,7 @@ export interface HudCallbacks {
   onImport: (state: GameState) => void;
   onSave: () => void;
   onCenter: () => void;
+  onPlayChapter: (chapter: number) => void;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] {
@@ -68,6 +70,11 @@ export class Hud {
   private problems: Problem[] = [];
   private koraMsg = '';
   private koraMsgT = 0;
+  private koraAction: { label: string; run: () => void } | null = null;
+  private problemSince = new Map<number, number>(); // building id -> game time the problem was first seen
+  private powerLowSince = -1;
+  private lastHintAt = -1e9;
+  private hintedIds = new Map<number, number>(); // building id -> game time of the last hint about it
   private storyIndex = 0;
   private minimapOpen = window.innerWidth > 900;
   private panelOpenedAt = 0;
@@ -138,6 +145,7 @@ export class Hud {
   }
 
   hideTitle() {
+    startAmbient();
     this.title.classList.add('hidden');
     this.top.classList.remove('hidden');
     this.bottom.classList.remove('hidden');
@@ -158,7 +166,10 @@ export class Hud {
           <button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story"><b>${t('mode_story')}</b><small>${t('mode_story_desc')}</small></button>
           <button class="btn mode" data-act="freeview"><b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small></button>
           ${seedInput}
-          <button class="btn ghost" data-act="howto">${t('how_to')}</button>
+          <div class="row2">
+            <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
+            <button class="btn ghost" data-act="howto">${t('how_to')}</button>
+          </div>
         </div>`;
     const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
     const freeView = `
@@ -167,6 +178,8 @@ export class Hud {
           ${opt('infiniteOre', t('infinite_ore'), o.infiniteOre)}
           ${opt('allUnlocked', t('all_unlocked'), o.allUnlocked)}
           ${opt('storms', t('storms_opt'), o.storms)}
+          <div class="menu-row"><span>${t('difficulty')}</span><span><button class="chip ${(o.difficulty ?? 'normal') === 'normal' ? 'active' : ''}" data-diff="normal">${t('diff_normal')}</button><button class="chip ${o.difficulty === 'hard' ? 'active' : ''}" data-diff="hard">${t('diff_hard')}</button></span></div>
+          ${o.difficulty === 'hard' ? `<p class="save-hint">${t('diff_hard_hint')}</p>` : ''}
           ${seedInput}
           <button class="btn primary" data-act="free">${t('start_free')}</button>
           <button class="btn ghost" data-act="back">${t('back')}</button>
@@ -199,6 +212,11 @@ export class Hud {
         this.renderTitle();
         return;
       }
+      if (target.dataset.diff) {
+        this.freeOptions.difficulty = target.dataset.diff as 'normal' | 'hard';
+        this.renderTitle();
+        return;
+      }
       if (target.dataset.opt) {
         (this.freeOptions as unknown as Record<string, boolean | string>)[target.dataset.opt] = target.dataset.val === '1';
         this.renderTitle();
@@ -220,7 +238,40 @@ export class Hud {
       } else if (act === 'free') {
         if (!hasSave() || confirm(t('new_game_confirm'))) this.cb.onNewGame(seedOf(), { ...this.freeOptions, mode: 'free' });
       } else if (act === 'howto') this.showHowTo();
+      else if (act === 'chapters') this.showChapters();
     };
+  }
+
+  private starsSummary(): string {
+    const p = loadProgress();
+    const total = Object.values(p.stars).reduce((a, c) => a + c, 0);
+    return total ? `★ ${total}/${LEVELS.length * 3}` : '';
+  }
+
+  /** Chapter select: replay any chapter reached so far, with stars and best times. */
+  showChapters() {
+    const p = loadProgress();
+    const unlocked = chaptersUnlocked();
+    const rows = LEVELS.map((lvl, i) => {
+      const m = MISSIONS[i];
+      const mt = tMission(m.id);
+      const open = i + 1 <= unlocked;
+      const stars = p.stars[i] ?? 0;
+      const best = p.best[i];
+      return `<div class="chapter-row ${open ? '' : 'locked'}">
+        <div class="cnum">${i + 1}</div>
+        <div class="cbody"><b>${mt.title}</b><small>${lvl.size}×${lvl.size} · ${best !== undefined ? `${t('best_time')} ${fmtTime(best)} · ` : ''}${t('par_time', { time: fmtTime(lvl.par) })}</small></div>
+        <div class="cstars ${stars === 3 ? 'gold' : ''}">${starString(stars)}</div>
+        <button class="btn small ${open ? 'primary' : ''}" data-chapter="${i + 1}" ${open ? '' : 'disabled'} title="${open ? '' : t('chapter_locked')}">${t('play')}</button>
+      </div>`;
+    }).join('');
+    this.openModal(`<h2>${t('chapter_select')}</h2><div class="chapter-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
+      const ch = Number(target.dataset.chapter);
+      if (ch && (!hasSave() || confirm(t('new_game_confirm')))) {
+        this.closeModal();
+        this.cb.onPlayChapter(ch);
+      }
+    });
   }
 
   showStory() {
@@ -397,6 +448,7 @@ export class Hud {
         : '';
       body = `<div class="mtitle"><span class="mnum">${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}</span> ${mt.title}</div>
         <div class="mtext">${this.koraMsg && this.koraMsgT > 0 ? this.koraMsg : mt.text}</div>
+        ${this.koraMsg && this.koraMsgT > 0 && this.koraAction ? `<div class="mact"><span class="btn small primary" data-act="kora-action">${this.koraAction.label}</span></div>` : ''}
         <div class="mrows">${builds}${rows}</div>`;
     } else body = `<div class="mtitle">🚀 ${t('launch_title')}</div>`;
     if (!tut && m && st.options.mode === 'free') {
@@ -433,10 +485,13 @@ export class Hud {
     this.lastTopHtml = topHtml;
     this.top.innerHTML = topHtml;
     this.top.onclick = (e) => {
-      const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+      const target = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
       if (!target) return;
       const act = target.dataset.act;
-      if (act === 'missions') this.showMissions();
+      if (act === 'kora-action') {
+        e.stopPropagation();
+        this.koraAction?.run();
+      } else if (act === 'missions') this.showMissions();
       else if (act === 'pause') this.togglePause();
       else if (act === 'speed') this.cycleSpeed();
       else if (act === 'menu') this.showMenu();
@@ -458,9 +513,72 @@ export class Hud {
     };
   }
 
-  koraSay(msg: string, seconds = 8) {
+  koraSay(msg: string, seconds = 8, action: { label: string; run: () => void } | null = null) {
     this.koraMsg = msg;
     this.koraMsgT = seconds;
+    this.koraAction = action;
+  }
+
+  /**
+   * KORA speaks up on her own when a problem persists: a machine starved or blocked for a while, a jammed
+   * belt, or a lasting power shortage. Each hint comes with a "Show" button that jumps to the spot.
+   */
+  private tickHints() {
+    const st = this.sim.state;
+    const now = st.time;
+    if (st.tutorialStep >= 0 || !st.introSeen || st.launched) return;
+    const PERSIST = 40, COOLDOWN = 75, REPEAT = 300;
+    const seen = new Set<number>();
+    for (const p of this.problems) {
+      seen.add(p.building.id);
+      if (!this.problemSince.has(p.building.id)) this.problemSince.set(p.building.id, now);
+    }
+    for (const id of [...this.problemSince.keys()]) if (!seen.has(id)) this.problemSince.delete(id);
+    if (st.powerDemand > st.powerSupply) {
+      if (this.powerLowSince < 0) this.powerLowSince = now;
+    } else this.powerLowSince = -1;
+    if (now - this.lastHintAt < COOLDOWN || (this.koraMsgT > 0 && !this.koraAction)) return;
+    // power first: it slows everything
+    if (this.powerLowSince >= 0 && now - this.powerLowSince > PERSIST && now - (this.hintedIds.get(-1) ?? -1e9) > REPEAT) {
+      const pct = Math.round((100 * st.powerSupply) / Math.max(1, st.powerDemand));
+      this.hintedIds.set(-1, now);
+      this.lastHintAt = now;
+      this.koraSay(`⚡ ${t('hint_low_power', { pct })}`, 14, { label: t('upgrades'), run: () => this.showUpgrades() });
+      return;
+    }
+    // the oldest persistent problem
+    let best: Problem | null = null, bestT = Infinity;
+    for (const p of this.problems) {
+      if (p.status === 'low_power') continue;
+      const since = this.problemSince.get(p.building.id) ?? now;
+      if (now - since < PERSIST) continue;
+      if (now - (this.hintedIds.get(p.building.id) ?? -1e9) < REPEAT) continue;
+      if (since < bestT) {
+        bestT = since;
+        best = p;
+      }
+    }
+    if (!best) return;
+    const b = best.building;
+    const name = tBuilding(b.type);
+    const items = (best.missing ?? []).map((m) => tItem(m)).join(', ');
+    const key = (`hint_${best.status}`) as 'hint_starved';
+    const msg = t(key, { b: name, items });
+    this.hintedIds.set(b.id, now);
+    this.lastHintAt = now;
+    this.koraSay(`💡 ${msg}`, 16, {
+      label: t('show'),
+      run: () => {
+        const sz = BUILDINGS[b.type].size;
+        this.renderer.centerOn(b.x + sz / 2 - 0.5, b.y + sz / 2 - 0.5, Math.max(this.renderer.cam.zoom, 1));
+        this.selectBuilding(b);
+        this.renderer.overlay = true;
+        this.koraMsgT = 0;
+        this.koraAction = null;
+        this.lastTopHtml = '';
+        this.renderTop();
+      },
+    });
   }
 
   // ---------- Bottom HUD ----------
@@ -930,6 +1048,7 @@ export class Hud {
       <div class="info-body">${this.infoBody(b)}</div>
       ${b.type !== 'core' ? `<div class="info-actions">
         ${def.rotatable ? `<button class="btn small" data-act="rotate">⟳ ${t('rotate')}</button>` : ''}
+        ${this.sim.state.unlockedBuildings.includes(b.type) ? `<button class="btn small" data-act="pick" title="Q">⤴ ${t('pipette')}</button>` : ''}
         <button class="btn small danger" data-act="remove">${b.status === 'depleted' ? '♻ ' + t('recycle') : '✕ ' + t('delete')}</button>
       </div>` : ''}`;
     const wasHidden = this.info.classList.contains('hidden');
@@ -978,7 +1097,11 @@ export class Hud {
       }
       const act = target.dataset.act;
       if (act === 'close') this.selectBuilding(null);
-      else if (act === 'rotate') this.rotateSelected();
+      else if (act === 'pick') {
+        this.input.pickTool(b);
+        this.selectBuilding(null);
+        sfx.select();
+      } else if (act === 'rotate') this.rotateSelected();
       else if (act === 'remove') {
         this.sim.remove(b);
         sfx.remove();
@@ -1164,16 +1287,20 @@ export class Hud {
 
   showUpgrades() {
     const st = this.sim.state;
-    const rows = UPGRADES.map((u) => {
+    const row = (u: (typeof UPGRADES)[number]) => {
       const lvl = st.upgrades[u.id] ?? 0;
       const cost = this.sim.upgradeCost(u.id);
       const can = this.sim.canUpgrade(u.id);
-      return `<div class="upgrade">
-        <div class="uname"><b>${tUpgrade(u.id)}</b><small>${t('level')} ${lvl}/${u.maxLevel} · ×${u.factor(lvl).toFixed(2)}</small></div>
+      const open = this.sim.upgradeUnlocked(u.id);
+      const pips = Array.from({ length: u.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
+      return `<div class="upgrade ${open ? '' : 'locked'}">
+        <div class="uname"><b>${tUpgrade(u.id)}</b> <span class="pips">${pips}</span><small>${t(`upgrade_desc_${u.id}` as 'upgrade_desc_belt')} · ×${u.factor(lvl).toFixed(2)}${!open && u.requires ? `<br>🔒 ${t('requires', { u: tUpgrade(u.requires.id), n: u.requires.level })}` : ''}</small></div>
         ${cost ? `<div class="ucost">${costHtml(cost, st.inventory)}</div><button class="btn small ${can ? 'primary' : ''}" data-up="${u.id}" ${can ? '' : 'disabled'}>${t('upgrade_buy')}</button>` : `<span class="umax">${t('upgrade_max')}</span>`}
       </div>`;
-    }).join('');
-    this.openModal(`<h2>${t('upgrades')}</h2><div class="upgrade-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
+    };
+    const base = UPGRADES.filter((u) => !u.requires).map(row).join('');
+    const tier2 = UPGRADES.filter((u) => u.requires).map(row).join('');
+    this.openModal(`<h2>${t('research')}</h2><div class="upgrade-list">${base}</div><h3>${t('upgrades')} II</h3><div class="upgrade-list">${tier2}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
       const id = target.dataset.up as UpgradeId | undefined;
       if (id && this.sim.buyUpgrade(id)) {
         sfx.mission();
@@ -1197,6 +1324,8 @@ export class Hud {
         <span><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
       <div class="menu-row"><span>${t('sound')}</span>
         <span><button class="chip ${soundEnabled() ? 'active' : ''}" data-sound="on">${t('on')}</button><button class="chip ${soundEnabled() ? '' : 'active'}" data-sound="off">${t('off')}</button></span></div>
+      <div class="menu-row"><span>${t('ambience')}</span>
+        <span><button class="chip ${ambientEnabled() ? 'active' : ''}" data-ambient="on">${t('on')}</button><button class="chip ${ambientEnabled() ? '' : 'active'}" data-ambient="off">${t('off')}</button></span></div>
       <div class="menu-row"><span>${t('mode')}</span><span>${st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}/${MISSIONS.length}` : t('mode_free')}</span></div>
       <div class="menu-row"><span>${t('seed')}</span><span class="mono">${st.seed}</span></div>
       <div class="menu-row"><span>${t('playtime')}</span><span>${fmtTime(st.time)}</span></div>
@@ -1215,6 +1344,9 @@ export class Hud {
           this.showMenu();
         } else if (target.dataset.sound) {
           setSound(target.dataset.sound === 'on');
+          this.showMenu();
+        } else if (target.dataset.ambient) {
+          setAmbient(target.dataset.ambient === 'on');
           this.showMenu();
         } else if (target.dataset.act === 'howto') this.showHowTo();
         else if (target.dataset.act === 'transfer') this.showTransfer();
@@ -1289,11 +1421,21 @@ export class Hud {
 
   showLaunch() {
     const st = this.sim.state;
+    const sc = this.sim.score();
+    const record = recordScore(sc.total, sc.hard);
+    if (st.options.mode === 'story') recordChapter(MISSIONS.length - 1, st.time - (st.chapterStart ?? 0));
+    const best = loadProgress().bestScore[sc.hard ? 'hard' : 'normal'];
+    const line = (label: string, v: number) => `<div class="menu-row"><span>${label}</span><span class="mono">${v}</span></div>`;
     this.openModal(
       `<div class="launch">
       <img class="ship" src="${uiUrl('ship.webp')}" alt="">
       <h2>🚀 ${t('launch_title')}</h2>
       <p>${t('launch_text', { time: fmtTime(st.time) })}</p>
+      <div class="score-box">
+        <div class="score-total">${t('score')}: <b>${sc.total}</b>${record ? ` <span class="rec">${t('new_record')}</span>` : ''}</div>
+        ${line(t('score_time'), sc.time)}${line(t('score_parts'), sc.parts)}${line(t('score_thrift'), sc.thrift)}${line(t('score_contracts'), sc.contracts)}${sc.hard ? line(t('score_hard'), Math.round(sc.total / 1.5 * 0.5)) : ''}
+        <div class="menu-row"><span>${t('best_score')}</span><span class="mono">${best}</span></div>
+      </div>
       <button class="btn primary" data-act="new">${t('play_again')}</button>
       <button class="btn" data-act="close">${t('keep_playing')}</button>
     </div>`,
@@ -1331,9 +1473,13 @@ export class Hud {
       const next = MISSIONS[index + 1];
       const nt = tMission(next.id);
       const lvl = LEVELS[Math.min(index + 1, LEVELS.length - 1)];
+      const seconds = st.time - (st.chapterStart ?? 0);
+      const rec = recordChapter(index, seconds);
       this.openModal(
         `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('chapter_done', { n: index + 1 })}</small></div></div>
         <h2>✓ ${mt.title}</h2>
+        <div class="stars-big ${rec.stars === 3 ? 'gold' : ''}">${starString(rec.stars)}</div>
+        <p class="stars-line">${t('stars_earned', { time: fmtTime(seconds), stars: `${rec.stars}/3` })}${rec.improved ? ` · ${t('new_record')}` : ''}<br><small>${t('par_time', { time: fmtTime(LEVELS[Math.min(index, LEVELS.length - 1)].par) })}</small></p>
         <p>${tChapter(index)}</p>
         ${unlocks.length ? `<div class="unlocks">${t('unlocked')}: ${unlocks.join(', ')}</div>` : ''}
         <h3>${t('chapter')} ${index + 2}: ${nt.title}</h3>
@@ -1383,6 +1529,51 @@ export class Hud {
     this.refresh();
   }
 
+  /** KORA reports a situation; the player decides (or the safe option happens when the timer runs out). */
+  eventOffer(ev: GameEvent) {
+    sfx.select();
+    const st = this.sim.state;
+    const item = ev.terrain ? tItem(TERRAIN_ITEM[ev.terrain]!) : '';
+    const text = t(`event_${ev.kind}_text` as 'event_wreck_text', { item });
+    const aOk = this.sim.eventOptionAvailable(ev, 'a');
+    this.openModal(
+      `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('event_title')}</small></div></div>
+      <p>${text}</p>
+      <p class="save-hint">${t('event_decide_in', { time: fmtTime(ev.until - st.time) })}</p>
+      <button class="btn primary" data-choice="a" ${aOk ? '' : 'disabled'}>${t(`event_${ev.kind}_a` as 'event_wreck_a')}</button>
+      <button class="btn" data-choice="b">${t(`event_${ev.kind}_b` as 'event_wreck_b')}</button>
+      ${ev.kind === 'meteorite' && ev.x !== undefined ? `<button class="btn ghost small" data-act="look">${t('show')}</button>` : ''}`,
+      (target) => {
+        const c = target.dataset.choice as 'a' | 'b' | undefined;
+        if (c) {
+          this.sim.resolveEvent(c);
+          this.closeModal();
+        } else if (target.dataset.act === 'look' && ev.x !== undefined && ev.y !== undefined) {
+          this.renderer.centerOn(ev.x, ev.y, Math.max(this.renderer.cam.zoom, 0.8));
+          this.renderer.ping = { x: ev.x - 1, y: ev.y - 1, w: 3, h: 3 };
+        }
+      },
+    );
+    // keep the card open when tapping the backdrop; the decision can also be postponed via the KORA card
+    this.koraSay(`📡 ${t('event_title')}: ${text}`, 60, { label: t('decide'), run: () => this.eventOffer(ev) });
+  }
+
+  eventDone(ev: GameEvent, choice: 'a' | 'b', auto: boolean) {
+    if (this.sim.state.event === null && this.modal.querySelector('[data-choice]')) this.closeModal();
+    if (auto) this.toast(t('event_auto'), 3500);
+    else this.toast(`✓ ${t(`event_${ev.kind}_${choice}` as 'event_wreck_a')}`, 3500, 'success');
+    this.renderer.ping = null;
+    if (this.koraAction) {
+      this.koraMsgT = 0;
+      this.koraAction = null;
+    }
+  }
+
+  meteorLanded(x: number, y: number) {
+    this.toast(`☄ ${t('event_meteor_landed')}`, 4000, 'success');
+    this.renderer.fxMeteor(x, y);
+  }
+
   contractOffer(c: Contract) {
     this.toast(`📋 ${t('contract_new')}: ${t('contract_text', { n: c.amount, item: tItem(c.item), time: fmtTime(c.deadline - this.sim.state.time) })}`, 6000);
     sfx.select();
@@ -1407,9 +1598,13 @@ export class Hud {
 
   /** Called ~4x per second. */
   refresh(dt = 0.25) {
-    if (this.koraMsgT > 0) this.koraMsgT -= dt;
+    if (this.koraMsgT > 0) {
+      this.koraMsgT -= dt;
+      if (this.koraMsgT <= 0) this.koraAction = null;
+    }
     this.problems = this.sim.analyze();
     this.tickTutorial();
+    this.tickHints();
     this.renderBottom();
     this.renderTop();
     if (this.renderer.selectedTile && !this.info.classList.contains('hidden') && this.sim.state.buildings.length && this.sim.at(this.renderer.selectedTile.x, this.renderer.selectedTile.y)) {

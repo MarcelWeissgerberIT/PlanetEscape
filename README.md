@@ -67,6 +67,18 @@ Seven orders unlock buildings and recipes step by step. The last one is the ship
 * Art generated with OpenArt (Nano Banana 2) from one style-anchor image, post-processed with `sharp` (`npm run assets`, sources in `tools/raw/`, not committed).
 * i18n dictionary in `src/i18n/index.ts`; language is auto-detected and can be switched in the menu.
 
+## Quality-of-life & long game / Komfort & Langzeitspiel
+
+* **Belt line editor**: drag with the belt tool to preview an L-shaped line (count and plate cost shown), release to lay it. `Q` or the *Pipette* button copies a building as the active tool.
+* **KORA speaks up**: machines starved, blocked or jammed for a while and lasting power shortages trigger a hint with a *Show* button that jumps to the spot.
+* **Scan overlay** tints belts by utilisation, shows measured items/min where a belt hands over to a machine, plus rates, ore left and depot fill.
+* **Research tree**: seven tracks in two tiers (belt, drill, machine, power → deposit yield, depot capacity, printer speed).
+* **Chapter stars & replay**: every story chapter has a par time; stars and best times are kept on the device, any reached chapter can be replayed from the title screen.
+* **Events with decisions**: meteorite (new deposit vs. salvage), buried wreck (plates vs. machine parts), solar flare (overclock the grid vs. ride out a storm).
+* **Endgame score** (speed, ship parts, lean factory, contracts) with best scores; **hard mode** for free play (half the material, thinner deposits, more storms, 1.5× score).
+* **Ambient soundscape**: procedural wind, drone and a factory hum that grows with activity (toggle in the menu).
+* **Large maps**: pre-rendered terrain cache and low-detail rendering when zoomed out keep 160×160 maps smooth.
+
 ## MCP server: let an AI play / KI spielt mit
 
 `mcp/` contains a [Model Context Protocol](https://modelcontextprotocol.io) server that runs the game headlessly (no browser) so an AI agent such as Claude can play it, inspect the map, place buildings and let the built-in **auto-solver** design production chains.
