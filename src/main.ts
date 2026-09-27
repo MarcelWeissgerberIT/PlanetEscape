@@ -41,20 +41,24 @@ const cbs = {
     hud.toast(t(reason as 'err_cost'), 1800, 'error');
   },
   onToolChange: (tool: Input['tool']) => hud.setTool(tool),
+  onRotate: (b: Parameters<Sim['remove']>[0]) => {
+    sfx.select();
+    hud.selectBuilding(b);
+    hud.flashOutput(b);
+  },
+  onRotateKey: () => hud.rotateSelected(),
 };
 
 let input = new Input(canvas, sim, renderer, cbs);
 
 const hud = new Hud(sim, input, renderer, {
-  onNewGame: () => {
+  onNewGame: (seed?: number) => {
     Save.clear();
-    swapState(newGame());
+    swapState(newGame(seed));
     start();
   },
   onContinue: () => start(),
-  onLanguage: () => {
-    /* HUD re-renders itself */
-  },
+  onSave: () => Save.save(sim.state),
   onCenter: () => renderer.centerOnCore(),
 });
 
@@ -68,10 +72,9 @@ function swapState(state: GameState) {
   renderer = new Renderer(canvas, sim);
   renderer.resize();
   input = new Input(canvas, sim, renderer, cbs);
-  // re-point the HUD to the new objects
-  (hud as unknown as { sim: Sim; input: Input; renderer: Renderer }).sim = sim;
-  (hud as unknown as { sim: Sim; input: Input; renderer: Renderer }).input = input;
-  (hud as unknown as { sim: Sim; input: Input; renderer: Renderer }).renderer = renderer;
+  hud.sim = sim;
+  hud.input = input;
+  hud.renderer = renderer;
   hud.selectBuilding(null);
   launchShown = false;
   renderer.centerOnCore();
@@ -103,11 +106,22 @@ function frame(now: number) {
       acc -= STEP;
     }
     for (const ev of sim.events) {
-      if (ev.type === 'mission') hud.missionComplete(ev.index);
-      if (ev.type === 'launch' && !launchShown) {
-        launchShown = true;
-        sfx.launch();
-        setTimeout(() => hud.showLaunch(), 600);
+      switch (ev.type) {
+        case 'mission': hud.missionComplete(ev.index); break;
+        case 'launch':
+          if (!launchShown) {
+            launchShown = true;
+            sfx.launch();
+            setTimeout(() => hud.showLaunch(), 600);
+          }
+          break;
+        case 'craft': renderer.fxCraft(ev.b); break;
+        case 'delivered': renderer.fxDelivered(ev.item); break;
+        case 'depleted': renderer.fxDepleted(ev.x, ev.y); hud.depleted(); break;
+        case 'contract_offer': hud.contractOffer(ev.contract); break;
+        case 'contract_done': hud.contractDone(); break;
+        case 'contract_failed': hud.contractFailed(); break;
+        case 'storm': hud.storm(ev.on); break;
       }
     }
     sim.events.length = 0;
@@ -123,6 +137,7 @@ function frame(now: number) {
     }
   }
   renderer.draw(dt);
+  if (playing) hud.updateFloating();
   requestAnimationFrame(frame);
 }
 
@@ -145,7 +160,7 @@ exposeDebug();
 hud.showTitle();
 requestAnimationFrame(frame);
 
-void preloadAll(BUILD_ORDER.concat('core'), ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'] as TerrainId[], ITEM_ORDER);
+void preloadAll(BUILD_ORDER.concat('core'), ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'rock'] as TerrainId[], ITEM_ORDER);
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {

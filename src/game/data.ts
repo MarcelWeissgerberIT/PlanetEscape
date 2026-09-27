@@ -1,4 +1,4 @@
-import type { BuildingDef, BuildingId, ItemDef, ItemId, MissionDef, RecipeDef, TerrainId } from './types';
+import type { BuildingDef, BuildingId, ItemDef, ItemId, MissionDef, RecipeDef, TerrainId, UpgradeId } from './types';
 
 export const ITEMS: Record<ItemId, ItemDef> = {
   iron_ore: { id: 'iron_ore', color: '#b5654a', tier: 0 },
@@ -15,6 +15,8 @@ export const ITEMS: Record<ItemId, ItemDef> = {
   fuel: { id: 'fuel', color: '#7ee36a', tier: 1 },
   steel_frame: { id: 'steel_frame', color: '#6c7580', tier: 2 },
   circuit: { id: 'circuit', color: '#2fbf71', tier: 2 },
+  machine_part: { id: 'machine_part', color: '#a3a9b3', tier: 2 },
+  precision_part: { id: 'precision_part', color: '#5eead4', tier: 2 },
   hull_plate: { id: 'hull_plate', color: '#d7dde3', tier: 3 },
   engine: { id: 'engine', color: '#ff7a1a', tier: 3 },
   nav_computer: { id: 'nav_computer', color: '#22d3ee', tier: 3 },
@@ -26,6 +28,7 @@ export const ITEM_ORDER: ItemId[] = Object.keys(ITEMS) as ItemId[];
 
 export const TERRAIN_ITEM: Record<TerrainId, ItemId | null> = {
   ground: null,
+  rock: null,
   iron_ore: 'iron_ore',
   copper_ore: 'copper_ore',
   quartz: 'quartz',
@@ -38,40 +41,51 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   conveyor: { id: 'conveyor', kind: 'conveyor', size: 1, cost: { iron_plate: 1 }, power: 0, rotatable: true },
   miner: { id: 'miner', kind: 'miner', size: 1, cost: { iron_plate: 6, copper_plate: 2 }, power: 2, rotatable: true, placeOn: 'deposit' },
   smelter: { id: 'smelter', kind: 'machine', size: 1, cost: { iron_plate: 8 }, power: 3, rotatable: true },
-  assembler: { id: 'assembler', kind: 'machine', size: 2, cost: { iron_plate: 12, copper_plate: 6 }, power: 4, rotatable: true },
-  refinery: { id: 'refinery', kind: 'machine', size: 2, cost: { iron_plate: 14, copper_wire: 6, glass: 4 }, power: 5, rotatable: true },
+  printer: { id: 'printer', kind: 'machine', size: 2, cost: { iron_plate: 20, copper_plate: 10 }, power: 4, rotatable: true },
+  assembler: { id: 'assembler', kind: 'machine', size: 2, cost: { machine_part: 6, copper_plate: 6 }, power: 4, rotatable: true },
+  refinery: { id: 'refinery', kind: 'machine', size: 2, cost: { machine_part: 8, steel_frame: 4, glass: 4 }, power: 5, rotatable: true },
+  fabricator: { id: 'fabricator', kind: 'machine', size: 2, cost: { precision_part: 8, steel_frame: 8, glass: 6 }, power: 8, rotatable: true },
   solar: { id: 'solar', kind: 'power', size: 1, cost: { iron_plate: 4, copper_plate: 4 }, power: -4, rotatable: false },
-  generator: { id: 'generator', kind: 'power', size: 2, cost: { iron_plate: 16, copper_wire: 8, glass: 4 }, power: -20, rotatable: true },
+  generator: { id: 'generator', kind: 'power', size: 2, cost: { machine_part: 6, circuit: 4, glass: 4 }, power: -20, rotatable: true },
   storage: { id: 'storage', kind: 'storage', size: 1, cost: { iron_plate: 8 }, power: 0, rotatable: true },
   splitter: { id: 'splitter', kind: 'splitter', size: 1, cost: { iron_plate: 4 }, power: 0, rotatable: true },
+  tunnel: { id: 'tunnel', kind: 'tunnel', size: 1, cost: { iron_plate: 5 }, power: 0, rotatable: true },
 };
+
+export const TUNNEL_RANGE = 4; // max tiles between entrance and exit
 
 export const BUILD_ORDER: BuildingId[] = [
   'conveyor',
   'miner',
   'smelter',
+  'storage',
+  'printer',
   'solar',
   'assembler',
   'splitter',
-  'storage',
+  'tunnel',
   'refinery',
   'generator',
+  'fabricator',
 ];
 
 export const RECIPES: RecipeDef[] = [
   // Smelter (auto-selects by input)
-  { id: 'iron_plate', machine: 'smelter', inputs: { iron_ore: 1 }, output: 'iron_plate', outputCount: 1, seconds: 2 },
-  { id: 'copper_plate', machine: 'smelter', inputs: { copper_ore: 1 }, output: 'copper_plate', outputCount: 1, seconds: 2 },
-  { id: 'glass', machine: 'smelter', inputs: { quartz: 1 }, output: 'glass', outputCount: 1, seconds: 2.5 },
+  { id: 'iron_plate', machine: 'smelter', auto: true, inputs: { iron_ore: 1 }, output: 'iron_plate', outputCount: 1, seconds: 2 },
+  { id: 'copper_plate', machine: 'smelter', auto: true, inputs: { copper_ore: 1 }, output: 'copper_plate', outputCount: 1, seconds: 2 },
+  { id: 'glass', machine: 'smelter', auto: true, inputs: { quartz: 1 }, output: 'glass', outputCount: 1, seconds: 2.5 },
   // Assembler
   { id: 'copper_wire', machine: 'assembler', inputs: { copper_plate: 1 }, output: 'copper_wire', outputCount: 2, seconds: 1.5 },
   { id: 'steel_frame', machine: 'assembler', inputs: { iron_plate: 3 }, output: 'steel_frame', outputCount: 1, seconds: 3 },
   { id: 'circuit', machine: 'assembler', inputs: { iron_plate: 1, copper_wire: 2 }, output: 'circuit', outputCount: 1, seconds: 3 },
-  { id: 'hull_plate', machine: 'assembler', inputs: { steel_frame: 2, glass: 1 }, output: 'hull_plate', outputCount: 1, seconds: 5 },
-  { id: 'life_support', machine: 'assembler', inputs: { glass: 2, circuit: 1, water: 2 }, output: 'life_support', outputCount: 1, seconds: 6 },
-  { id: 'engine', machine: 'assembler', inputs: { steel_frame: 3, circuit: 2, fuel: 1 }, output: 'engine', outputCount: 1, seconds: 8 },
-  { id: 'nav_computer', machine: 'assembler', inputs: { circuit: 3, silicon: 2, glass: 1 }, output: 'nav_computer', outputCount: 1, seconds: 8 },
-  { id: 'fuel_cell', machine: 'assembler', inputs: { steel_frame: 1, fuel: 3 }, output: 'fuel_cell', outputCount: 1, seconds: 5 },
+  { id: 'hull_plate', machine: 'fabricator', inputs: { steel_frame: 2, glass: 1 }, output: 'hull_plate', outputCount: 1, seconds: 5 },
+  { id: 'life_support', machine: 'fabricator', inputs: { glass: 2, circuit: 1, water: 2 }, output: 'life_support', outputCount: 1, seconds: 6 },
+  { id: 'engine', machine: 'fabricator', inputs: { steel_frame: 3, circuit: 2, fuel: 1 }, output: 'engine', outputCount: 1, seconds: 8 },
+  { id: 'nav_computer', machine: 'fabricator', inputs: { circuit: 3, silicon: 2, glass: 1 }, output: 'nav_computer', outputCount: 1, seconds: 8 },
+  { id: 'fuel_cell', machine: 'fabricator', inputs: { steel_frame: 1, fuel: 3 }, output: 'fuel_cell', outputCount: 1, seconds: 5 },
+  // 3D printer (auto-selects by input)
+  { id: 'machine_part', machine: 'printer', auto: true, inputs: { iron_plate: 2, copper_wire: 1 }, output: 'machine_part', outputCount: 1, seconds: 4 },
+  { id: 'precision_part', machine: 'printer', auto: true, inputs: { steel_frame: 1, circuit: 1 }, output: 'precision_part', outputCount: 1, seconds: 6 },
   // Refinery
   { id: 'water', machine: 'refinery', inputs: { ice: 1 }, output: 'water', outputCount: 2, seconds: 2 },
   { id: 'fuel', machine: 'refinery', inputs: { oil: 1, water: 1 }, output: 'fuel', outputCount: 2, seconds: 3 },
@@ -86,25 +100,28 @@ export function recipesFor(machine: RecipeDef['machine']): RecipeDef[] {
 
 /** The ship: what has to be delivered to the Landing Core to launch. */
 export const SHIP_PARTS: Partial<Record<ItemId, number>> = {
-  hull_plate: 16,
-  engine: 4,
-  nav_computer: 2,
-  fuel_cell: 8,
-  life_support: 3,
+  hull_plate: 30,
+  engine: 6,
+  nav_computer: 4,
+  fuel_cell: 14,
+  life_support: 6,
 };
+export const SHIP_PART_IDS = Object.keys(SHIP_PARTS) as ItemId[];
+export const SHIP_TOTAL = Object.values(SHIP_PARTS).reduce((a, c) => a + (c ?? 0), 0);
 
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
-  { id: 'm2', deliver: { iron_plate: 15 }, unlocks: ['solar', 'assembler'], unlockRecipes: ['copper_wire', 'steel_frame'] },
-  { id: 'm3', deliver: { copper_wire: 10, steel_frame: 4 }, unlocks: ['splitter'], unlockRecipes: ['circuit', 'glass'] },
-  { id: 'm4', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'storage'], unlockRecipes: ['water', 'fuel', 'hull_plate', 'life_support'] },
-  { id: 'm5', deliver: { water: 10, fuel: 6 }, unlocks: ['generator'], unlockRecipes: ['silicon', 'engine', 'nav_computer', 'fuel_cell'] },
-  { id: 'm6', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
+  { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['printer', 'storage'], unlockRecipes: ['machine_part'] },
+  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['assembler', 'solar', 'splitter', 'tunnel'], unlockRecipes: ['copper_wire', 'steel_frame'] },
+  { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: [], unlockRecipes: ['circuit', 'glass'] },
+  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
+  { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
+  { id: 'm7', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
 ];
 
 export const STARTING_INVENTORY: Partial<Record<ItemId, number>> = {
-  iron_plate: 80,
-  copper_plate: 16,
+  iron_plate: 70,
+  copper_plate: 12,
 };
 
 export const STARTING_BUILDINGS: BuildingId[] = ['conveyor', 'miner'];
@@ -114,6 +131,41 @@ export const BELT_SPEED = 1.6; // tiles per second
 export const BELT_SPACING = 0.28; // min distance between items on a belt
 export const BUFFER_CAP = 6; // max per input item in a machine
 export const OUTPUT_CAP = 6;
-export const STORAGE_CAP = 60;
+export const STORAGE_CAP = 120;
 export const MINE_SECONDS = 1.6;
 export const GENERATOR_FUEL_SECONDS = 12; // seconds of full power per fuel unit
+
+// ---------- Upgrades (bought from KORA with printed parts) ----------
+export interface UpgradeDef {
+  id: UpgradeId;
+  maxLevel: number;
+  cost: (level: number) => Partial<Record<ItemId, number>>; // cost to reach `level` (1-based)
+  factor: (level: number) => number; // multiplier at `level`
+}
+
+export const UPGRADES: UpgradeDef[] = [
+  { id: 'belt', maxLevel: 3, cost: (l) => ({ machine_part: 6 * l, copper_wire: 10 * l }), factor: (l) => 1 + 0.35 * l },
+  { id: 'miner', maxLevel: 3, cost: (l) => ({ machine_part: 8 * l, iron_plate: 20 * l }), factor: (l) => 1 + 0.3 * l },
+  { id: 'machine', maxLevel: 3, cost: (l) => (l < 3 ? { machine_part: 10 * l, circuit: 6 * l } : { precision_part: 10, circuit: 20 }), factor: (l) => 1 + 0.25 * l },
+  { id: 'power', maxLevel: 3, cost: (l) => ({ machine_part: 6 * l, glass: 8 * l }), factor: (l) => 1 + 0.4 * l },
+];
+export const UPGRADE_BY_ID: Record<UpgradeId, UpgradeDef> = Object.fromEntries(UPGRADES.map((u) => [u.id, u])) as Record<UpgradeId, UpgradeDef>;
+
+// ---------- Contracts: optional timed side orders from KORA ----------
+export const CONTRACT_ITEMS: { item: ItemId; minMission: number; amount: [number, number]; seconds: number; reward: (n: number) => Partial<Record<ItemId, number>> }[] = [
+  { item: 'iron_plate', minMission: 1, amount: [20, 40], seconds: 360, reward: (n) => ({ copper_plate: Math.round(n * 0.5) }) },
+  { item: 'copper_plate', minMission: 1, amount: [15, 30], seconds: 360, reward: (n) => ({ iron_plate: n }) },
+  { item: 'machine_part', minMission: 2, amount: [6, 14], seconds: 480, reward: (n) => ({ glass: n }) },
+  { item: 'copper_wire', minMission: 3, amount: [20, 40], seconds: 420, reward: (n) => ({ machine_part: Math.round(n / 5) }) },
+  { item: 'steel_frame', minMission: 3, amount: [10, 20], seconds: 480, reward: (n) => ({ machine_part: Math.round(n / 3) }) },
+  { item: 'circuit', minMission: 4, amount: [10, 24], seconds: 540, reward: (n) => ({ precision_part: Math.round(n / 4) }) },
+  { item: 'glass', minMission: 4, amount: [15, 30], seconds: 420, reward: (n) => ({ machine_part: Math.round(n / 4) }) },
+  { item: 'fuel', minMission: 5, amount: [10, 24], seconds: 540, reward: (n) => ({ precision_part: Math.round(n / 4) }) },
+  { item: 'silicon', minMission: 6, amount: [8, 16], seconds: 600, reward: (n) => ({ precision_part: Math.round(n / 3) }) },
+  { item: 'precision_part', minMission: 6, amount: [6, 12], seconds: 720, reward: (n) => ({ hull_plate: Math.round(n / 3) }) },
+];
+export const CONTRACT_INTERVAL = 240; // seconds between offers
+export const STORM_INTERVAL: [number, number] = [420, 900];
+export const STORM_SECONDS = 60;
+export const STORM_SOLAR_FACTOR = 0.35;
+export const ORE_PER_TILE: [number, number] = [220, 420];

@@ -6,7 +6,7 @@ export class Camera {
   zoom = 1;
   width = 1;
   height = 1;
-  minZoom = 0.22;
+  minZoom = 0.12;
   maxZoom = 2.5;
 
   resize(w: number, h: number) {

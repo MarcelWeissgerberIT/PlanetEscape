@@ -8,26 +8,84 @@ import {
   MISSIONS,
   OUTPUT_CAP,
   RECIPE_BY_ID,
+  SHIP_PARTS,
+  SHIP_TOTAL,
   STORAGE_CAP,
   TERRAIN_ITEM,
+  TUNNEL_RANGE,
+  CONTRACT_INTERVAL,
+  CONTRACT_ITEMS,
+  STORM_INTERVAL,
+  STORM_SECONDS,
+  STORM_SOLAR_FACTOR,
+  UPGRADE_BY_ID,
   recipesFor,
 } from './data';
-import type { Building, BuildingId, Dir, GameState, ItemId, RecipeDef } from './types';
+import type { Building, BuildingId, Contract, Dir, GameState, ItemId, RecipeDef, Status, UpgradeId } from './types';
 import { DX, DY } from './types';
 
 export type SimEvent =
   | { type: 'mission'; index: number }
   | { type: 'launch' }
-  | { type: 'delivered'; item: ItemId; count: number };
+  | { type: 'delivered'; item: ItemId; count: number }
+  | { type: 'craft'; b: Building; item: ItemId }
+  | { type: 'depleted'; x: number; y: number }
+  | { type: 'contract_offer'; contract: Contract }
+  | { type: 'contract_done'; contract: Contract }
+  | { type: 'contract_failed'; contract: Contract }
+  | { type: 'storm'; on: boolean };
+
+export interface Problem {
+  building: Building;
+  status: Status;
+  missing?: ItemId[];
+}
+
+const JAM_SECONDS = 2;
+const RATE_WINDOW = 10;
+const MINER_BUFFER = 4;
 
 /**
+ * The simulation: belts, machines, power, missions and diagnostics.
  * Spatial index: tile -> building. Rebuilt whenever buildings change.
  */
 export class Sim {
   state: GameState;
   grid: (Building | null)[];
   events: SimEvent[] = [];
+  powerRatio = 1;
   private rrOut = new Map<number, number>();
+
+  factor(id: UpgradeId): number {
+    return UPGRADE_BY_ID[id].factor(this.state.upgrades[id] ?? 0);
+  }
+
+  upgradeCost(id: UpgradeId): Partial<Record<ItemId, number>> | null {
+    const def = UPGRADE_BY_ID[id];
+    const lvl = this.state.upgrades[id] ?? 0;
+    if (lvl >= def.maxLevel) return null;
+    return def.cost(lvl + 1);
+  }
+
+  canUpgrade(id: UpgradeId): boolean {
+    const cost = this.upgradeCost(id);
+    if (!cost) return false;
+    for (const k in cost) if ((this.state.inventory[k as ItemId] ?? 0) < cost[k as ItemId]!) return false;
+    return true;
+  }
+
+  buyUpgrade(id: UpgradeId): boolean {
+    if (!this.canUpgrade(id)) return false;
+    const cost = this.upgradeCost(id)!;
+    for (const k in cost) this.addInv(k as ItemId, -cost[k as ItemId]!);
+    this.state.upgrades[id] = (this.state.upgrades[id] ?? 0) + 1;
+    return true;
+  }
+
+  /** Remaining ore under a miner (sum of its tile). */
+  oreLeft(x: number, y: number): number {
+    return this.state.ore[y * this.state.width + x] ?? 0;
+  }
 
   constructor(state: GameState) {
     this.state = state;
@@ -54,8 +112,17 @@ export class Sim {
     return this.grid[y * this.state.width + x];
   }
 
+  byId(id: number | null | undefined): Building | null {
+    if (id == null) return null;
+    return this.state.buildings.find((b) => b.id === id) ?? null;
+  }
+
   terrain(x: number, y: number) {
     return this.state.terrain[y * this.state.width + x];
+  }
+
+  isDeposit(x: number, y: number) {
+    return this.inBounds(x, y) && !!TERRAIN_ITEM[this.terrain(x, y)];
   }
 
   // ---------- Building placement ----------
@@ -74,9 +141,12 @@ export class Sim {
       for (let dx = 0; dx < def.size; dx++) {
         if (!this.inBounds(x + dx, y + dy)) return 'err_bounds';
         if (this.at(x + dx, y + dy)) return 'err_occupied';
+        if (this.terrain(x + dx, y + dy) === 'rock') return 'err_rock';
+        // deposits are reserved for miners
+        if (def.placeOn !== 'deposit' && this.isDeposit(x + dx, y + dy)) return 'err_deposit_only_miner';
       }
     }
-    if (def.placeOn === 'deposit' && !TERRAIN_ITEM[this.terrain(x, y)]) return 'err_deposit';
+    if (def.placeOn === 'deposit' && !this.isDeposit(x, y)) return 'err_deposit';
     if (!this.canAfford(type)) return 'err_cost';
     return null;
   }
@@ -86,7 +156,7 @@ export class Sim {
     const def = BUILDINGS[type];
     for (const k in def.cost) this.addInv(k as ItemId, -def.cost[k as ItemId]!);
     const b: Building = { id: this.state.nextId++, type, x, y, dir: def.rotatable ? dir : 0 };
-    if (type === 'conveyor') b.items = [];
+    if (type === 'conveyor' || type === 'tunnel') b.items = [];
     if (def.kind === 'machine') {
       b.input = {};
       b.output = {};
@@ -98,21 +168,82 @@ export class Sim {
       b.progress = 0;
       b.output = {};
     }
-    if (type === 'storage') b.store = {};
+    if (type === 'storage') {
+      b.store = {};
+      b.recipe = null;
+    }
     if (type === 'generator') {
       b.input = {};
       b.fuelSeconds = 0;
     }
+    if (type === 'tunnel') {
+      b.pair = null;
+      b.exit = false;
+    }
     this.state.buildings.push(b);
     this.index(b);
+    if (type === 'tunnel') this.pairTunnel(b);
     return b;
   }
 
-  /** Replace an existing conveyor's direction (used while drag-building belts). */
+  /** Pair a new tunnel piece with an unpaired one in line with it (behind = we are the exit, ahead = we are the entrance). */
+  private pairTunnel(b: Building) {
+    const candidates = (dir: Dir, ahead: boolean) => {
+      for (let i = 1; i <= TUNNEL_RANGE + 1; i++) {
+        const x = b.x + DX[dir] * i, y = b.y + DY[dir] * i;
+        const t = this.at(x, y);
+        if (t?.type === 'tunnel' && t.dir === b.dir && t.pair == null) {
+          // behind: partner must be an entrance (not exit). ahead: partner must not already be an entrance with pair
+          if (!ahead && !t.exit) return t;
+          if (ahead && !t.exit) return t; // an unpaired piece ahead becomes the exit
+        }
+      }
+      return null;
+    };
+    const back = ((b.dir + 2) & 3) as Dir;
+    const behind = candidates(back, false);
+    if (behind) {
+      behind.pair = b.id;
+      b.pair = behind.id;
+      b.exit = true;
+      behind.exit = false;
+      return;
+    }
+    const ahead = candidates(b.dir, true);
+    if (ahead) {
+      ahead.pair = b.id;
+      ahead.exit = true;
+      ahead.items = [];
+      b.pair = ahead.id;
+      b.exit = false;
+    }
+  }
+
+  /** Replace an existing building's direction. */
   rotate(b: Building, dir: Dir) {
     if (!BUILDINGS[b.type].rotatable) return;
+    if (b.dir === dir) return;
+    if (b.type === 'tunnel') this.unpair(b);
     b.dir = dir;
-    if (b.items) b.items = [];
+    if (b.items) {
+      for (const it of b.items) this.addInv(it.item, 1);
+      b.items = [];
+    }
+    if (b.type === 'tunnel') this.pairTunnel(b);
+  }
+
+  private unpair(b: Building) {
+    const p = this.byId(b.pair);
+    if (p) {
+      p.pair = null;
+      p.exit = false;
+      if (p.items) {
+        for (const it of p.items) this.addInv(it.item, 1);
+        p.items = [];
+      }
+    }
+    b.pair = null;
+    b.exit = false;
   }
 
   remove(b: Building) {
@@ -128,6 +259,7 @@ export class Sim {
     dump(b.output);
     dump(b.store);
     if (b.items) for (const it of b.items) this.addInv(it.item, 1);
+    if (b.type === 'tunnel') this.unpair(b);
     const i = this.state.buildings.indexOf(b);
     if (i >= 0) this.state.buildings.splice(i, 1);
     for (let y = 0; y < def.size; y++) for (let x = 0; x < def.size; x++) this.grid[(b.y + y) * this.state.width + b.x + x] = null;
@@ -141,7 +273,6 @@ export class Sim {
 
   setRecipe(b: Building, recipeId: string | null) {
     if (b.recipe === recipeId) return;
-    // return buffered inputs to the core so nothing is lost
     if (b.input) for (const k in b.input) this.addInv(k as ItemId, b.input[k as ItemId] ?? 0);
     b.input = {};
     b.progress = 0;
@@ -150,31 +281,63 @@ export class Sim {
 
   // ---------- Item transfer ----------
 
+  /** Could building b ever take items arriving in direction `from`? (static check used for dead-end detection) */
+  canReceiveFrom(b: Building, from: Dir): boolean {
+    switch (BUILDINGS[b.type].kind) {
+      case 'core':
+        return true;
+      case 'conveyor':
+        return ((from + 2) & 3) !== b.dir;
+      case 'tunnel':
+        return !b.exit && from === b.dir && b.pair != null;
+      case 'machine':
+      case 'storage':
+        return !this.isOutputSide(b, from);
+      case 'power':
+        return b.type === 'generator';
+      case 'splitter':
+      case 'miner':
+        return from === b.dir;
+    }
+  }
+
   /** Try to give an item to building b arriving from direction `from` (direction of travel). */
-  accept(b: Building, item: ItemId, from: Dir): boolean {
+  accept(b: Building, item: ItemId, from: Dir, viaTunnel = false): boolean {
     const def = BUILDINGS[b.type];
     switch (def.kind) {
       case 'core': {
-        this.addInv(item, 1);
+        const need = SHIP_PARTS[item];
+        if (need && (this.state.ship[item] ?? 0) < need) this.state.ship[item] = (this.state.ship[item] ?? 0) + 1; // installed on the ship
+        else this.addInv(item, 1);
         this.state.delivered[item] = (this.state.delivered[item] ?? 0) + 1;
+        this.bump(this.state.stats.delivered, item, 1);
+        for (const c of this.state.contracts) if (c.accepted && c.item === item && c.delivered < c.amount) c.delivered++;
         this.events.push({ type: 'delivered', item, count: 1 });
         return true;
       }
       case 'conveyor': {
-        // belts cannot be fed head-on against their direction
-        if (((from + 2) & 3) === b.dir) return false;
+        if (((from + 2) & 3) === b.dir) return false; // never head-on
         const items = b.items!;
-        // entry point: from behind -> 0, from the side -> 0.5 (merge)
-        const entry = from === b.dir ? 0 : 0.5;
+        const entry = from === b.dir ? 0 : 0.5; // from behind -> start, from the side -> merge in the middle
         for (const it of items) if (Math.abs(it.pos - entry) < BELT_SPACING) return false;
         items.push({ item, pos: entry });
         items.sort((a, c) => a.pos - c.pos);
         return true;
       }
+      case 'tunnel': {
+        if (b.exit) {
+          if (!viaTunnel) return false;
+        } else if (from !== b.dir || b.pair == null) return false;
+        const items = b.items!;
+        for (const it of items) if (it.pos < BELT_SPACING) return false;
+        items.push({ item, pos: 0 });
+        items.sort((a, c) => a.pos - c.pos);
+        return true;
+      }
       case 'machine': {
-        if (!b.recipe && b.type === 'smelter') {
-          // auto select the smelter recipe matching this input
-          const r = recipesFor('smelter').find((rc) => rc.inputs[item] && this.state.unlockedRecipes.includes(rc.id));
+        if (!b.recipe) {
+          // auto-select machines pick the recipe that uses the first item they receive
+          const r = recipesFor(b.type as RecipeDef['machine']).find((rc) => rc.auto && rc.inputs[item] && this.state.unlockedRecipes.includes(rc.id));
           if (r) b.recipe = r.id;
         }
         if (!b.recipe) return false;
@@ -201,17 +364,22 @@ export class Sim {
         return true;
       }
       case 'splitter': {
-        if (from !== b.dir) return false; // only from behind
+        if (from !== b.dir) return false;
         if (b.output && Object.keys(b.output).length) return false;
         b.output = { [item]: 1 };
         return true;
       }
-      case 'miner':
-        return false;
+      case 'miner': {
+        // miners pass items through from behind so several can be chained across a deposit
+        if (from !== b.dir) return false;
+        const total = Object.values(b.output!).reduce((a, c) => a + (c ?? 0), 0);
+        if (total >= MINER_BUFFER) return false;
+        b.output![item] = (b.output![item] ?? 0) + 1;
+        return true;
+      }
     }
   }
 
-  /** True when an item travelling in direction `from` would enter b through its output (front) edge. */
   private isOutputSide(b: Building, from: Dir): boolean {
     return ((from + 2) & 3) === b.dir;
   }
@@ -231,7 +399,14 @@ export class Sim {
     return out;
   }
 
-  /** Try to push one item out of the building's front edge. */
+  /** Is there any building in front that could take output? */
+  hasOutputTarget(b: Building): boolean {
+    return this.frontTiles(b).some((t) => {
+      const target = this.at(t.x, t.y);
+      return !!target && target !== b && this.canReceiveFrom(target, b.dir);
+    });
+  }
+
   private pushOut(b: Building, item: ItemId): boolean {
     const tiles = this.frontTiles(b);
     const start = this.rrOut.get(b.id) ?? 0;
@@ -252,7 +427,6 @@ export class Sim {
     const st = this.state;
     st.time += dt;
 
-    // power balance
     let supply = 0;
     let demand = 0;
     for (const b of st.buildings) {
@@ -263,26 +437,33 @@ export class Sim {
             b.input!.fuel!--;
             b.fuelSeconds! += GENERATOR_FUEL_SECONDS;
           }
-          if (b.fuelSeconds! > 0) supply += -p;
-        } else supply += -p;
+          if (b.fuelSeconds! > 0) supply += -p * this.factor('power');
+          b.status = b.fuelSeconds! > 0 ? 'ok' : 'no_fuel';
+        } else if (b.type === 'solar') supply += -p * this.factor('power') * (st.storm > 0 ? STORM_SOLAR_FACTOR : 1);
+        else supply += -p;
       } else if (p > 0) demand += p;
     }
-    st.powerSupply = supply;
+    st.powerSupply = Math.round(supply);
     st.powerDemand = demand;
     const ratio = demand <= supply ? 1 : supply / demand;
+    this.powerRatio = ratio;
 
     for (const b of st.buildings) {
       switch (b.type) {
         case 'conveyor':
           this.tickBelt(b, dt);
           break;
+        case 'tunnel':
+          this.tickTunnel(b, dt);
+          break;
         case 'miner':
-          this.tickMiner(b, dt * ratio);
+          this.tickMiner(b, dt, ratio);
           break;
         case 'smelter':
         case 'assembler':
         case 'refinery':
-          this.tickMachine(b, dt * ratio);
+        case 'fabricator':
+          this.tickMachine(b, dt, ratio);
           break;
         case 'storage':
           this.tickStorage(b);
@@ -295,75 +476,225 @@ export class Sim {
           break;
       }
     }
+    this.tickWorld(dt);
     this.checkMission();
   }
 
-  private tickBelt(b: Building, dt: number) {
+  private bump(rec: Partial<Record<ItemId, number>>, item: ItemId, n: number) {
+    rec[item] = (rec[item] ?? 0) + n;
+  }
+
+  private tickWorld(_dt: number) {
+    const st = this.state;
+    // dust storms (only once solar power matters)
+    if (st.storm > 0) {
+      st.storm -= _dt;
+      if (st.storm <= 0) {
+        st.storm = 0;
+        this.events.push({ type: 'storm', on: false });
+      }
+    } else if (st.time >= st.nextStormAt) {
+      st.nextStormAt = st.time + STORM_INTERVAL[0] + Math.random() * (STORM_INTERVAL[1] - STORM_INTERVAL[0]);
+      if (this.countBuildings('solar') > 0) {
+        st.storm = STORM_SECONDS;
+        this.events.push({ type: 'storm', on: true });
+      }
+    }
+    // contracts
+    for (let i = st.contracts.length - 1; i >= 0; i--) {
+      const c = st.contracts[i];
+      if (c.accepted && c.delivered >= c.amount) {
+        for (const k in c.reward) this.addInv(k as ItemId, c.reward[k as ItemId]!);
+        st.contractsDone++;
+        st.contracts.splice(i, 1);
+        this.events.push({ type: 'contract_done', contract: c });
+      } else if (st.time >= c.deadline) {
+        st.contracts.splice(i, 1);
+        if (c.accepted) this.events.push({ type: 'contract_failed', contract: c });
+      }
+    }
+    if (st.time >= st.nextContractAt && st.missionIndex >= 1 && st.contracts.length < 2) {
+      st.nextContractAt = st.time + CONTRACT_INTERVAL;
+      const pool = CONTRACT_ITEMS.filter((c) => st.missionIndex >= c.minMission);
+      if (pool.length) {
+        const def = pool[Math.floor(Math.random() * pool.length)];
+        const amount = def.amount[0] + Math.floor(Math.random() * (def.amount[1] - def.amount[0] + 1));
+        const c: Contract = { id: st.nextId++, item: def.item, amount, delivered: 0, deadline: st.time + def.seconds + 120, reward: def.reward(amount), accepted: false };
+        st.contracts.push(c);
+        this.events.push({ type: 'contract_offer', contract: c });
+      }
+    }
+  }
+
+  acceptContract(c: Contract) {
+    c.accepted = true;
+    c.delivered = 0;
+    c.deadline = this.state.time + (c.deadline - this.state.time); // timer starts on accept (deadline already includes offer window)
+  }
+
+  declineContract(c: Contract) {
+    const i = this.state.contracts.indexOf(c);
+    if (i >= 0) this.state.contracts.splice(i, 1);
+  }
+
+  private moveItems(b: Building, dt: number, deliver: (item: ItemId) => boolean) {
     const items = b.items!;
-    if (!items.length) return;
-    const step = BELT_SPEED * dt;
-    // items sorted by pos ascending; move the front one first
+    if (!items.length) {
+      b.stuck = 0;
+      b.status = 'ok';
+      return;
+    }
+    const step = BELT_SPEED * this.factor('belt') * dt;
+    let blocked = false;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
       const ahead = i < items.length - 1 ? items[i + 1].pos - BELT_SPACING : Infinity;
       let target = Math.min(it.pos + step, ahead);
       if (target >= 1) {
-        const nx = b.x + DX[b.dir];
-        const ny = b.y + DY[b.dir];
-        const next = this.at(nx, ny);
-        if (next && this.accept(next, it.item, b.dir)) {
+        if (deliver(it.item)) {
           items.splice(i, 1);
           continue;
         }
         target = 1;
+        if (i === items.length - 1) blocked = true;
       }
       it.pos = Math.max(it.pos, target);
     }
+    b.stuck = blocked ? (b.stuck ?? 0) + dt : 0;
+    b.status = (b.stuck ?? 0) > JAM_SECONDS ? 'jammed' : 'ok';
   }
 
-  private tickMiner(b: Building, dt: number) {
-    const item = b.mineItem!;
-    const buffered = b.output![item] ?? 0;
-    if (buffered > 0 && this.pushOut(b, item)) b.output![item] = buffered - 1;
-    if ((b.output![item] ?? 0) >= 2) {
-      b.working = false;
+  private tickBelt(b: Building, dt: number) {
+    const nx = b.x + DX[b.dir], ny = b.y + DY[b.dir];
+    const next = this.at(nx, ny);
+    this.moveItems(b, dt, (item) => !!next && this.accept(next, item, b.dir));
+    if (b.status === 'jammed' && (!next || !this.canReceiveFrom(next, b.dir))) b.status = 'dead_end';
+  }
+
+  private tickTunnel(b: Building, dt: number) {
+    const pair = this.byId(b.pair);
+    if (!pair) {
+      b.status = 'unpaired';
       return;
     }
-    b.working = true;
-    b.progress = (b.progress ?? 0) + dt / MINE_SECONDS;
-    if (b.progress >= 1) {
-      b.progress -= 1;
-      b.output![item] = (b.output![item] ?? 0) + 1;
+    if (b.exit) {
+      const nx = b.x + DX[b.dir], ny = b.y + DY[b.dir];
+      const next = this.at(nx, ny);
+      this.moveItems(b, dt, (item) => !!next && this.accept(next, item, b.dir));
+      if (b.status === 'jammed' && (!next || !this.canReceiveFrom(next, b.dir))) b.status = 'dead_end';
+    } else {
+      this.moveItems(b, dt, (item) => this.accept(pair, item, b.dir, true));
     }
   }
 
-  private tickMachine(b: Building, dt: number) {
+  private countRate(b: Building, dt: number, produced: number) {
+    b.rateT = (b.rateT ?? 0) + dt;
+    b.produced = (b.produced ?? 0) + produced;
+    if (b.rateT >= RATE_WINDOW) {
+      b.rate = (b.produced / b.rateT) * 60;
+      b.rateT = 0;
+      b.produced = 0;
+    }
+  }
+
+  private tickMiner(b: Building, dt: number, ratio: number) {
+    const item = b.mineItem!;
+    // push whatever is buffered (own ore or passed-through items)
+    for (const k in b.output) {
+      const n = b.output[k as ItemId] ?? 0;
+      if (n > 0) {
+        if (this.pushOut(b, k as ItemId)) b.output[k as ItemId] = n - 1;
+        break;
+      }
+    }
+    const total = Object.values(b.output!).reduce((a, c) => a + (c ?? 0), 0);
+    let produced = 0;
+    if (total >= 2) {
+      b.working = false;
+      b.status = 'blocked';
+    } else {
+      const idx = b.y * this.state.width + b.x;
+      if ((this.state.ore[idx] ?? 0) <= 0) {
+        b.working = false;
+        b.status = 'depleted';
+      } else {
+        b.working = true;
+        b.status = ratio < 1 ? 'low_power' : 'ok';
+        b.progress = (b.progress ?? 0) + (dt * ratio * this.factor('miner')) / MINE_SECONDS;
+        if (b.progress >= 1) {
+          b.progress -= 1;
+          b.output![item] = (b.output![item] ?? 0) + 1;
+          produced = 1;
+          this.state.ore[idx]--;
+          this.bump(this.state.stats.produced, item, 1);
+          if (this.state.ore[idx] <= 0) {
+            this.state.terrain[idx] = 'ground';
+            this.events.push({ type: 'depleted', x: b.x, y: b.y });
+          }
+        }
+      }
+    }
+    this.countRate(b, dt, produced);
+  }
+
+  private tickMachine(b: Building, dt: number, ratio: number) {
     b.working = false;
-    // push outputs
+    let produced = 0;
     for (const k in b.output) {
       const n = b.output[k as ItemId] ?? 0;
       if (n > 0 && this.pushOut(b, k as ItemId)) b.output[k as ItemId] = n - 1;
     }
-    if (!b.recipe) return;
+    if (!b.recipe) {
+      b.status = 'no_recipe';
+      b.missing = undefined;
+      this.countRate(b, dt, 0);
+      return;
+    }
     const r: RecipeDef = RECIPE_BY_ID[b.recipe];
     const outN = b.output![r.output] ?? 0;
-    if (outN >= OUTPUT_CAP) return;
-    if (b.progress === 0 || b.progress === undefined) {
-      // can we start?
-      for (const k in r.inputs) if ((b.input![k as ItemId] ?? 0) < r.inputs[k as ItemId]!) return;
+    if (outN >= OUTPUT_CAP) {
+      b.status = 'blocked';
+      this.countRate(b, dt, 0);
+      return;
+    }
+    if (!b.progress) {
+      const missing: ItemId[] = [];
+      for (const k in r.inputs) if ((b.input![k as ItemId] ?? 0) < r.inputs[k as ItemId]!) missing.push(k as ItemId);
+      if (missing.length) {
+        b.status = 'starved';
+        b.missing = missing;
+        this.countRate(b, dt, 0);
+        return;
+      }
       for (const k in r.inputs) b.input![k as ItemId]! -= r.inputs[k as ItemId]!;
       b.progress = 1e-6;
     }
     b.working = true;
-    b.progress += dt / r.seconds;
+    b.missing = undefined;
+    b.status = ratio < 1 ? 'low_power' : 'ok';
+    b.progress += (dt * ratio * this.factor('machine')) / r.seconds;
     if (b.progress >= 1) {
       b.progress = 0;
       b.output![r.output] = outN + r.outputCount;
+      produced = r.outputCount;
+      this.bump(this.state.stats.produced, r.output, r.outputCount);
+      this.events.push({ type: 'craft', b, item: r.output });
     }
+    this.countRate(b, dt, produced);
   }
 
   private tickStorage(b: Building) {
     const store = b.store!;
+    b.status = 'ok';
+    if (b.recipe) {
+      // "recipe" doubles as an output filter for storages: only this item leaves
+      const n = store[b.recipe as ItemId] ?? 0;
+      if (n > 0 && this.pushOut(b, b.recipe as ItemId)) {
+        if (n - 1 <= 0) delete store[b.recipe as ItemId];
+        else store[b.recipe as ItemId] = n - 1;
+      }
+      return;
+    }
     for (const k in store) {
       const n = store[k as ItemId] ?? 0;
       if (n > 0) {
@@ -371,16 +702,16 @@ export class Sim {
           if (n - 1 <= 0) delete store[k as ItemId];
           else store[k as ItemId] = n - 1;
         }
-        return; // one item per tick
+        return;
       }
     }
   }
 
   private tickSplitter(b: Building) {
+    b.status = 'ok';
     if (!b.output) return;
     const key = Object.keys(b.output)[0] as ItemId | undefined;
     if (!key) return;
-    // outputs: left, front, right (relative to dir)
     const dirs: Dir[] = [((b.dir + 3) & 3) as Dir, b.dir, ((b.dir + 1) & 3) as Dir];
     const start = b.rr ?? 0;
     for (let i = 0; i < 3; i++) {
@@ -392,9 +723,77 @@ export class Sim {
         return;
       }
     }
+    b.status = 'blocked';
+  }
+
+  // ---------- Diagnostics ----------
+
+  /** Everything that currently keeps a chain from running. */
+  analyze(): Problem[] {
+    const out: Problem[] = [];
+    for (const b of this.state.buildings) {
+      const s = b.status;
+      if (!s || s === 'ok' || s === 'idle') continue;
+      if (s === 'low_power') continue; // reported globally
+      if (s === 'blocked' && (b.type === 'miner' || BUILDINGS[b.type].kind === 'machine')) {
+        // only report blocked machines that have nowhere to output; a full buffer on a busy belt is normal
+        if (this.hasOutputTarget(b)) continue;
+      }
+      out.push({ building: b, status: s, missing: b.missing });
+    }
+    return out;
+  }
+
+  /** Follow belts from a building's output until they reach something else. Returns tile centres and the target. */
+  traceFlow(b: Building): { path: { x: number; y: number }[]; target: Building | null } {
+    const path: { x: number; y: number }[] = [];
+    let target: Building | null = null;
+    const seen = new Set<number>();
+    let cur: Building | null = null;
+    for (const t of this.frontTiles(b)) {
+      const n = this.at(t.x, t.y);
+      if (n && n !== b && this.canReceiveFrom(n, b.dir)) {
+        cur = n;
+        break;
+      }
+    }
+    let guard = 0;
+    while (cur && guard++ < 400 && !seen.has(cur.id)) {
+      seen.add(cur.id);
+      if (cur.type === 'conveyor' || cur.type === 'tunnel') {
+        path.push({ x: cur.x + 0.5, y: cur.y + 0.5 });
+        if (cur.type === 'tunnel' && !cur.exit) {
+          const p = this.byId(cur.pair);
+          if (!p) break;
+          cur = p;
+          path.push({ x: cur.x + 0.5, y: cur.y + 0.5 });
+          seen.add(cur.id);
+        }
+        const next = this.at(cur.x + DX[cur.dir], cur.y + DY[cur.dir]);
+        if (!next || !this.canReceiveFrom(next, cur.dir)) break;
+        cur = next;
+      } else {
+        target = cur;
+        break;
+      }
+    }
+    return { path, target };
+  }
+
+  /** 0..1 how much of the ship has been assembled. */
+  shipProgress(): number {
+    let n = 0;
+    for (const k in SHIP_PARTS) n += Math.min(SHIP_PARTS[k as ItemId]!, this.state.ship[k as ItemId] ?? 0);
+    return n / SHIP_TOTAL;
   }
 
   // ---------- Missions ----------
+
+  countBuildings(type: BuildingId): number {
+    let n = 0;
+    for (const b of this.state.buildings) if (b.type === type) n++;
+    return n;
+  }
 
   currentMission() {
     return MISSIONS[this.state.missionIndex] ?? null;
@@ -403,8 +802,11 @@ export class Sim {
   private checkMission() {
     const m = this.currentMission();
     if (!m || this.state.launched) return;
-    for (const k in m.deliver) if ((this.state.delivered[k as ItemId] ?? 0) < m.deliver[k as ItemId]!) return;
-    // complete
+    for (const k in m.deliver) {
+      const have = Math.max(this.state.delivered[k as ItemId] ?? 0, this.state.ship[k as ItemId] ?? 0);
+      if (have < m.deliver[k as ItemId]!) return;
+    }
+    if (m.build) for (const k in m.build) if (this.countBuildings(k as BuildingId) < m.build[k as BuildingId]!) return;
     for (const u of m.unlocks) if (!this.state.unlockedBuildings.includes(u)) this.state.unlockedBuildings.push(u);
     for (const r of m.unlockRecipes) if (!this.state.unlockedRecipes.includes(r)) this.state.unlockedRecipes.push(r);
     this.state.delivered = {};

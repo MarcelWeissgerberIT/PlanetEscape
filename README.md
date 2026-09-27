@@ -19,22 +19,29 @@ The game is a PWA: open it in Safari on iPhone and use *Share → Add to Home Sc
 
 A GitHub Actions workflow (`.github/workflows/deploy.yml`) deploys `dist/` to GitHub Pages on every push to `main`. Enable *Settings → Pages → Source: GitHub Actions* once in the repository.
 
+## Story & loop
+
+You are KORA, the ship AI. The crash left exactly one working industrial 3D printer, the *Core Printer*. Everything delivered to it becomes build material: minerals → smelt / refine → parts → depots → **print machines** → real ship parts. Seven orders lead from the first ore to the finished ship; KORA also offers timed side contracts, four upgrade tracks (belts, drills, machines, power), dust storms that weaken solar power, and deposits that run out, so the base has to keep expanding across a 120×120 map with rock formations that force routing decisions. A scan overlay shows item flows, rates and problems; a diagnostics panel lists everything that keeps a chain from running and jumps to it.
+
 ## How it works / So funktioniert es
 
 | Building | What it does |
 | --- | --- |
-| **Landing Core** | Accepts every item. Delivered items become build resources and ship parts. |
-| **Conveyor** | Moves items in the arrow direction. Drag to lay several; tap a belt to rotate it. Side-feeding belts merge. |
-| **Miner** | Must sit on a deposit (iron, copper, quartz, ice, oil). Pushes ore out of its front. |
-| **Smelter** | Ore → plates, quartz → glass. Picks the recipe from its input automatically. |
-| **Assembler** (2×2) | Wire, steel frames, circuits and all ship parts. Choose the recipe by tapping the building. |
+| **Core Printer** | Accepts every item. Delivered items become build material; ship parts are installed on the ship, which visibly grows on the pad. |
+| **Conveyor** | Moves items in the arrow direction. Drag to lay several; double-tap (or tap with the belt tool) to turn. Side-feeding belts merge. |
+| **Belt tunnel** | Entrance + exit up to 4 tiles ahead: belts cross rocks and other belts underground. |
+| **Miner** | Only on deposits (and deposits are reserved for miners). Passes items from behind through, so miners chain. Deposits run out. |
+| **Smelter** | Ore → plates, quartz → glass. Picks the recipe from its first input. |
+| **3D Printer** (2×2) | Iron plates + wire → machine parts; later steel frames + circuits → precision parts. Every higher machine costs printed parts. |
+| **Assembler** (2×2) | Wire, steel frames, circuits. |
 | **Refinery** (2×2) | Ice → water, oil + water → rocket fuel, quartz + water → silicon. |
+| **Fabricator** (2×2) | Hull plates, engines, nav computers, fuel cells, life support. |
 | **Solar panel / Fuel generator** | Power. When demand exceeds supply every machine slows down proportionally. |
 | **Splitter** | Takes items from behind and distributes them left / forward / right. |
-| **Storage** | Buffers 60 items and passes them on at its front. |
+| **Depot** | Buffers 120 items, passes them on at its front, optional output filter. |
 
-Six missions unlock buildings and recipes step by step. The last one is the ship itself:
-16 hull plates, 4 engines, 2 nav computers, 8 fuel cells, 3 life-support modules.
+Seven orders unlock buildings and recipes step by step. The last one is the ship itself:
+30 hull plates, 6 engines, 4 nav computers, 14 fuel cells, 6 life-support modules.
 
 ### Controls
 

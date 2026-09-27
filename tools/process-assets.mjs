@@ -7,11 +7,11 @@ const RAW = 'tools/raw';
 const OUT = 'public/assets';
 for (const d of ['buildings', 'items', 'terrain', 'ui']) mkdirSync(`${OUT}/${d}`, { recursive: true });
 
-const BUILDINGS = ['core', 'conveyor', 'miner', 'smelter', 'assembler', 'refinery', 'solar', 'generator', 'storage', 'splitter'];
-const TERRAIN = ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'];
+const BUILDINGS = ['core', 'conveyor', 'conveyor_curve', 'tunnel', 'miner', 'smelter', 'assembler', 'refinery', 'solar', 'generator', 'storage', 'splitter', 'fabricator', 'printer', 'core_0', 'core_1', 'core_2'];
+const TERRAIN = ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'rock'];
 const ITEMS = [
   'iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'iron_plate', 'copper_plate', 'copper_wire', 'glass', 'silicon',
-  'water', 'fuel', 'steel_frame', 'circuit', 'hull_plate', 'engine', 'nav_computer', 'fuel_cell', 'life_support',
+  'water', 'fuel', 'steel_frame', 'circuit', 'machine_part', 'precision_part', 'hull_plate', 'engine', 'nav_computer', 'fuel_cell', 'life_support',
 ];
 
 async function tile(src, dst, size) {
@@ -85,6 +85,8 @@ for (const it of ITEMS) await cutout(`${RAW}/i_${it}.png`, `${OUT}/items/${it}.w
 
 if (existsSync(`${RAW}/title_bg.png`)) await sharp(`${RAW}/title_bg.png`).resize(1920).webp({ quality: 82 }).toFile(`${OUT}/ui/title_bg.webp`);
 if (existsSync(`${RAW}/ship.png`)) await sharp(`${RAW}/ship.png`).resize({ height: 1400 }).webp({ quality: 84 }).toFile(`${OUT}/ui/ship.webp`);
+for (const n of ['story_1', 'story_2', 'story_3', 'story_4']) if (existsSync(`${RAW}/${n}.png`)) await sharp(`${RAW}/${n}.png`).resize(1280).webp({ quality: 80 }).toFile(`${OUT}/ui/${n}.webp`);
+if (existsSync(`${RAW}/kora.png`)) await sharp(`${RAW}/kora.png`).resize(256).webp({ quality: 86 }).toFile(`${OUT}/ui/kora.webp`);
 if (existsSync(`${RAW}/icon.png`)) {
   await sharp(`${RAW}/icon.png`).resize(512).png().toFile(`public/icon-512.png`);
   await sharp(`${RAW}/icon.png`).resize(192).png().toFile(`public/icon-192.png`);

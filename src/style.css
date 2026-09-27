@@ -227,3 +227,106 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
   .mission-card { max-width: 230px; }
   .mrows { display: none; }
 }
+
+/* ---------- KORA card ---------- */
+.kora-card {
+  display: flex; gap: 10px; align-items: flex-start; text-align: left;
+  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius);
+  padding: 8px 10px; min-width: 200px; max-width: min(360px, 66vw);
+  backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px);
+}
+.kora-avatar { width: 44px; height: 44px; border-radius: 12px; flex: 0 0 auto; box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.3), 0 0 16px rgba(34, 211, 238, 0.25); animation: korapulse 3s ease-in-out infinite; }
+.kora-avatar.talk { animation: korapulse 1.2s ease-in-out infinite; }
+@keyframes korapulse { 0%, 100% { box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.3), 0 0 10px rgba(34, 211, 238, 0.2); } 50% { box-shadow: 0 0 0 1px rgba(34, 211, 238, 0.7), 0 0 22px rgba(34, 211, 238, 0.55); } }
+.kora-body { min-width: 0; flex: 1; }
+.mtext { font-size: 12px; color: var(--muted); line-height: 1.35; margin-top: 3px; }
+.kora-head { display: flex; gap: 10px; align-items: center; margin-bottom: 10px; }
+.kora-head img { width: 48px; height: 48px; border-radius: 12px; }
+.kora-head small { display: block; color: var(--muted); font-size: 11px; }
+.pill { height: 40px; padding: 0 12px; border-radius: 12px; font-weight: 700; font-size: 13px; border: 1px solid var(--line); background: var(--panel); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+.pill.ok { color: var(--ok); }
+.pill.warn { color: #fbbf24; border-color: rgba(251, 191, 36, 0.5); animation: warnpulse 1.5s ease-in-out infinite; }
+@keyframes warnpulse { 50% { background: rgba(251, 191, 36, 0.18); } }
+.iconbtn.active { background: rgba(34, 211, 238, 0.2); border-color: var(--accent); }
+.iconbtn.badge { position: relative; }
+.iconbtn.badge::after { content: attr(data-badge); position: absolute; top: -5px; right: -5px; background: var(--accent-2); color: #111; font-size: 10px; font-weight: 800; border-radius: 999px; min-width: 16px; height: 16px; display: flex; align-items: center; justify-content: center; }
+.power.storm .plabel { color: #fcd34d; }
+.top-right { flex-wrap: wrap; justify-content: flex-end; }
+
+/* ---------- Story ---------- */
+.story { position: absolute; inset: 0; background: #0b0e14; z-index: 45; display: flex; flex-direction: column; }
+.story-img { flex: 1; background-size: cover; background-position: center; animation: storyfade 0.6s ease-out; }
+@keyframes storyfade { from { opacity: 0; transform: scale(1.03); } to { opacity: 1; transform: none; } }
+.story-text { padding: 16px 18px calc(16px + var(--sab)); background: linear-gradient(180deg, rgba(11, 14, 20, 0.6), #0b0e14 30%); margin-top: -60px; }
+.story-kora { display: flex; align-items: center; gap: 8px; color: var(--accent); font-size: 13px; }
+.story-kora img { width: 32px; height: 32px; border-radius: 8px; }
+.story-text p { font-size: 16px; line-height: 1.5; margin: 8px 0 10px; min-height: 3em; }
+.story-dots { display: flex; gap: 6px; margin-bottom: 10px; }
+.story-dots span { width: 8px; height: 8px; border-radius: 50%; background: rgba(255, 255, 255, 0.2); }
+.story-dots span.on { background: var(--accent); }
+.story-buttons { display: flex; justify-content: space-between; gap: 8px; }
+.story-buttons .btn { width: auto; flex: 1; }
+
+/* ---------- Floating rotate button ---------- */
+.floating { position: absolute; left: 0; top: 0; z-index: 25; will-change: transform; }
+.fab { width: 40px; height: 40px; border-radius: 50%; background: var(--accent); color: #06202a; font-size: 22px; font-weight: 700; box-shadow: 0 4px 14px rgba(0, 0, 0, 0.5); display: flex; align-items: center; justify-content: center; }
+.fab:active { transform: scale(0.92); }
+
+/* ---------- Minimap ---------- */
+.minimap-box { position: absolute; right: calc(10px + var(--sar)); top: calc(var(--sat) + 58px); z-index: 20; background: var(--panel); border: 1px solid var(--line); border-radius: 10px; padding: 4px; }
+.minimap-box canvas { display: block; width: 120px; height: 120px; border-radius: 6px; image-rendering: pixelated; }
+@media (min-width: 900px) { .minimap-box canvas { width: 160px; height: 160px; } }
+
+/* ---------- Direction picker / build hint ---------- */
+.dirs { display: flex; align-items: center; gap: 6px; margin: 6px 0; }
+.dirbtn { width: 38px; height: 34px; border-radius: 10px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); font-size: 15px; }
+.dirbtn.active { background: var(--accent); color: #06202a; border-color: transparent; }
+.build-btn.hint { border-color: var(--accent-2); animation: hintpulse 1.2s ease-in-out infinite; }
+@keyframes hintpulse { 50% { box-shadow: 0 0 0 4px rgba(251, 191, 36, 0.35); } }
+.status.bad { color: #fca5a5; }
+.pbar.big { height: 8px; border-radius: 4px; margin: 4px 0 8px; }
+.seed-row { margin: 4px 0; }
+.seed-row input { width: 100%; padding: 10px 12px; border-radius: 10px; border: 1px solid var(--line); background: rgba(255, 255, 255, 0.05); color: var(--text); font: inherit; text-align: center; }
+.mono { font-family: ui-monospace, Menlo, monospace; font-size: 12px; }
+.wrap { display: flex; flex-wrap: wrap; gap: 4px; justify-content: flex-end; max-width: 60%; }
+
+/* ---------- Diagnostics / chains / contracts / upgrades ---------- */
+.prob-list { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; max-height: 40vh; overflow-y: auto; }
+.prob { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 10px; padding: 6px 8px; font-size: 13px; }
+.prob .pname { flex: 1; min-width: 0; }
+.prob .btn.small { margin: 0; }
+.okline { color: var(--ok); font-weight: 600; }
+.badline { color: #fca5a5; font-weight: 600; }
+.modal-card h3 { font-size: 14px; color: var(--muted); margin: 8px 0 6px; text-transform: uppercase; letter-spacing: 0.06em; }
+.chain-grid { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 12px; }
+.chain-grid .chip { display: inline-flex; align-items: center; gap: 4px; }
+.tree { display: flex; flex-direction: column; gap: 4px; margin-bottom: 12px; }
+.tree-row { display: flex; align-items: center; gap: 6px; font-size: 13px; padding: 4px 6px; border-left: 2px solid rgba(34, 211, 238, 0.35); flex-wrap: wrap; }
+.tree-row[data-n]::before { content: attr(data-n) '×'; color: var(--accent-2); font-weight: 700; font-size: 12px; }
+.tree-row small { color: var(--muted); display: inline-flex; align-items: center; gap: 3px; }
+.tree-meta { margin-left: auto; color: var(--muted); font-size: 12px; white-space: nowrap; }
+.contract-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.contract { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 12px; padding: 10px; }
+.contract.accepted { border-color: var(--accent); }
+.ctitle { display: flex; align-items: center; gap: 8px; font-size: 13px; }
+.creward { font-size: 12px; color: var(--accent-2); margin: 6px 0; display: flex; align-items: center; gap: 4px; }
+.cmeta { font-size: 12px; color: var(--muted); }
+.cbtns { display: flex; gap: 6px; }
+.cbtns .btn { margin: 0; }
+.upgrade-list { display: flex; flex-direction: column; gap: 8px; margin-bottom: 10px; }
+.upgrade { display: flex; align-items: center; gap: 8px; background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; }
+.upgrade .uname { flex: 1; min-width: 0; }
+.upgrade .uname small { display: block; color: var(--muted); font-size: 11px; }
+.upgrade .ucost { display: flex; gap: 6px; flex-wrap: wrap; font-size: 12px; }
+.upgrade .cost { display: inline-flex; align-items: center; gap: 2px; }
+.upgrade .cost.short { color: #fca5a5; }
+.upgrade .btn.small { margin: 0; }
+.upgrade .btn[disabled] { opacity: 0.45; }
+.umax { color: var(--ok); font-weight: 700; font-size: 12px; }
+.inv-item { background: none; padding: 0; }
+@media (max-width: 899px) {
+  .top-right { max-width: 40vw; }
+  .iconbtn { width: 36px; height: 36px; font-size: 17px; }
+  .pill { height: 36px; padding: 0 9px; }
+  .power { min-width: 78px; padding: 4px 8px; }
+}

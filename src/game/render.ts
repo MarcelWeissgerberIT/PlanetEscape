@@ -1,6 +1,6 @@
 import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
-import { BUILDINGS, ITEMS, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
+import { BUILDINGS, ITEMS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import type { Sim } from './sim';
 import type { Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -13,6 +13,21 @@ export interface Ghost {
   valid: boolean;
 }
 
+interface Particle {
+  x: number;
+  y: number;
+  vx: number;
+  vy: number;
+  life: number;
+  max: number;
+  size: number;
+  color?: string;
+  item?: ItemId;
+  grav?: number;
+}
+
+const BELT_STRIP = 0.26; // fraction of the tile width that is moving belt surface in the texture
+
 export class Renderer {
   ctx: CanvasRenderingContext2D;
   cam = new Camera();
@@ -21,7 +36,16 @@ export class Renderer {
   ghost: Ghost | null = null;
   selected: Building | null = null;
   deleteMode = false;
+  overlay = false;
+  ping: { x: number; y: number; w: number; h: number } | null = null;
   dpr = 1;
+  private particles: Particle[] = [];
+  private spawn = new Map<number, number>();
+  private flows: { path: { x: number; y: number }[]; target: Building | null; from: Building }[] = [];
+  private flowT = 0;
+  private stormDust: { x: number; y: number; l: number; s: number }[] = [];
+  private mini: HTMLCanvasElement | null = null;
+  private miniT = 0;
 
   constructor(public canvas: HTMLCanvasElement, public sim: Sim) {
     this.ctx = canvas.getContext('2d', { alpha: false })!;
@@ -34,7 +58,6 @@ export class Renderer {
     const g = c.getContext('2d')!;
     g.fillStyle = '#373d45';
     g.fillRect(0, 0, 256, 256);
-    // subtle noise speckle
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     for (let i = 0; i < 900; i++) {
@@ -44,7 +67,6 @@ export class Renderer {
       g.arc(x, y, r, 0, Math.PI * 2);
       g.fill();
     }
-    // faint hex dots grid
     g.fillStyle = 'rgba(120,140,160,0.08)';
     for (let y = 0; y < 256; y += 16) for (let x = 0; x < 256; x += 16) {
       g.beginPath();
@@ -73,6 +95,46 @@ export class Renderer {
     this.cam.zoom = Math.max(0.3, Math.min(1.0, minDim / (TILE * 17)));
   }
 
+  centerOn(tx: number, ty: number, zoom?: number) {
+    this.cam.x = (tx + 0.5) * TILE;
+    this.cam.y = (ty + 0.5) * TILE;
+    if (zoom) this.cam.zoom = zoom;
+  }
+
+  // ---------- Effects ----------
+
+  fxCraft(b: Building) {
+    const sz = BUILDINGS[b.type].size * TILE;
+    const cx = b.x * TILE + sz / 2, cy = b.y * TILE + sz / 2;
+    for (let i = 0; i < 6; i++) {
+      const a = Math.random() * Math.PI * 2, sp = 30 + Math.random() * 60;
+      this.particles.push({ x: cx, y: cy, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - 30, life: 0.5, max: 0.5, size: 2 + Math.random() * 2, color: Math.random() < 0.5 ? '#fbbf24' : '#22d3ee', grav: 120 });
+    }
+  }
+
+  fxDelivered(item: ItemId) {
+    const core = this.sim.state.buildings[0];
+    const sz = 3 * TILE;
+    this.particles.push({ x: core.x * TILE + sz / 2 + (Math.random() - 0.5) * 60, y: core.y * TILE + sz / 2, vx: 0, vy: -40, life: 1.1, max: 1.1, size: 22, item });
+  }
+
+  fxDepleted(x: number, y: number) {
+    for (let i = 0; i < 10; i++) {
+      this.particles.push({ x: x * TILE + TILE / 2, y: y * TILE + TILE / 2, vx: (Math.random() - 0.5) * 60, vy: -20 - Math.random() * 40, life: 0.8, max: 0.8, size: 4 + Math.random() * 4, color: 'rgba(160,150,140,0.7)' });
+    }
+  }
+
+  fxUpgrade() {
+    const core = this.sim.state.buildings[0];
+    const sz = 3 * TILE;
+    for (let i = 0; i < 24; i++) {
+      const a = (i / 24) * Math.PI * 2;
+      this.particles.push({ x: core.x * TILE + sz / 2, y: core.y * TILE + sz / 2, vx: Math.cos(a) * 120, vy: Math.sin(a) * 120, life: 0.9, max: 0.9, size: 4, color: '#22d3ee' });
+    }
+  }
+
+  // ---------- Frame ----------
+
   draw(dt: number) {
     this.time += dt;
     const { ctx, cam } = this;
@@ -81,7 +143,6 @@ export class Renderer {
     ctx.fillStyle = '#1a1d23';
     ctx.fillRect(0, 0, cam.width, cam.height);
 
-    // world transform
     ctx.save();
     ctx.translate(cam.width / 2, cam.height / 2);
     ctx.scale(cam.zoom, cam.zoom);
@@ -92,27 +153,35 @@ export class Renderer {
     const x0 = Math.max(0, tx0), y0 = Math.max(0, ty0);
     const x1 = Math.min(s.width - 1, tx1 + 1), y1 = Math.min(s.height - 1, ty1 + 1);
 
-    // ground
     ctx.fillStyle = this.ground ?? '#373d45';
     ctx.fillRect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE);
 
-    // deposits
+    // terrain features
     for (let y = y0; y <= y1; y++) {
       for (let x = x0; x <= x1; x++) {
-        const t = s.terrain[y * s.width + x];
+        const i = y * s.width + x;
+        const t = s.terrain[i];
         if (t === 'ground') continue;
         const img = terrainSprite(t);
+        if (t === 'rock') {
+          if (ready(img)) ctx.drawImage(img, x * TILE, y * TILE, TILE, TILE);
+          else {
+            ctx.fillStyle = '#2a2d33';
+            ctx.fillRect(x * TILE + 4, y * TILE + 4, TILE - 8, TILE - 8);
+          }
+          continue;
+        }
+        const frac = Math.min(1, (s.ore[i] ?? ORE_PER_TILE[1]) / ORE_PER_TILE[1]);
+        ctx.globalAlpha = 0.4 + 0.6 * frac;
         if (ready(img)) ctx.drawImage(img, x * TILE, y * TILE, TILE, TILE);
         else {
           ctx.fillStyle = ITEMS[TERRAIN_ITEM[t]!].color;
-          ctx.globalAlpha = 0.5;
           ctx.fillRect(x * TILE + 8, y * TILE + 8, TILE - 16, TILE - 16);
-          ctx.globalAlpha = 1;
         }
+        ctx.globalAlpha = 1;
       }
     }
 
-    // grid lines (only when zoomed in enough)
     if (cam.zoom > 0.5) {
       ctx.strokeStyle = 'rgba(0,0,0,0.13)';
       ctx.lineWidth = 1 / cam.zoom;
@@ -122,26 +191,26 @@ export class Renderer {
       ctx.stroke();
     }
 
-    // map border
     ctx.strokeStyle = 'rgba(56,189,248,0.35)';
     ctx.lineWidth = 3 / cam.zoom;
     ctx.strokeRect(0, 0, s.width * TILE, s.height * TILE);
 
-    // buildings: belts first, then the rest so machines overlap belt edges
     const visible: Building[] = [];
     for (const b of s.buildings) {
       const sz = BUILDINGS[b.type].size;
       if (b.x + sz <= x0 || b.x > x1 || b.y + sz <= y0 || b.y > y1) continue;
       visible.push(b);
     }
-    for (const b of visible) if (b.type === 'conveyor') this.drawBelt(b);
-    for (const b of visible) if (b.type === 'conveyor') this.drawBeltItems(b);
-    for (const b of visible) if (b.type !== 'conveyor') this.drawBuilding(b);
+    for (const b of visible) if (b.type === 'conveyor' || b.type === 'tunnel') this.drawBelt(b);
+    for (const b of visible) if (b.type === 'conveyor' || (b.type === 'tunnel' && b.exit)) this.drawBeltItems(b);
+    for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel') this.drawBuilding(b);
 
-    // ghost
+    if (this.overlay) this.drawOverlay(visible, dt);
+
+    this.drawParticles(dt);
+
     if (this.ghost) this.drawGhost(this.ghost);
 
-    // selection
     if (this.selected) {
       const b = this.selected;
       const sz = BUILDINGS[b.type].size * TILE;
@@ -153,14 +222,30 @@ export class Renderer {
       ctx.setLineDash([]);
     }
 
+    if (this.ping) {
+      const p = this.ping;
+      const pulse = (this.time * 1.2) % 1;
+      ctx.strokeStyle = `rgba(251,191,36,${1 - pulse})`;
+      ctx.lineWidth = 4 / cam.zoom;
+      const grow = pulse * 24;
+      ctx.strokeRect(p.x * TILE - grow, p.y * TILE - grow, p.w * TILE + grow * 2, p.h * TILE + grow * 2);
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 3 / cam.zoom;
+      ctx.strokeRect(p.x * TILE, p.y * TILE, p.w * TILE, p.h * TILE);
+    }
+
     ctx.restore();
+
+    if (s.storm > 0) this.drawStorm(dt);
   }
 
-  /** Where does this belt receive from? returns 'back' | 'left' | 'right' | 'none' */
-  private beltInput(b: Building): 'back' | 'left' | 'right' | 'none' {
+  // ---------- Belts ----------
+
+  /** Where does this belt receive from? */
+  beltInput(b: Building): 'back' | 'left' | 'right' | 'none' {
     const back = this.sim.at(b.x - DX[b.dir], b.y - DY[b.dir]);
     if (back && this.feedsInto(back, b, b.dir)) return 'back';
-    const ld = ((b.dir + 3) & 3) as Dir; // left of travel
+    const ld = ((b.dir + 3) & 3) as Dir;
     const rd = ((b.dir + 1) & 3) as Dir;
     const left = this.sim.at(b.x + DX[ld], b.y + DY[ld]);
     const right = this.sim.at(b.x + DX[rd], b.y + DY[rd]);
@@ -171,86 +256,137 @@ export class Renderer {
     return 'none';
   }
 
-  /** Does building `from` output into `to` travelling in direction `dir`? */
   private feedsInto(from: Building, to: Building, dir: Dir): boolean {
     if (from.type === 'conveyor') return from.dir === dir;
+    if (from.type === 'tunnel') return from.exit === true && from.dir === dir;
     if (from.type === 'splitter') return from.dir !== ((dir + 2) & 3);
     if (from.type === 'core' || from.type === 'solar' || from.type === 'generator') return false;
-    // machines / miners / storage output over the whole front edge
     return this.sim.frontTiles(from).some((t) => t.x === to.x && t.y === to.y);
+  }
+
+  private beltSpeedPx() {
+    return 1.6 * this.sim.factor('belt') * TILE;
   }
 
   private drawBelt(b: Building) {
     const { ctx } = this;
-    const input = this.beltInput(b);
     const cx = b.x * TILE + TILE / 2, cy = b.y * TILE + TILE / 2;
+    const straight = buildingSprite('conveyor');
+    const curveImg = buildingSprite('conveyor_curve');
+    const tunnelImg = buildingSprite('tunnel');
+    const input = b.type === 'conveyor' ? this.beltInput(b) : 'back';
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate((b.dir * Math.PI) / 2);
-    // belt oriented "up" in local space
-    const w = TILE * 0.62, h = TILE;
-    const curved = input === 'left' || input === 'right';
-    const sgn = input === 'left' ? -1 : 1;
-    ctx.lineCap = 'butt';
-    ctx.lineJoin = 'round';
-    if (!curved) {
-      ctx.fillStyle = '#2b2f37';
-      roundRect(ctx, -w / 2, -h / 2, w, h, 6);
-      ctx.fill();
-      ctx.strokeStyle = '#3d434d';
-      ctx.lineWidth = 2;
-      ctx.beginPath();
-      ctx.moveTo(-w / 2, -h / 2); ctx.lineTo(-w / 2, h / 2);
-      ctx.moveTo(w / 2, -h / 2); ctx.lineTo(w / 2, h / 2);
-      ctx.stroke();
-    } else {
-      // L-shaped path from the side centre through the middle to the front centre
-      const path = () => {
-        ctx.beginPath();
-        ctx.moveTo(sgn * (h / 2), 0);
-        ctx.lineTo(0, 0);
-        ctx.lineTo(0, -h / 2);
-      };
-      path();
-      ctx.strokeStyle = '#3d434d';
-      ctx.lineWidth = w + 4;
-      ctx.stroke();
-      path();
-      ctx.strokeStyle = '#2b2f37';
-      ctx.lineWidth = w;
-      ctx.stroke();
-    }
-    // moving chevrons
-    ctx.strokeStyle = 'rgba(34,211,238,0.55)';
-    ctx.lineWidth = 3;
-    ctx.lineCap = 'round';
-    const speed = 40;
-    const off = (this.time * speed) % 16;
-    ctx.beginPath();
-    if (curved) {
-      // quarter arc around the corner (sgn*h/2, -h/2), from side centre (angle pi/2) to front centre
-      const ccx = sgn * (h / 2), ccy = -h / 2, r = h / 2;
+    const curved = (input === 'left' || input === 'right') && ready(curveImg);
+    if (b.type === 'tunnel' && !b.exit) {
+      // entrance: belt comes in from behind and vanishes into the hatch
+      if (ready(tunnelImg)) {
+        ctx.drawImage(tunnelImg, -TILE / 2, -TILE / 2, TILE, TILE);
+        this.scrollStrip(straight, 0, TILE / 2, true);
+      } else this.fallbackBelt();
+      if (b.pair == null) this.dot(0, -TILE / 4, '#ef4444');
+    } else if (b.type === 'tunnel') {
+      // exit: belt continues forward, hatch at the back
+      if (ready(straight)) {
+        ctx.drawImage(straight, -TILE / 2, -TILE / 2, TILE, TILE);
+        this.scrollStrip(straight, -TILE / 2, TILE / 2, false);
+        if (ready(tunnelImg)) {
+          ctx.save();
+          ctx.rotate(Math.PI);
+          // top half of the tunnel texture (the hatch), rotated to sit at the back
+          ctx.drawImage(tunnelImg, 0, 0, tunnelImg.naturalWidth, tunnelImg.naturalHeight / 2, -TILE / 2, -TILE / 2, TILE, TILE / 2);
+          ctx.restore();
+        }
+      } else this.fallbackBelt();
+      if (b.pair == null) this.dot(0, TILE / 4, '#ef4444');
+    } else if (curved) {
+      const sgn = input === 'left' ? -1 : 1;
+      ctx.save();
+      // texture: enters bottom, exits right. Rotate -90deg -> enters right, exits top (= fed from the right side)
+      ctx.rotate(-Math.PI / 2);
+      if (sgn < 0) ctx.scale(1, -1); // mirror across the travel axis for a left feed
+      ctx.drawImage(curveImg, -TILE / 2, -TILE / 2, TILE, TILE);
+      ctx.restore();
+      // animated chevrons along the arc (the baked ones cannot scroll)
+      const ccx = sgn * (TILE / 2), ccy = -TILE / 2, r = TILE / 2;
       const a0 = Math.PI / 2, a1 = sgn > 0 ? Math.PI : 0;
-      const n = 4;
-      for (let i = 0; i < n; i++) {
-        const tt = ((i * 16 + off) / (n * 16)) % 1;
+      const off = ((this.time * this.beltSpeedPx()) / (TILE * 0.5)) % 1;
+      ctx.strokeStyle = 'rgba(103,232,249,0.9)';
+      ctx.lineWidth = 3;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      for (let i = 0; i < 3; i++) {
+        const tt = ((i + off) / 3) % 1;
         const a = a0 + (a1 - a0) * tt;
         const px = ccx + Math.cos(a) * r, py = ccy + Math.sin(a) * r;
-        // direction of travel = derivative of position wrt tt
         let tx = -Math.sin(a) * (a1 - a0), ty = Math.cos(a) * (a1 - a0);
         const l = Math.hypot(tx, ty) || 1;
         tx /= l; ty /= l;
-        chevron(ctx, px, py, tx, ty, 7);
+        chevron(ctx, px, py, tx, ty, 6);
       }
-    } else {
-      for (let yy = h / 2 - off; yy > -h / 2 - 8; yy -= 16) chevron(ctx, 0, yy, 0, -1, 7);
+      ctx.stroke();
+    } else if (ready(straight)) {
+      ctx.drawImage(straight, -TILE / 2, -TILE / 2, TILE, TILE);
+      this.scrollStrip(straight, -TILE / 2, TILE / 2, false);
+    } else this.fallbackBelt();
+    ctx.restore();
+
+    if (this.overlay || b.status === 'jammed' || b.status === 'dead_end') this.drawBeltStatus(b);
+  }
+
+  /** Redraw the moving belt surface of the straight texture scrolled by time, clipped to [y0,y1] in local space. */
+  private scrollStrip(img: HTMLImageElement, y0: number, y1: number, half: boolean) {
+    const { ctx } = this;
+    if (!ready(img)) return;
+    const w = TILE * BELT_STRIP;
+    const off = (this.time * this.beltSpeedPx()) % TILE;
+    ctx.save();
+    ctx.beginPath();
+    ctx.rect(-w / 2, y0, w, y1 - y0);
+    ctx.clip();
+    const sx = img.naturalWidth * (0.5 - BELT_STRIP / 2), sw = img.naturalWidth * BELT_STRIP;
+    // two copies so the seam is never visible (belt moves "up" = towards -y)
+    ctx.drawImage(img, sx, 0, sw, img.naturalHeight, -w / 2, -TILE / 2 - off, w, TILE);
+    ctx.drawImage(img, sx, 0, sw, img.naturalHeight, -w / 2, TILE / 2 - off, w, TILE);
+    if (half) {
+      // entrance: fade the belt into the hatch
+      const g = ctx.createLinearGradient(0, 0, 0, -TILE / 6);
+      g.addColorStop(0, 'rgba(0,0,0,0)');
+      g.addColorStop(1, 'rgba(0,0,0,0.8)');
+      ctx.fillStyle = g;
+      ctx.fillRect(-w / 2, -TILE / 6, w, TILE / 6);
     }
-    ctx.stroke();
     ctx.restore();
   }
 
+  private fallbackBelt() {
+    const { ctx } = this;
+    const w = TILE * 0.62;
+    ctx.fillStyle = '#2b2f37';
+    roundRect(ctx, -w / 2, -TILE / 2, w, TILE, 6);
+    ctx.fill();
+  }
+
+  private dot(x: number, y: number, color: string) {
+    const { ctx } = this;
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.arc(x, y, 5, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
+  private drawBeltStatus(b: Building) {
+    const { ctx } = this;
+    if (b.status === 'jammed' || b.status === 'dead_end') {
+      const pulse = 0.25 + 0.2 * Math.sin(this.time * 6);
+      ctx.fillStyle = b.status === 'dead_end' ? `rgba(239,68,68,${pulse})` : `rgba(245,158,11,${pulse})`;
+      ctx.fillRect(b.x * TILE, b.y * TILE, TILE, TILE);
+      if (b.status === 'dead_end') this.drawBadge(b.x * TILE + TILE / 2, b.y * TILE + TILE / 2, '⊘', '#ef4444');
+    }
+  }
+
   private beltItemPos(b: Building, pos: number, input: string): [number, number] {
-    // local coords, belt pointing up; returns world coords
     let lx = 0, ly = 0;
     if (input === 'left' || input === 'right') {
       const sgn = input === 'left' ? -1 : 1;
@@ -260,12 +396,8 @@ export class Renderer {
         const a = a0 + (a1 - a0) * tt;
         lx = sgn * (TILE / 2) + Math.cos(a) * (TILE / 2);
         ly = -TILE / 2 + Math.sin(a) * (TILE / 2);
-      } else {
-        ly = TILE / 2 - pos * TILE;
-      }
-    } else {
-      ly = TILE / 2 - pos * TILE;
-    }
+      } else ly = TILE / 2 - pos * TILE;
+    } else ly = TILE / 2 - pos * TILE;
     const a = (b.dir * Math.PI) / 2;
     const rx = lx * Math.cos(a) - ly * Math.sin(a);
     const ry = lx * Math.sin(a) + ly * Math.cos(a);
@@ -274,7 +406,7 @@ export class Renderer {
 
   private drawBeltItems(b: Building) {
     if (!b.items?.length) return;
-    const input = this.beltInput(b);
+    const input = b.type === 'conveyor' ? this.beltInput(b) : 'back';
     const size = TILE * 0.42;
     for (const it of b.items) {
       const [px, py] = this.beltItemPos(b, it.pos, input);
@@ -282,9 +414,10 @@ export class Renderer {
     }
   }
 
-  drawItem(id: ItemId, px: number, py: number, size: number) {
+  drawItem(id: ItemId, px: number, py: number, size: number, alpha = 1) {
     const { ctx } = this;
     const img = itemSprite(id);
+    ctx.globalAlpha = alpha;
     ctx.shadowColor = 'rgba(0,0,0,0.55)';
     ctx.shadowBlur = 4;
     ctx.shadowOffsetY = 2;
@@ -298,17 +431,37 @@ export class Renderer {
     ctx.shadowColor = 'transparent';
     ctx.shadowBlur = 0;
     ctx.shadowOffsetY = 0;
+    ctx.globalAlpha = 1;
   }
+
+  // ---------- Buildings ----------
 
   private drawBuilding(b: Building, alpha = 1) {
     const { ctx } = this;
     const def = BUILDINGS[b.type];
     const sz = def.size * TILE;
     const cx = b.x * TILE + sz / 2, cy = b.y * TILE + sz / 2;
-    const img = buildingSprite(b.type);
+    let img = buildingSprite(b.type);
+    if (b.type === 'core') {
+      const p = this.sim.shipProgress();
+      const stage = p <= 0 ? 0 : p < 0.45 ? 1 : p < 0.99 ? 2 : 3;
+      img = buildingSprite((stage === 3 ? 'core' : `core_${stage}`) as BuildingId);
+    }
+    // spawn animation
+    let scale = 1;
+    if (alpha === 1 && b.id >= 0) {
+      let t0 = this.spawn.get(b.id);
+      if (t0 === undefined) {
+        t0 = this.time;
+        this.spawn.set(b.id, t0);
+      }
+      const k = Math.min(1, (this.time - t0) / 0.28);
+      scale = 0.7 + 0.3 * (1 - Math.pow(1 - k, 3));
+    }
     ctx.save();
     ctx.globalAlpha = alpha;
     ctx.translate(cx, cy);
+    ctx.scale(scale, scale);
     ctx.rotate((b.dir * Math.PI) / 2);
     if (ready(img)) ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
     else {
@@ -319,7 +472,15 @@ export class Renderer {
     ctx.restore();
 
     if (alpha < 1) return;
-    // output arrow
+
+    // working animations
+    if (b.working) {
+      if (b.type === 'miner') this.animDrill(cx, cy);
+      else if (b.type === 'smelter') this.animGlow(cx, cy, sz * 0.18, '#fb923c');
+      else if (b.type === 'refinery') this.animGlow(cx, cy, sz * 0.14, '#4ade80');
+      else if (b.type === 'assembler' || b.type === 'fabricator' || b.type === 'printer') this.animSparks(b, cx, cy);
+    }
+
     if (def.kind === 'miner' || def.kind === 'machine' || def.kind === 'storage' || def.kind === 'splitter') {
       this.drawArrow(b, b.dir, '#22d3ee');
       if (def.kind === 'splitter') {
@@ -327,7 +488,6 @@ export class Renderer {
         this.drawArrow(b, ((b.dir + 3) & 3) as Dir, '#22d3ee');
       }
     }
-    // status
     if (def.kind === 'machine' || def.kind === 'miner') {
       const p = b.progress ?? 0;
       const barW = sz * 0.6, barH = 5;
@@ -346,11 +506,17 @@ export class Renderer {
         ctx.stroke();
       }
       if (def.kind === 'machine' && !b.recipe) this.drawBadge(cx, b.y * TILE + 14, '?', '#f59e0b');
-      else if (def.kind === 'machine' && b.recipe) {
-        // show recipe output icon in the corner
-        const r = RECIPE_BY_ID[b.recipe];
-        this.drawItem(r.output, b.x * TILE + sz - 14, b.y * TILE + 14, 22);
-      }
+      else if (def.kind === 'machine' && b.recipe) this.drawItem(RECIPE_BY_ID[b.recipe].output, b.x * TILE + sz - 14, b.y * TILE + 14, 22);
+      if (b.status === 'starved' && b.missing?.length) {
+        const m = b.missing[0];
+        this.drawItem(m, b.x * TILE + 14, b.y * TILE + 14, 22, 0.5 + 0.5 * Math.abs(Math.sin(this.time * 3)));
+        ctx.strokeStyle = '#ef4444';
+        ctx.lineWidth = 2;
+        ctx.beginPath();
+        ctx.arc(b.x * TILE + 14, b.y * TILE + 14, 12, 0, Math.PI * 2);
+        ctx.stroke();
+      } else if (b.status === 'blocked' && !this.sim.hasOutputTarget(b)) this.drawBadge(b.x * TILE + 14, b.y * TILE + 14, '!', '#ef4444');
+      else if (b.status === 'depleted') this.drawBadge(b.x * TILE + 14, b.y * TILE + 14, '∅', '#94a3b8');
     }
     if (b.type === 'generator') {
       const fuel = Math.min(1, (b.fuelSeconds ?? 0) / 12);
@@ -362,15 +528,72 @@ export class Renderer {
       ctx.fillStyle = fuel > 0 ? '#84cc16' : '#ef4444';
       roundRect(ctx, bx, by, Math.max(2, barW * fuel), barH, 2);
       ctx.fill();
+      if (fuel > 0) this.animGlow(cx, cy, sz * 0.12, '#fb923c');
     }
+    if (b.type === 'storage' && b.recipe) this.drawItem(b.recipe as ItemId, b.x * TILE + sz - 14, b.y * TILE + 14, 22);
     if (b.type === 'core') {
-      // gentle pulsing landing beacon
       const glow = 0.35 + 0.2 * Math.sin(this.time * 2.5);
       ctx.strokeStyle = `rgba(34,211,238,${glow})`;
       ctx.lineWidth = 3;
       ctx.beginPath();
       ctx.arc(cx, cy, sz * 0.47, 0, Math.PI * 2);
       ctx.stroke();
+      // rotating hologram ring segments
+      ctx.save();
+      ctx.translate(cx, cy);
+      ctx.rotate(this.time * 0.4);
+      ctx.strokeStyle = 'rgba(103,232,249,0.55)';
+      ctx.lineWidth = 2;
+      for (let i = 0; i < 4; i++) {
+        ctx.beginPath();
+        ctx.arc(0, 0, sz * 0.5, (i * Math.PI) / 2, (i * Math.PI) / 2 + 0.6);
+        ctx.stroke();
+      }
+      ctx.restore();
+      // ship progress arc
+      const p = this.sim.shipProgress();
+      if (p > 0 && p < 1) {
+        ctx.strokeStyle = '#fbbf24';
+        ctx.lineWidth = 4;
+        ctx.beginPath();
+        ctx.arc(cx, cy, sz * 0.47, -Math.PI / 2, -Math.PI / 2 + p * Math.PI * 2);
+        ctx.stroke();
+      }
+    }
+  }
+
+  private animDrill(cx: number, cy: number) {
+    const { ctx } = this;
+    ctx.save();
+    ctx.translate(cx, cy);
+    ctx.rotate(this.time * 5);
+    ctx.strokeStyle = 'rgba(251,146,60,0.85)';
+    ctx.lineWidth = 3;
+    for (let i = 0; i < 3; i++) {
+      ctx.beginPath();
+      ctx.arc(0, 0, 9, (i * Math.PI * 2) / 3, (i * Math.PI * 2) / 3 + 1.2);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
+
+  private animGlow(cx: number, cy: number, r: number, color: string) {
+    const { ctx } = this;
+    const k = 0.55 + 0.45 * Math.sin(this.time * 7 + cx);
+    const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, r * 2);
+    g.addColorStop(0, color);
+    g.addColorStop(1, 'rgba(0,0,0,0)');
+    ctx.globalAlpha = 0.35 * k;
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.arc(cx, cy, r * 2, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.globalAlpha = 1;
+  }
+
+  private animSparks(b: Building, cx: number, cy: number) {
+    if (Math.random() < 0.12) {
+      this.particles.push({ x: cx + (Math.random() - 0.5) * 20, y: cy + (Math.random() - 0.5) * 20, vx: (Math.random() - 0.5) * 80, vy: -30 - Math.random() * 40, life: 0.35, max: 0.35, size: 2, color: b.type === 'printer' ? '#67e8f9' : '#fde68a', grav: 200 });
     }
   }
 
@@ -410,17 +633,190 @@ export class Renderer {
     const { ctx } = this;
     const def = BUILDINGS[g.type];
     const sz = def.size * TILE;
-    if (g.type === 'conveyor') {
-      this.drawBelt({ id: -1, type: 'conveyor', x: g.x, y: g.y, dir: g.dir, items: [] });
-    } else {
-      this.drawBuilding({ id: -1, type: g.type, x: g.x, y: g.y, dir: g.dir }, 0.6);
-    }
+    if (g.type === 'conveyor' || g.type === 'tunnel') {
+      ctx.globalAlpha = 0.7;
+      this.drawBelt({ id: -1, type: g.type, x: g.x, y: g.y, dir: g.dir, items: [], pair: 1 });
+      ctx.globalAlpha = 1;
+    } else this.drawBuilding({ id: -1, type: g.type, x: g.x, y: g.y, dir: g.dir }, 0.6);
     ctx.fillStyle = g.valid ? 'rgba(34,211,238,0.18)' : 'rgba(239,68,68,0.3)';
     ctx.fillRect(g.x * TILE, g.y * TILE, sz, sz);
     ctx.strokeStyle = g.valid ? '#22d3ee' : '#ef4444';
     ctx.lineWidth = 2;
     ctx.strokeRect(g.x * TILE + 1, g.y * TILE + 1, sz - 2, sz - 2);
-    if (def.rotatable && g.type !== 'conveyor' && g.type !== 'solar') this.drawArrow({ id: -1, type: g.type, x: g.x, y: g.y, dir: g.dir }, g.dir, g.valid ? '#22d3ee' : '#ef4444');
+    if (def.rotatable && g.type !== 'solar') this.drawArrow({ id: -1, type: g.type, x: g.x, y: g.y, dir: g.dir }, g.dir, g.valid ? '#22d3ee' : '#ef4444');
+  }
+
+  // ---------- Overlay (scan mode) ----------
+
+  private drawOverlay(visible: Building[], dt: number) {
+    const { ctx, cam } = this;
+    this.flowT += dt;
+    if (this.flowT > 0.5 || !this.flows.length) {
+      this.flowT = 0;
+      this.flows = [];
+      for (const b of this.sim.state.buildings) {
+        const k = BUILDINGS[b.type].kind;
+        if (k === 'miner' || k === 'machine' || k === 'storage') this.flows.push({ from: b, ...this.sim.traceFlow(b) });
+      }
+    }
+    // flow lines
+    ctx.lineWidth = 3 / Math.max(0.6, cam.zoom);
+    ctx.setLineDash([10, 8]);
+    ctx.lineDashOffset = -this.time * 40;
+    for (const f of this.flows) {
+      if (!f.path.length) continue;
+      const item = f.from.type === 'miner' ? f.from.mineItem! : f.from.recipe ? RECIPE_BY_ID[f.from.recipe]?.output : null;
+      ctx.strokeStyle = f.target ? (item ? ITEMS[item].color : '#22d3ee') : '#ef4444';
+      ctx.globalAlpha = 0.8;
+      ctx.beginPath();
+      const s0 = BUILDINGS[f.from.type].size;
+      ctx.moveTo((f.from.x + s0 / 2) * TILE, (f.from.y + s0 / 2) * TILE);
+      for (const p of f.path) ctx.lineTo(p.x * TILE, p.y * TILE);
+      if (f.target) {
+        const s1 = BUILDINGS[f.target.type].size;
+        ctx.lineTo((f.target.x + s1 / 2) * TILE, (f.target.y + s1 / 2) * TILE);
+      }
+      ctx.stroke();
+      if (!f.target && f.path.length) {
+        const e = f.path[f.path.length - 1];
+        this.drawBadge(e.x * TILE, e.y * TILE, '⊘', '#ef4444');
+      }
+    }
+    ctx.setLineDash([]);
+    ctx.globalAlpha = 1;
+    // hologram labels
+    for (const b of visible) {
+      const def = BUILDINGS[b.type];
+      if (def.kind !== 'miner' && def.kind !== 'machine' && def.kind !== 'storage' && b.type !== 'generator') continue;
+      const sz = def.size * TILE;
+      const cx = b.x * TILE + sz / 2;
+      const top = b.y * TILE - 6;
+      let item: ItemId | null = null;
+      if (b.type === 'miner') item = b.mineItem!;
+      else if (b.recipe && def.kind === 'machine') item = RECIPE_BY_ID[b.recipe].output;
+      else if (b.type === 'storage') item = (Object.keys(b.store ?? {})[0] as ItemId) ?? null;
+      const rate = b.rate ?? 0;
+      let text = item ? `${rate.toFixed(0)}/min` : '';
+      if (b.type === 'miner') text += `  ${this.sim.oreLeft(b.x, b.y)}`;
+      if (b.type === 'storage') text = String(Object.values(b.store ?? {}).reduce((a, c) => a + (c ?? 0), 0));
+      if (b.type === 'generator') text = `${Math.ceil(b.fuelSeconds ?? 0)}s`;
+      const status = b.status ?? 'ok';
+      const col = status === 'ok' ? '#22d3ee' : status === 'blocked' || status === 'no_recipe' || status === 'starved' || status === 'no_fuel' || status === 'depleted' ? '#ef4444' : '#f59e0b';
+      ctx.font = 'bold 12px system-ui, sans-serif';
+      const tw = ctx.measureText(text).width + (item ? 28 : 8);
+      ctx.fillStyle = 'rgba(8,12,18,0.82)';
+      roundRect(ctx, cx - tw / 2, top - 22, tw, 22, 6);
+      ctx.fill();
+      ctx.strokeStyle = col;
+      ctx.lineWidth = 1.5;
+      ctx.stroke();
+      if (item) this.drawItem(item, cx - tw / 2 + 13, top - 11, 18);
+      ctx.fillStyle = col;
+      ctx.textAlign = 'left';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(text, cx - tw / 2 + (item ? 25 : 4), top - 10);
+    }
+    // belts: tint by carried item
+    for (const b of visible) {
+      if (b.type !== 'conveyor' || !b.items?.length) continue;
+      const it = b.items[b.items.length - 1].item;
+      ctx.fillStyle = ITEMS[it].color;
+      ctx.globalAlpha = 0.22;
+      ctx.fillRect(b.x * TILE + 4, b.y * TILE + 4, TILE - 8, TILE - 8);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  // ---------- Particles & storm ----------
+
+  private drawParticles(dt: number) {
+    const { ctx } = this;
+    for (let i = this.particles.length - 1; i >= 0; i--) {
+      const p = this.particles[i];
+      p.life -= dt;
+      if (p.life <= 0) {
+        this.particles.splice(i, 1);
+        continue;
+      }
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      if (p.grav) p.vy += p.grav * dt;
+      const a = Math.min(1, p.life / p.max);
+      if (p.item) this.drawItem(p.item, p.x, p.y, p.size, a);
+      else {
+        ctx.globalAlpha = a;
+        ctx.fillStyle = p.color ?? '#fff';
+        ctx.beginPath();
+        ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+    }
+  }
+
+  private drawStorm(dt: number) {
+    const { ctx, cam } = this;
+    if (this.stormDust.length < 90) {
+      for (let i = this.stormDust.length; i < 90; i++) this.stormDust.push({ x: Math.random() * cam.width, y: Math.random() * cam.height, l: 20 + Math.random() * 60, s: 300 + Math.random() * 500 });
+    }
+    ctx.fillStyle = 'rgba(120,90,50,0.16)';
+    ctx.fillRect(0, 0, cam.width, cam.height);
+    ctx.strokeStyle = 'rgba(214,190,150,0.35)';
+    ctx.lineWidth = 1.5;
+    ctx.beginPath();
+    for (const d of this.stormDust) {
+      d.x += d.s * dt;
+      d.y += d.s * 0.25 * dt;
+      if (d.x > cam.width + 80) { d.x = -80; d.y = Math.random() * cam.height; }
+      if (d.y > cam.height + 40) d.y = -20;
+      ctx.moveTo(d.x, d.y);
+      ctx.lineTo(d.x - d.l, d.y - d.l * 0.25);
+    }
+    ctx.stroke();
+  }
+
+  // ---------- Minimap ----------
+
+  drawMinimap(target: HTMLCanvasElement, force = false) {
+    const s = this.sim.state;
+    if (!this.mini) {
+      this.mini = document.createElement('canvas');
+      this.mini.width = s.width;
+      this.mini.height = s.height;
+      this.miniT = -1;
+    }
+    if (force || this.time - this.miniT > 1) {
+      this.miniT = this.time;
+      const g = this.mini.getContext('2d')!;
+      const img = g.createImageData(s.width, s.height);
+      for (let i = 0; i < s.width * s.height; i++) {
+        const t = s.terrain[i];
+        let c = [55, 61, 69];
+        if (t === 'rock') c = [30, 32, 38];
+        else if (t !== 'ground') {
+          const col = ITEMS[TERRAIN_ITEM[t]!].color;
+          c = [parseInt(col.slice(1, 3), 16), parseInt(col.slice(3, 5), 16), parseInt(col.slice(5, 7), 16)];
+        }
+        img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1]; img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255;
+      }
+      g.putImageData(img, 0, 0);
+      for (const b of s.buildings) {
+        const sz = BUILDINGS[b.type].size;
+        g.fillStyle = b.type === 'core' ? '#fbbf24' : b.type === 'conveyor' || b.type === 'tunnel' ? '#67e8f9' : '#e2e8f0';
+        g.fillRect(b.x, b.y, sz, sz);
+      }
+    }
+    const t = target.getContext('2d')!;
+    t.imageSmoothingEnabled = false;
+    t.clearRect(0, 0, target.width, target.height);
+    t.drawImage(this.mini, 0, 0, target.width, target.height);
+    // viewport
+    const k = target.width / (s.width * TILE);
+    const [wx0, wy0] = this.cam.screenToWorld(0, 0);
+    const [wx1, wy1] = this.cam.screenToWorld(this.cam.width, this.cam.height);
+    t.strokeStyle = '#fff';
+    t.lineWidth = 1;
+    t.strokeRect(wx0 * k, wy0 * k, (wx1 - wx0) * k, (wy1 - wy0) * k);
   }
 }
 
@@ -438,9 +834,7 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.closePath();
 }
 
-/** Adds a chevron centred at (x,y) pointing along (tx,ty) to the current path. */
 function chevron(ctx: CanvasRenderingContext2D, x: number, y: number, tx: number, ty: number, s: number) {
-  // perpendicular
   const px = -ty, py = tx;
   ctx.moveTo(x - tx * s * 0.5 + px * s, y - ty * s * 0.5 + py * s);
   ctx.lineTo(x + tx * s * 0.5, y + ty * s * 0.5);

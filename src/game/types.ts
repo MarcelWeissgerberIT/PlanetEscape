@@ -20,13 +20,15 @@ export type ItemId =
   | 'fuel'
   | 'steel_frame'
   | 'circuit'
+  | 'machine_part'
+  | 'precision_part'
   | 'hull_plate'
   | 'engine'
   | 'nav_computer'
   | 'fuel_cell'
   | 'life_support';
 
-export type TerrainId = 'ground' | 'iron_ore' | 'copper_ore' | 'quartz' | 'ice' | 'oil';
+export type TerrainId = 'ground' | 'rock' | 'iron_ore' | 'copper_ore' | 'quartz' | 'ice' | 'oil';
 
 export type BuildingId =
   | 'core'
@@ -38,9 +40,14 @@ export type BuildingId =
   | 'solar'
   | 'generator'
   | 'storage'
-  | 'splitter';
+  | 'splitter'
+  | 'tunnel'
+  | 'fabricator'
+  | 'printer';
 
-export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter';
+export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter' | 'tunnel';
+
+export type Status = 'ok' | 'idle' | 'no_recipe' | 'starved' | 'blocked' | 'low_power' | 'no_fuel' | 'jammed' | 'dead_end' | 'unpaired' | 'depleted';
 
 export interface ItemDef {
   id: ItemId;
@@ -50,7 +57,8 @@ export interface ItemDef {
 
 export interface RecipeDef {
   id: string;
-  machine: 'smelter' | 'assembler' | 'refinery';
+  machine: 'smelter' | 'assembler' | 'refinery' | 'fabricator' | 'printer';
+  auto?: boolean; // machine picks this recipe automatically from its first input
   inputs: Partial<Record<ItemId, number>>;
   output: ItemId;
   outputCount: number;
@@ -95,11 +103,34 @@ export interface Building {
   store?: Partial<Record<ItemId, number>>;
   // generator fuel buffer
   fuelSeconds?: number;
+  // tunnel: id of the paired tunnel (entrance <-> exit); `exit` marks the exit end
+  pair?: number | null;
+  exit?: boolean;
+  // diagnostics (transient, recomputed every tick)
+  status?: Status;
+  missing?: ItemId[];
+  stuck?: number; // seconds the front item has been blocked
+  rate?: number; // produced items per minute (rolling)
+  produced?: number; // items produced in the current rate window
+  rateT?: number;
+}
+
+export type UpgradeId = 'belt' | 'miner' | 'machine' | 'power';
+
+export interface Contract {
+  id: number;
+  item: ItemId;
+  amount: number;
+  delivered: number;
+  deadline: number; // game time
+  reward: Partial<Record<ItemId, number>>;
+  accepted: boolean;
 }
 
 export interface MissionDef {
   id: string;
   deliver: Partial<Record<ItemId, number>>;
+  build?: Partial<Record<BuildingId, number>>; // buildings that must exist
   unlocks: BuildingId[];
   unlockRecipes: string[];
 }
@@ -115,6 +146,17 @@ export interface GameState {
   inventory: Partial<Record<ItemId, number>>; // items in the Landing Core
   delivered: Partial<Record<ItemId, number>>; // totals delivered per mission (reset per mission)
   missionIndex: number;
+  ship: Partial<Record<ItemId, number>>; // ship parts installed so far
+  ore: number[]; // remaining units per deposit tile (0 for ground)
+  upgrades: Record<UpgradeId, number>; // level per upgrade
+  contracts: Contract[];
+  contractsDone: number;
+  nextContractAt: number; // game time
+  storm: number; // seconds of dust storm remaining
+  nextStormAt: number;
+  tutorialStep: number; // -1 = finished / skipped
+  introSeen: boolean;
+  stats: { produced: Partial<Record<ItemId, number>>; delivered: Partial<Record<ItemId, number>> };
   unlockedBuildings: BuildingId[];
   unlockedRecipes: string[];
   time: number; // seconds of play

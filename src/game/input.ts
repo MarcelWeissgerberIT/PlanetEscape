@@ -12,6 +12,8 @@ export interface InputCallbacks {
   onSelect: (b: Building | null) => void;
   onPlacementError: (reason: string) => void;
   onToolChange: (tool: Tool) => void;
+  onRotate: (b: Building) => void;
+  onRotateKey: () => void;
 }
 
 interface PointerInfo {
@@ -39,6 +41,7 @@ export class Input {
   private hoverTile: [number, number] | null = null;
   private moved = false;
   private longPressTimer: number | null = null;
+  private lastTap: { x: number; y: number; t: number } | null = null;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -77,7 +80,7 @@ export class Input {
     if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
     switch (e.key.toLowerCase()) {
       case 'r':
-        this.rotate();
+        this.cb.onRotateKey();
         break;
       case 'escape':
         this.setTool({ kind: 'none' });
@@ -216,9 +219,18 @@ export class Input {
 
   private tap(tx: number, ty: number) {
     const b = this.sim.at(tx, ty);
+    // double tap on a rotatable building turns it by 90 degrees
+    const now = performance.now();
+    if (this.lastTap && this.lastTap.x === tx && this.lastTap.y === ty && now - this.lastTap.t < 380 && b && BUILDINGS[b.type].rotatable && this.tool.kind !== 'delete') {
+      this.lastTap = null;
+      this.sim.rotate(b, ((b.dir + 1) & 3) as Dir);
+      this.cb.onRotate(b);
+      return;
+    }
+    this.lastTap = { x: tx, y: ty, t: now };
     switch (this.tool.kind) {
       case 'none':
-        this.cb.onSelect(b && b.type !== 'core' ? b : b);
+        this.cb.onSelect(b);
         break;
       case 'delete':
         if (b && b.type !== 'core') this.cb.onRemove(b);
@@ -226,9 +238,10 @@ export class Input {
       case 'build': {
         const type = this.tool.type;
         const [px, py] = this.originFor(type, tx, ty);
-        if (b && b.type === type && type === 'conveyor') {
-          // tapping an existing belt rotates it
-          this.sim.rotate(b, this.dir);
+        if (b && b.type === type && BUILDINGS[type].rotatable) {
+          // tapping an existing building of the same type turns it by 90 degrees
+          this.sim.rotate(b, ((b.dir + 1) & 3) as Dir);
+          this.cb.onRotate(b);
           return;
         }
         const err = this.sim.placementError(type, px, py);
