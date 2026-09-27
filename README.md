@@ -67,12 +67,38 @@ Seven orders unlock buildings and recipes step by step. The last one is the ship
 * Art generated with OpenArt (Nano Banana 2) from one style-anchor image, post-processed with `sharp` (`npm run assets`, sources in `tools/raw/`, not committed).
 * i18n dictionary in `src/i18n/index.ts`; language is auto-detected and can be switched in the menu.
 
+## MCP server: let an AI play / KI spielt mit
+
+`mcp/` contains a [Model Context Protocol](https://modelcontextprotocol.io) server that runs the game headlessly (no browser) so an AI agent such as Claude can play it, inspect the map, place buildings and let the built-in **auto-solver** design production chains.
+
+```bash
+npm run mcp:build      # bundles mcp/dist/index.mjs (esbuild)
+npm run mcp:test       # drives the server over stdio: solves chapters 1-3, plans a circuit chain
+npm run solver:check   # runs the auto-solver through all seven story chapters
+```
+
+Claude Desktop / Claude Code configuration (stdio transport):
+
+```json
+{
+  "mcpServers": {
+    "planet-escape": { "command": "node", "args": ["/absolute/path/to/PlanetEscape/mcp/dist/index.mjs"] }
+  }
+}
+```
+
+Tools (all return JSON): `pe_new_game` (story chapter or free play), `pe_get_state`, `pe_map` (ASCII map with legend), `pe_list_buildings`, `pe_place`, `pe_remove`, `pe_configure` (rotate, recipe, filter, valve/mixer settings, contracts), `pe_route_belt` (auto-routed belt line between two buildings), `pe_build_chain` (whole production chain for an item at a target rate), `pe_solve_order` (builds everything the current KORA order needs, incl. power), `pe_tick` (advance time, stop when the order completes), `pe_analyze` (jams, starved machines, power), `pe_plan` (machine/miner counts for a rate), `pe_save` (export/import saves compatible with the browser game), `pe_chapters`.
+
+The solver (`src/game/solver.ts`) uses Dijkstra belt routing with turn and "hugging" penalties, places machines between the consumer and their raw source, retries other spots when inputs cannot be connected, and when it runs out of plates it builds a supply chain into the core and asks the caller to tick and solve again. In `npm run solver:check` it completes chapters 1-6 unattended; the final chapter (five ship parts at once) is solved only partially and needs an agent that plans per part with `pe_build_chain`.
+
 ## Project layout
 
 ```
 src/game/data.ts     items, buildings, recipes, missions, balancing constants
 src/game/world.ts    terrain generation, new game state
 src/game/sim.ts      belts, machines, power, missions
+src/game/solver.ts   headless auto-solver (belt routing, chain building) used by the MCP server
+mcp/src/index.ts     MCP server exposing the game to AI agents
 src/game/render.ts   canvas rendering (belts are drawn procedurally)
 src/game/input.ts    touch / mouse / keyboard handling
 src/ui/hud.ts        title screen, HUD, info panel, modals

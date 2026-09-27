@@ -143,6 +143,7 @@ export interface MissionDef {
   build?: Partial<Record<BuildingId, number>>; // buildings that must exist
   unlocks: BuildingId[];
   unlockRecipes: string[];
+  reward?: Partial<Record<ItemId, number>>; // items KORA hands over on completion (bootstraps the next chain)
 }
 
 export type GameMode = 'story' | 'free';

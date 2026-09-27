@@ -1323,6 +1323,7 @@ export class Hud {
     const m = MISSIONS[index];
     const mt = tMission(m.id);
     const unlocks = [...m.unlocks.map((u) => tBuilding(u)), ...m.unlockRecipes.map((r) => tItem(RECIPE_BY_ID[r].output))];
+    if (m.reward) for (const k in m.reward) unlocks.push(`${m.reward[k as ItemId]}× ${tItem(k as ItemId)}`);
     sfx.mission();
     const st = this.sim.state;
     if (st.options.mode === 'story' && index < MISSIONS.length - 1) {

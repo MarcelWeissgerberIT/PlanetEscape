@@ -281,7 +281,7 @@ const dict = {
     missions_text: {
       m1: { title: 'First ore', text: 'Print a Miner on iron ore and connect it to the Core Printer with a conveyor.' },
       m2: { title: 'Hot metal', text: 'Route ore through Smelters. Plates are what the printer builds machines from.' },
-      m3: { title: 'The first printer', text: 'Print a 3D Printer and feed it iron plates and copper wire. Deliver machine parts.' },
+      m3: { title: 'The first printer', text: 'My last spare machine parts build one Assembler: it turns copper plates into wire. Print a 3D Printer, feed it iron plates and wire, and deliver machine parts.' },
       m4: { title: 'Machine shop', text: 'Assemblers turn copper plates into wire and iron plates into steel frames.' },
       m5: { title: 'Electronics', text: 'Circuits need iron plates AND copper wire in one Assembler. Smelt quartz into glass.' },
       m6: { title: 'Liquids and precision', text: 'A Refinery turns ice into water. Fuel needs oil and water. The printer now makes precision parts.' },
@@ -568,7 +568,7 @@ const dict = {
     missions_text: {
       m1: { title: 'Erstes Erz', text: 'Drucke einen Bohrer auf Eisenerz und verbinde ihn per Förderband mit dem Kern-Drucker.' },
       m2: { title: 'Heißes Metall', text: 'Leite Erz durch Schmelzöfen. Aus Platten druckt der Kern Maschinen.' },
-      m3: { title: 'Der erste Drucker', text: 'Drucke einen 3D-Drucker und füttere ihn mit Eisenplatten und Kupferdraht. Liefere Maschinenteile.' },
+      m3: { title: 'Der erste Drucker', text: 'Meine letzten Ersatz-Maschinenteile reichen für einen Assembler: Er macht aus Kupferplatten Draht. Drucke einen 3D-Drucker, füttere ihn mit Eisenplatten und Draht und liefere Maschinenteile.' },
       m4: { title: 'Maschinenbau', text: 'Montagewerke machen aus Kupferplatten Draht und aus Eisenplatten Stahlrahmen.' },
       m5: { title: 'Elektronik', text: 'Platinen brauchen Eisenplatten UND Kupferdraht in einem Montagewerk. Schmelze Quarz zu Glas.' },
       m6: { title: 'Flüssigkeiten und Präzision', text: 'Eine Raffinerie macht aus Eis Wasser. Treibstoff braucht Öl und Wasser. Der Drucker fertigt jetzt Präzisionsteile.' },

@@ -495,6 +495,7 @@ export class Sim {
           this.tickMiner(b, dt, ratio);
           break;
         case 'smelter':
+        case 'printer':
         case 'assembler':
         case 'refinery':
         case 'fabricator':
@@ -992,6 +993,7 @@ export class Sim {
     if (m.build) for (const k in m.build) if (this.countBuildings(k as BuildingId) < m.build[k as BuildingId]!) return;
     for (const u of m.unlocks) if (!this.state.unlockedBuildings.includes(u)) this.state.unlockedBuildings.push(u);
     for (const r of m.unlockRecipes) if (!this.state.unlockedRecipes.includes(r)) this.state.unlockedRecipes.push(r);
+    if (m.reward) for (const k in m.reward) this.addInv(k as ItemId, m.reward[k as ItemId]!);
     this.state.delivered = {};
     this.state.missionIndex++;
     this.events.push({ type: 'mission', index: this.state.missionIndex - 1 });
