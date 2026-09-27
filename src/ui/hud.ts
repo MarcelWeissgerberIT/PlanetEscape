@@ -289,12 +289,20 @@ export class Hud {
       this.renderer.centerOn(cx - 0.5, cy - 0.5);
       return;
     }
+    // second anchor: the core, or the first miner while the belt is being laid
+    let ax = cx, ay = cy;
+    const miner = this.sim.state.buildings.find((b) => b.type === 'miner');
+    if (this.sim.state.tutorialStep === 1 && miner) {
+      ax = miner.x + 0.5;
+      ay = miner.y + 0.5;
+    }
     const px = p.x + p.w / 2, py = p.y + p.h / 2;
-    const spanX = Math.abs(px - cx) + 5, spanY = Math.abs(py - cy) + 5;
+    const spanX = Math.abs(px - ax) + 5, spanY = Math.abs(py - ay) + 5;
     const zoom = Math.max(0.3, Math.min(1.1, Math.min(cam.width / (spanX * TILE), bandH / (spanY * TILE))));
     cam.zoom = zoom;
-    cam.x = ((px + cx) / 2) * TILE;
-    cam.y = ((py + cy) / 2) * TILE - (bandCenter - cam.height / 2) / zoom;
+    cam.x = ((px + ax) / 2) * TILE;
+    cam.y = ((py + ay) / 2) * TILE - (bandCenter - cam.height / 2) / zoom;
+    this.renderer.cancelPan();
   }
 
   private tutorialPing(step: number) {
