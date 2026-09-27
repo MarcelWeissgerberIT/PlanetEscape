@@ -52,9 +52,10 @@ const cbs = {
 let input = new Input(canvas, sim, renderer, cbs);
 
 const hud = new Hud(sim, input, renderer, {
-  onNewGame: (seed?: number) => {
+  onNewGame: (seed, options) => {
     Save.clear();
-    swapState(newGame(seed));
+    swapState(newGame(seed, options));
+    Save.save(sim.state);
     start();
   },
   onContinue: () => start(),

@@ -135,8 +135,19 @@ export interface MissionDef {
   unlockRecipes: string[];
 }
 
+export type GameMode = 'story' | 'free';
+
+export interface GameOptions {
+  mode: GameMode;
+  mapSize: 'small' | 'medium' | 'large';
+  infiniteOre: boolean;
+  allUnlocked: boolean;
+  storms: boolean;
+}
+
 export interface GameState {
   version: number;
+  options: GameOptions;
   seed: number;
   width: number;
   height: number;

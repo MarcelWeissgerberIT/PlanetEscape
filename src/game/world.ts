@@ -1,7 +1,7 @@
-import type { Building, GameState, TerrainId } from './types';
-import { ORE_PER_TILE, STARTING_BUILDINGS, STARTING_INVENTORY, STARTING_RECIPES } from './data';
+import type { Building, GameOptions, GameState, TerrainId } from './types';
+import { BUILD_ORDER, MISSIONS, ORE_PER_TILE, RECIPES, STARTING_BUILDINGS, STARTING_INVENTORY, STARTING_RECIPES } from './data';
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 
 /** Small deterministic PRNG (mulberry32). */
 export function rng(seed: number): () => number {
@@ -81,9 +81,13 @@ export function generateTerrain(seed: number, w: number, h: number): TerrainId[]
   return terrain;
 }
 
-export function newGame(seed = Math.floor(Math.random() * 1e9)): GameState {
-  const width = 120;
-  const height = 120;
+export const DEFAULT_OPTIONS: GameOptions = { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
+
+export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOptions = DEFAULT_OPTIONS): GameState {
+  const width = options.mapSize === 'small' ? 80 : options.mapSize === 'large' ? 160 : 120;
+  const height = width;
+  const free = options.mode === 'free';
+  const all = free && options.allUnlocked;
   const terrain = generateTerrain(seed, width, height);
   const r2 = rng(seed ^ 0x5bd1e995);
   const ore = terrain.map((t) => (t === 'ground' ? 0 : Math.round(ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0]))));
@@ -96,15 +100,16 @@ export function newGame(seed = Math.floor(Math.random() * 1e9)): GameState {
   };
   return {
     version: SAVE_VERSION,
+    options: { ...options },
     seed,
     width,
     height,
     terrain,
     buildings: [core],
     nextId: 2,
-    inventory: { ...STARTING_INVENTORY },
+    inventory: all ? { iron_plate: 400, copper_plate: 200, copper_wire: 100, glass: 60, machine_part: 80, precision_part: 30, steel_frame: 60, circuit: 40 } : free ? { iron_plate: 120, copper_plate: 30 } : { ...STARTING_INVENTORY },
     delivered: {},
-    missionIndex: 0,
+    missionIndex: all ? MISSIONS.length - 1 : 0,
     ship: {},
     ore,
     upgrades: { belt: 0, miner: 0, machine: 0, power: 0 },
@@ -113,11 +118,11 @@ export function newGame(seed = Math.floor(Math.random() * 1e9)): GameState {
     nextContractAt: 300,
     storm: 0,
     nextStormAt: 600,
-    tutorialStep: 0,
-    introSeen: false,
+    tutorialStep: free ? -1 : 0,
+    introSeen: free,
     stats: { produced: {}, delivered: {} },
-    unlockedBuildings: [...STARTING_BUILDINGS],
-    unlockedRecipes: [...STARTING_RECIPES],
+    unlockedBuildings: all ? [...BUILD_ORDER] : [...STARTING_BUILDINGS],
+    unlockedRecipes: all ? RECIPES.map((r) => r.id) : [...STARTING_RECIPES],
     time: 0,
     launched: false,
     powerSupply: 10,

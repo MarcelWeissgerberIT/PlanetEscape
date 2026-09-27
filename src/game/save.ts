@@ -35,6 +35,10 @@ export function load(): GameState | null {
       st.stats = { produced: {}, delivered: {} };
       st.version = 3;
     }
+    if (st.version === 3) {
+      st.options = { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
+      st.version = 4;
+    }
     if (st.version !== SAVE_VERSION) return null;
     return st;
   } catch {

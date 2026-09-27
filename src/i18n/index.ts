@@ -127,6 +127,30 @@ const dict = {
     status_low_power: 'Not enough power',
     tutorial_title: 'Tutorial',
     tutorial_done: 'Tutorial complete. Your first part has been printed!',
+    mode_story: 'Story mode',
+    mode_story_desc: 'KORA guides you: intro, tutorial, seven orders, contracts and events. The ship is the goal.',
+    mode_free: 'Free play',
+    mode_free_desc: 'Your planet, your rules: map size, infinite deposits, everything unlocked, storms on or off.',
+    map_size: 'Map size',
+    size_small: 'Small (80×80)',
+    size_medium: 'Medium (120×120)',
+    size_large: 'Large (160×160)',
+    infinite_ore: 'Infinite deposits',
+    all_unlocked: 'Everything unlocked',
+    storms_opt: 'Dust storms',
+    start_free: 'Start free play',
+    back: 'Back',
+    mode: 'Mode',
+    chapters: [
+      'Ore is flowing. Now I can smelt – and print. Show me hot metal.',
+      'Plates! With these I can print machine parts. Let us build the first printer.',
+      'Printed parts. This is how machines get built from now on. Assemblers next.',
+      'Wire and frames. Electronics will need both at once – keep the belts tidy.',
+      'Circuits and glass. Liquids next: the refinery unlocks water and fuel.',
+      'Precision parts. The fabricator can now build real ship parts. Watch the pad.',
+      'The ship is complete. Systems green. Thank you – we are leaving.',
+    ],
+
     story: [
       'Emergency descent. The cargo ship broke apart in the atmosphere of an uncharted planet.',
       'I am KORA, the ship AI. My core survived – and so did exactly one industrial 3D printer.',
@@ -331,6 +355,30 @@ const dict = {
     status_low_power: 'Zu wenig Energie',
     tutorial_title: 'Tutorial',
     tutorial_done: 'Tutorial abgeschlossen. Dein erstes Bauteil ist gedruckt!',
+    mode_story: 'Story-Modus',
+    mode_story_desc: 'KORA führt dich: Intro, Tutorial, sieben Aufträge, Zusatzaufträge und Ereignisse. Das Schiff ist das Ziel.',
+    mode_free: 'Freies Spiel',
+    mode_free_desc: 'Dein Planet, deine Regeln: Kartengröße, unendliche Vorkommen, alles freigeschaltet, Stürme an oder aus.',
+    map_size: 'Kartengröße',
+    size_small: 'Klein (80×80)',
+    size_medium: 'Mittel (120×120)',
+    size_large: 'Groß (160×160)',
+    infinite_ore: 'Unendliche Vorkommen',
+    all_unlocked: 'Alles freigeschaltet',
+    storms_opt: 'Staubstürme',
+    start_free: 'Freies Spiel starten',
+    back: 'Zurück',
+    mode: 'Modus',
+    chapters: [
+      'Erz fließt. Jetzt kann ich schmelzen – und drucken. Zeig mir heißes Metall.',
+      'Platten! Daraus drucke ich Maschinenteile. Bauen wir den ersten Drucker.',
+      'Gedruckte Teile. So entstehen ab jetzt alle Maschinen. Als Nächstes Montagewerke.',
+      'Draht und Rahmen. Elektronik braucht beides gleichzeitig – halte die Bänder sauber.',
+      'Platinen und Glas. Jetzt Flüssigkeiten: Die Raffinerie schaltet Wasser und Treibstoff frei.',
+      'Präzisionsteile. Der Fabrikator kann jetzt echte Schiffsteile bauen. Behalte die Rampe im Blick.',
+      'Das Schiff ist fertig. Alle Systeme grün. Danke – wir verlassen diesen Planeten.',
+    ],
+
     story: [
       'Notabstieg. Das Frachtschiff ist in der Atmosphäre eines unkartierten Planeten zerbrochen.',
       'Ich bin KORA, die Schiffs-KI. Mein Kern hat überlebt – und genau ein industrieller 3D-Drucker.',
@@ -464,6 +512,10 @@ export function tMission(id: string): { title: string; text: string } {
 
 export function tStory(): readonly string[] {
   return dict[current].story;
+}
+
+export function tChapter(i: number): string {
+  return dict[current].chapters[i] ?? '';
 }
 
 export function tTutorial(): readonly { title: string; text: string }[] {

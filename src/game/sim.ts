@@ -495,7 +495,7 @@ export class Sim {
       }
     } else if (st.time >= st.nextStormAt) {
       st.nextStormAt = st.time + STORM_INTERVAL[0] + Math.random() * (STORM_INTERVAL[1] - STORM_INTERVAL[0]);
-      if (this.countBuildings('solar') > 0) {
+      if (st.options.storms && this.countBuildings('solar') > 0) {
         st.storm = STORM_SECONDS;
         this.events.push({ type: 'storm', on: true });
       }
@@ -625,7 +625,7 @@ export class Sim {
           b.progress -= 1;
           b.output![item] = (b.output![item] ?? 0) + 1;
           produced = 1;
-          this.state.ore[idx]--;
+          if (!this.state.options.infiniteOre) this.state.ore[idx]--;
           this.bump(this.state.stats.produced, item, 1);
           if (this.state.ore[idx] <= 0) {
             this.state.terrain[idx] = 'ground';
@@ -686,25 +686,23 @@ export class Sim {
   private tickStorage(b: Building) {
     const store = b.store!;
     b.status = 'ok';
-    if (b.recipe) {
-      // "recipe" doubles as an output filter for storages: only this item leaves
-      const n = store[b.recipe as ItemId] ?? 0;
-      if (n > 0 && this.pushOut(b, b.recipe as ItemId)) {
-        if (n - 1 <= 0) delete store[b.recipe as ItemId];
-        else store[b.recipe as ItemId] = n - 1;
-      }
-      return;
-    }
-    for (const k in store) {
-      const n = store[k as ItemId] ?? 0;
-      if (n > 0) {
-        if (this.pushOut(b, k as ItemId)) {
-          if (n - 1 <= 0) delete store[k as ItemId];
-          else store[k as ItemId] = n - 1;
-        }
+    // With a filter only that item leaves. Otherwise try every stored item type in turn, so one
+    // item the target refuses never blocks the others.
+    const keys = (b.recipe ? [b.recipe] : Object.keys(store)) as ItemId[];
+    if (!keys.length) return;
+    const start = b.rr ?? 0;
+    for (let i = 0; i < keys.length; i++) {
+      const k = keys[(start + i) % keys.length];
+      const n = store[k] ?? 0;
+      if (n <= 0) continue;
+      if (this.pushOut(b, k)) {
+        if (n - 1 <= 0) delete store[k];
+        else store[k] = n - 1;
+        b.rr = (start + i + 1) % Math.max(1, keys.length);
         return;
       }
     }
+    if (Object.values(store).reduce((a, c) => a + (c ?? 0), 0) >= STORAGE_CAP) b.status = 'blocked';
   }
 
   private tickSplitter(b: Building) {

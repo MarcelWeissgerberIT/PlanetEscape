@@ -4,13 +4,13 @@ import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import type { Problem, Sim } from '../game/sim';
 import { setSound, sfx, soundEnabled } from '../game/sfx';
-import type { Building, BuildingId, Contract, Dir, ItemId, UpgradeId } from '../game/types';
+import type { Building, BuildingId, Contract, Dir, GameOptions, ItemId, UpgradeId } from '../game/types';
 import { TILE } from '../game/camera';
-import { getLang, setLang, t, tBuilding, tBuildingDesc, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
+import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave } from '../game/save';
 
 export interface HudCallbacks {
-  onNewGame: (seed?: number) => void;
+  onNewGame: (seed: number | undefined, options: GameOptions) => void;
   onContinue: () => void;
   onSave: () => void;
   onCenter: () => void;
@@ -126,20 +126,39 @@ export class Hud {
     if (!this.sim.state.introSeen) this.showStory();
   }
 
+  private freeOptions: GameOptions = { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
+  private titleView: 'main' | 'free' = 'main';
+
   private renderTitle() {
     const lang = getLang();
+    const o = this.freeOptions;
+    const seedInput = `<div class="seed-row"><input id="seed" type="text" inputmode="numeric" placeholder="${t('seed')}" maxlength="12"></div>`;
+    const mainView = `
+        <div class="title-buttons">
+          ${hasSave() ? `<button class="btn primary" data-act="continue">${t('continue')}</button>` : ''}
+          <button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story"><b>${t('mode_story')}</b><small>${t('mode_story_desc')}</small></button>
+          <button class="btn mode" data-act="freeview"><b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small></button>
+          ${seedInput}
+          <button class="btn ghost" data-act="howto">${t('how_to')}</button>
+        </div>`;
+    const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
+    const freeView = `
+        <div class="title-buttons">
+          <div class="menu-row"><span>${t('map_size')}</span><span>${(['small', 'medium', 'large'] as const).map((sz) => `<button class="chip ${o.mapSize === sz ? 'active' : ''}" data-size="${sz}">${t(`size_${sz}` as 'size_small').split(' ')[0]}</button>`).join('')}</span></div>
+          ${opt('infiniteOre', t('infinite_ore'), o.infiniteOre)}
+          ${opt('allUnlocked', t('all_unlocked'), o.allUnlocked)}
+          ${opt('storms', t('storms_opt'), o.storms)}
+          ${seedInput}
+          <button class="btn primary" data-act="free">${t('start_free')}</button>
+          <button class="btn ghost" data-act="back">${t('back')}</button>
+        </div>`;
     this.title.innerHTML = `
       <div class="title-bg" style="background-image:url('${uiUrl('title_bg.webp')}')"></div>
       <div class="title-content">
         <h1 class="logo"><span>PLANET</span><span class="accent">ESCAPE</span></h1>
         <p class="tagline">${t('tagline')}</p>
-        <p class="intro">${t('intro')}</p>
-        <div class="title-buttons">
-          ${hasSave() ? `<button class="btn primary" data-act="continue">${t('continue')}</button>` : ''}
-          <button class="btn ${hasSave() ? '' : 'primary'}" data-act="new">${t('new_game')}</button>
-          <div class="seed-row"><input id="seed" type="text" inputmode="numeric" placeholder="${t('seed')}" maxlength="10"></div>
-          <button class="btn ghost" data-act="howto">${t('how_to')}</button>
-        </div>
+        ${this.titleView === 'main' ? `<p class="intro">${t('intro')}</p>` : `<p class="intro"><b>${t('mode_free')}</b> · ${t('mode_free_desc')}</p>`}
+        ${this.titleView === 'main' ? mainView : freeView}
         <div class="lang-switch">
           <button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">Deutsch</button>
           <button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">English</button>
@@ -156,13 +175,31 @@ export class Hud {
         this.renderAll();
         return;
       }
+      if (target.dataset.size) {
+        this.freeOptions.mapSize = target.dataset.size as GameOptions['mapSize'];
+        this.renderTitle();
+        return;
+      }
+      if (target.dataset.opt) {
+        (this.freeOptions as unknown as Record<string, boolean | string>)[target.dataset.opt] = target.dataset.val === '1';
+        this.renderTitle();
+        return;
+      }
+      const seedOf = () => {
+        const v = (this.title.querySelector('#seed') as HTMLInputElement | null)?.value.trim();
+        return v ? Math.abs(hashSeed(v)) : undefined;
+      };
       if (act === 'continue') this.cb.onContinue();
-      else if (act === 'new') {
-        if (!hasSave() || confirm(t('new_game_confirm'))) {
-          const v = (this.title.querySelector('#seed') as HTMLInputElement | null)?.value.trim();
-          const seed = v ? Math.abs(hashSeed(v)) : undefined;
-          this.cb.onNewGame(seed);
-        }
+      else if (act === 'story') {
+        if (!hasSave() || confirm(t('new_game_confirm'))) this.cb.onNewGame(seedOf(), { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true });
+      } else if (act === 'freeview') {
+        this.titleView = 'free';
+        this.renderTitle();
+      } else if (act === 'back') {
+        this.titleView = 'main';
+        this.renderTitle();
+      } else if (act === 'free') {
+        if (!hasSave() || confirm(t('new_game_confirm'))) this.cb.onNewGame(seedOf(), { ...this.freeOptions, mode: 'free' });
       } else if (act === 'howto') this.showHowTo();
     };
   }
@@ -302,6 +339,10 @@ export class Hud {
         <div class="mtext">${this.koraMsg && this.koraMsgT > 0 ? this.koraMsg : mt.text}</div>
         <div class="mrows">${builds}${rows}</div>`;
     } else body = `<div class="mtitle">🚀 ${t('launch_title')}</div>`;
+    if (!tut && m && st.options.mode === 'free') {
+      const p = Math.round(this.sim.shipProgress() * 100);
+      body += `<div class="mtext">${t('ship_progress')}: ${p}%</div>`;
+    }
 
     const supply = st.powerSupply, demand = st.powerDemand;
     const ratio = demand <= 0 ? 0 : Math.min(1, demand / Math.max(1, supply));
@@ -770,6 +811,7 @@ export class Hud {
         <span><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
       <div class="menu-row"><span>${t('sound')}</span>
         <span><button class="chip ${soundEnabled() ? 'active' : ''}" data-sound="on">${t('on')}</button><button class="chip ${soundEnabled() ? '' : 'active'}" data-sound="off">${t('off')}</button></span></div>
+      <div class="menu-row"><span>${t('mode')}</span><span>${st.options.mode === 'story' ? t('mode_story') : t('mode_free')}</span></div>
       <div class="menu-row"><span>${t('seed')}</span><span class="mono">${st.seed}</span></div>
       <div class="menu-row"><span>${t('playtime')}</span><span>${fmtTime(st.time)}</span></div>
       <div class="menu-row"><span>${t('produced')}</span><span class="wrap">${produced || '–'}</span></div>
@@ -791,10 +833,10 @@ export class Hud {
           this.cb.onSave();
           this.toast(`💾 ${t('saved')}`, 1500, 'success');
         } else if (target.dataset.act === 'new') {
-          if (confirm(t('new_game_confirm'))) {
-            this.closeModal();
-            this.cb.onNewGame();
-          }
+          this.closeModal();
+          this.cb.onSave();
+          this.titleView = 'main';
+          this.showTitle();
         }
       },
     );
@@ -813,7 +855,8 @@ export class Hud {
       (target) => {
         if (target.dataset.act === 'new') {
           this.closeModal();
-          this.cb.onNewGame();
+          this.titleView = 'main';
+          this.showTitle();
         }
       },
     );
@@ -838,9 +881,11 @@ export class Hud {
     this.toast(`✓ ${t('mission_done')} <b>${mt.title}</b>${unlocks.length ? `<br><small>${t('unlocked')}: ${unlocks.join(', ')}</small>` : ''}`, 5000, 'success');
     sfx.mission();
     const next = MISSIONS[index + 1];
+    const chapter = this.sim.state.options.mode === 'story' ? tChapter(index) : '';
+    if (chapter) this.koraSay(chapter, 14);
     if (next) {
       const nt = tMission(next.id);
-      this.koraSay(nt.text, 20);
+      setTimeout(() => this.koraSay(nt.text, 20), chapter ? 14000 : 0);
     }
   }
 
