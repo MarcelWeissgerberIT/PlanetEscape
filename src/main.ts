@@ -1,0 +1,154 @@
+import './style.css';
+import { preloadAll } from './game/assets';
+import { BUILD_ORDER, ITEM_ORDER } from './game/data';
+import { Input } from './game/input';
+import { Renderer } from './game/render';
+import * as Save from './game/save';
+import { sfx } from './game/sfx';
+import { Sim } from './game/sim';
+import type { GameState, TerrainId } from './game/types';
+import { newGame } from './game/world';
+import { t } from './i18n';
+import { Hud } from './ui/hud';
+
+const canvas = document.getElementById('game') as HTMLCanvasElement;
+
+let sim = new Sim(Save.load() ?? newGame());
+let renderer = new Renderer(canvas, sim);
+let playing = false;
+let launchShown = false;
+
+const cbs = {
+  onPlace: (type: Parameters<Sim['place']>[0], x: number, y: number, dir: Parameters<Sim['place']>[3]) => {
+    const b = sim.place(type, x, y, dir);
+    if (!b) return false;
+    if (type === 'conveyor') sfx.belt();
+    else sfx.place();
+    if (type === 'assembler' || type === 'refinery') hud.selectBuilding(b);
+    return true;
+  },
+  onRemove: (b: Parameters<Sim['remove']>[0]) => {
+    sim.remove(b);
+    sfx.remove();
+    if (hud.selected === b) hud.selectBuilding(null);
+  },
+  onSelect: (b: Parameters<Sim['remove']>[0] | null) => {
+    hud.selectBuilding(b);
+    if (b) sfx.select();
+  },
+  onPlacementError: (reason: string) => {
+    sfx.error();
+    hud.toast(t(reason as 'err_cost'), 1800, 'error');
+  },
+  onToolChange: (tool: Input['tool']) => hud.setTool(tool),
+};
+
+let input = new Input(canvas, sim, renderer, cbs);
+
+const hud = new Hud(sim, input, renderer, {
+  onNewGame: () => {
+    Save.clear();
+    swapState(newGame());
+    start();
+  },
+  onContinue: () => start(),
+  onLanguage: () => {
+    /* HUD re-renders itself */
+  },
+  onCenter: () => renderer.centerOnCore(),
+});
+
+// Debug / automation hook (used by the smoke test).
+function exposeDebug() {
+  (window as unknown as { __pe: unknown }).__pe = { get sim() { return sim; }, get renderer() { return renderer; }, get input() { return input; }, hud, start, swapState };
+}
+
+function swapState(state: GameState) {
+  sim = new Sim(state);
+  renderer = new Renderer(canvas, sim);
+  renderer.resize();
+  input = new Input(canvas, sim, renderer, cbs);
+  // re-point the HUD to the new objects
+  (hud as unknown as { sim: Sim; input: Input; renderer: Renderer }).sim = sim;
+  (hud as unknown as { sim: Sim; input: Input; renderer: Renderer }).input = input;
+  (hud as unknown as { sim: Sim; input: Input; renderer: Renderer }).renderer = renderer;
+  hud.selectBuilding(null);
+  launchShown = false;
+  renderer.centerOnCore();
+  exposeDebug();
+}
+
+function start() {
+  playing = true;
+  hud.hideTitle();
+  renderer.centerOnCore();
+  if (sim.state.launched) launchShown = true;
+}
+
+// ---------- Loop ----------
+
+const STEP = 1 / 30;
+let acc = 0;
+let last = performance.now();
+let saveTimer = 0;
+let hudTimer = 0;
+
+function frame(now: number) {
+  const dt = Math.min(0.25, (now - last) / 1000);
+  last = now;
+  if (playing) {
+    acc += dt;
+    while (acc >= STEP) {
+      sim.tick(STEP);
+      acc -= STEP;
+    }
+    for (const ev of sim.events) {
+      if (ev.type === 'mission') hud.missionComplete(ev.index);
+      if (ev.type === 'launch' && !launchShown) {
+        launchShown = true;
+        sfx.launch();
+        setTimeout(() => hud.showLaunch(), 600);
+      }
+    }
+    sim.events.length = 0;
+    hudTimer += dt;
+    if (hudTimer > 0.25) {
+      hudTimer = 0;
+      hud.refresh();
+    }
+    saveTimer += dt;
+    if (saveTimer > 8) {
+      saveTimer = 0;
+      Save.save(sim.state);
+    }
+  }
+  renderer.draw(dt);
+  requestAnimationFrame(frame);
+}
+
+window.addEventListener('resize', () => renderer.resize());
+window.addEventListener('orientationchange', () => setTimeout(() => renderer.resize(), 100));
+document.addEventListener('visibilitychange', () => {
+  if (document.hidden && playing) Save.save(sim.state);
+  last = performance.now();
+});
+window.addEventListener('pagehide', () => {
+  if (playing) Save.save(sim.state);
+});
+// prevent iOS double-tap zoom / rubber banding on the UI layer
+document.addEventListener('gesturestart', (e) => e.preventDefault());
+document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: false });
+
+renderer.resize();
+renderer.centerOnCore();
+exposeDebug();
+hud.showTitle();
+requestAnimationFrame(frame);
+
+void preloadAll(BUILD_ORDER.concat('core'), ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'] as TerrainId[], ITEM_ORDER);
+
+if ('serviceWorker' in navigator && import.meta.env.PROD) {
+  window.addEventListener('load', () => {
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
+  });
+}
