@@ -15,6 +15,7 @@ export interface InputCallbacks {
   onRotate: (b: Building) => void;
   onRotateKey: () => void;
   onSelectTile: (x: number, y: number) => void;
+  onUndo: () => void;
 }
 
 interface PointerInfo {
@@ -45,6 +46,7 @@ export class Input {
   private longPressTimer: number | null = null;
   private lastTap: { x: number; y: number; t: number } | null = null;
   private lastTouch = -1e9;
+  private lastPointerType = 'mouse';
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -89,6 +91,9 @@ export class Input {
         this.setTool({ kind: 'none' });
         this.cb.onSelect(null);
         break;
+      case 'z':
+        this.cb.onUndo();
+        break;
       case 'x':
       case 'delete':
         this.setTool(this.tool.kind === 'delete' ? { kind: 'none' } : { kind: 'delete' });
@@ -109,6 +114,7 @@ export class Input {
     // ignore compatibility mouse events browsers synthesise shortly after a touch (ghost clicks)
     if (e.pointerType === 'mouse' && now - this.lastTouch < 800) return;
     if (e.pointerType === 'touch') this.lastTouch = now;
+    this.lastPointerType = e.pointerType;
     try {
       this.canvas.setPointerCapture(e.pointerId);
     } catch {
@@ -265,7 +271,10 @@ export class Input {
           this.cb.onPlacementError(err);
           return;
         }
-        this.cb.onPlace(type, px, py, this.dir);
+        if (this.cb.onPlace(type, px, py, this.dir) && type !== 'conveyor' && this.lastPointerType === 'touch') {
+          // on touch, leave build mode after placing a building so the next tap cannot build by accident
+          this.setTool({ kind: 'none' });
+        }
         break;
       }
     }

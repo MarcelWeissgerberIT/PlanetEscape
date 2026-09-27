@@ -67,6 +67,8 @@ export class Hud {
   private storyIndex = 0;
   private minimapOpen = window.innerWidth > 900;
   private panelOpenedAt = 0;
+  private undoStack: { id: number; t: number }[] = [];
+  toolChip: HTMLElement;
 
   constructor(
     public sim: Sim,
@@ -88,7 +90,9 @@ export class Hud {
     this.minimap.width = 160;
     this.minimap.height = 160;
     this.minimapBox.append(this.minimap);
-    this.root.append(this.title, this.story, this.top, this.bottom, this.info, this.floating, this.minimapBox, this.modal, this.toasts);
+    this.toolChip = el('div', 'tool-chip hidden');
+    this.root.append(this.title, this.story, this.top, this.bottom, this.info, this.floating, this.minimapBox, this.toolChip, this.modal, this.toasts);
+    this.toolChip.onclick = () => this.input.setTool({ kind: 'none' });
     this.renderTitle();
     this.renderBottom();
     this.renderTop();
@@ -97,7 +101,9 @@ export class Hud {
       if (this.panelJustOpened()) return;
       const img = (e.target as HTMLElement).closest('img[data-item]') as HTMLImageElement | null;
       if (!img) return;
-      if (img.closest('.build-btn, .recipe, .inv-item, .r-in, .cost, .upgrade')) return;
+      if (img.closest('.build-btn, .inv-item, .cost, .upgrade')) return;
+      if (img.closest('.recipe') && !img.closest('.r-in')) return; // the output icon selects the recipe
+      e.stopPropagation();
       this.showChain(img.dataset.item as ItemId);
     });
     this.minimapBox.addEventListener('pointerdown', (e) => {
@@ -360,12 +366,16 @@ export class Hud {
         <div class="mtext">${tut.text}</div>`;
     } else if (m) {
       const mt = tMission(m.id);
-      const rows = Object.entries(m.deliver)
-        .map(([k, n]) => {
-          const have = Math.min(n!, Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0));
-          return `<div class="mrow ${have >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
-        })
-        .join('');
+      const entries = Object.entries(m.deliver);
+      const compact = window.innerWidth < 900;
+      const shown = compact ? entries.slice(0, 2) : entries;
+      const rows =
+        shown
+          .map(([k, n]) => {
+            const have = Math.min(n!, Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0));
+            return `<div class="mrow ${have >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
+          })
+          .join('') + (entries.length > shown.length ? `<div class="mrow more">+${entries.length - shown.length} …</div>` : '');
       const builds = m.build
         ? Object.entries(m.build)
             .map(([k, n]) => {
@@ -468,6 +478,7 @@ export class Hud {
         <div class="tool-col">
           <button class="iconbtn big" data-act="rotate" title="${t('rotate')} (R)">⟳</button>
           <button class="iconbtn big ${delActive ? 'danger-active' : ''}" data-act="delete" title="${t('delete')} (X)">✕</button>
+          <button class="iconbtn big ${this.undoStack.length ? '' : 'dim'}" data-act="undo" title="${t('undo')} (Z)">↶</button>
         </div>
       </div>`;
     if (bottomHtml === this.lastBottomHtml) return;
@@ -496,6 +507,8 @@ export class Hud {
       const act = target.dataset.act;
       if (act === 'rotate') {
         this.rotateSelected();
+      } else if (act === 'undo') {
+        this.undo();
       } else if (act === 'delete') {
         this.input.setTool(delActive ? { kind: 'none' } : { kind: 'delete' });
         if (!delActive) this.toast(t('delete_mode'), 2500);
@@ -527,6 +540,13 @@ export class Hud {
   setTool(tool: Tool) {
     this.tool = tool;
     this.renderBottom();
+    if (tool.kind === 'build') {
+      this.toolChip.innerHTML = `<img src="${buildingUrl(tool.type)}" alt=""><span>${t('build')}: <b>${tBuilding(tool.type)}</b> · ${tool.type === 'conveyor' ? t('chip_belt') : t('chip_place')}</span><span class="x">✕</span>`;
+      this.toolChip.classList.remove('hidden');
+    } else if (tool.kind === 'delete') {
+      this.toolChip.innerHTML = `<span>${t('delete_mode')}</span><span class="x">✕</span>`;
+      this.toolChip.classList.remove('hidden');
+    } else this.toolChip.classList.add('hidden');
   }
 
   // ---------- Info panel ----------
@@ -540,6 +560,38 @@ export class Hud {
       this.info.classList.add('hidden');
       this.floating.classList.add('hidden');
     }
+  }
+
+  /** Has the player ever had this item? Used to mark ingredients that still need a chain. */
+  private known(id: ItemId): boolean {
+    const st = this.sim.state;
+    return (st.inventory[id] ?? 0) > 0 || (st.stats.produced[id] ?? 0) > 0 || (st.stats.delivered[id] ?? 0) > 0;
+  }
+
+  recordPlacement(b: Building) {
+    this.undoStack.push({ id: b.id, t: performance.now() });
+    if (this.undoStack.length > 200) this.undoStack.shift();
+    this.lastBottomHtml = '';
+    this.renderBottom();
+  }
+
+  /** Remove the last placement, or the whole belt drag it belonged to. */
+  undo() {
+    if (!this.undoStack.length) return;
+    const last = this.undoStack[this.undoStack.length - 1];
+    let n = 0;
+    while (this.undoStack.length && last.t - this.undoStack[this.undoStack.length - 1].t < 1500) {
+      const e = this.undoStack.pop()!;
+      const b = this.sim.byId(e.id);
+      if (b && b.type !== 'core') {
+        this.sim.remove(b);
+        n++;
+      }
+    }
+    if (n) sfx.remove();
+    if (this.selected && !this.sim.state.buildings.includes(this.selected)) this.selectBuilding(null);
+    this.lastBottomHtml = '';
+    this.renderBottom();
   }
 
   /** Clicks that land on the panel right after it opened are the tail of the tap that opened it. */
@@ -675,7 +727,7 @@ export class Hud {
           (rc) => `<button class="recipe ${b.recipe === rc.id ? 'active' : ''}" data-recipe="${rc.id}">
             <div class="r-out">${itemImg(rc.output, 'icon')}<span class="r-n">${rc.outputCount > 1 ? '×' + rc.outputCount : ''}</span></div>
             <div class="r-name">${tItem(rc.output)}</div>
-            <div class="r-in">${Object.entries(rc.inputs).map(([k, n]) => `${itemImg(k as ItemId, 'icon xs')}${n}`).join(' ')}</div>
+            <div class="r-in">${Object.entries(rc.inputs).map(([k, n]) => `<span class="${this.known(k as ItemId) ? '' : 'unknown'}">${itemImg(k as ItemId, 'icon xs')}${n}</span>`).join(' ')}</div>
             <div class="r-time">${rc.seconds}s</div>
           </button>`,
         )

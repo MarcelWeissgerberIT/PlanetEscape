@@ -22,6 +22,7 @@ const cbs = {
   onPlace: (type: Parameters<Sim['place']>[0], x: number, y: number, dir: Parameters<Sim['place']>[3]) => {
     const b = sim.place(type, x, y, dir);
     if (!b) return false;
+    hud.recordPlacement(b);
     if (type === 'conveyor') sfx.belt();
     else sfx.place();
     if (type === 'assembler' || type === 'refinery') hud.selectBuilding(b);
@@ -48,6 +49,7 @@ const cbs = {
   },
   onRotateKey: () => hud.rotateSelected(),
   onSelectTile: (x: number, y: number) => hud.selectTile(x, y),
+  onUndo: () => hud.undo(),
 };
 
 let input = new Input(canvas, sim, renderer, cbs);
