@@ -92,10 +92,9 @@ export class Renderer {
     this.ground = this.ctx.createPattern(c, 'repeat');
   }
 
-  resize() {
+  resize(w = window.innerWidth, h = window.innerHeight) {
     const dpr = Math.min(window.devicePixelRatio || 1, 2);
     this.dpr = dpr;
-    const w = window.innerWidth, h = window.innerHeight;
     this.canvas.width = Math.round(w * dpr);
     this.canvas.height = Math.round(h * dpr);
     this.canvas.style.width = w + 'px';

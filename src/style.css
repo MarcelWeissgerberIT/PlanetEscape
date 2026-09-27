@@ -400,3 +400,4 @@ label.btn { text-align: center; }
 .power .plabel { display: inline-flex; align-items: center; gap: 4px; }
 .power .ico.sm { color: var(--accent); }
 .power.low .ico.sm { color: #fbbf24; }
+.ai-link { text-decoration: none; text-align: center; font-size: 13px; color: var(--accent); }

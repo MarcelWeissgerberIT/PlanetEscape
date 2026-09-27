@@ -99,6 +99,8 @@ Claude Desktop / Claude Code configuration (stdio transport):
 }
 ```
 
+**Sub page for agents**: https://planet-escape.dev/ai/ explains the server, shows the tools, the playbook and a live demo where the auto-solver plays a chapter in the browser (source: `ai/index.html`, `src/ai.ts`).
+
 **Let an agent play a round**: the server ships a playbook (`mcp/PLAYBOOK.md`, also served by the `pe_playbook` tool and as the MCP prompt `play_chapter`) and the repo contains a Claude Code skill (`.claude/skills/play-planet-escape`). In Claude Code, after adding the server, just say "play chapter 3 of Planet Escape" or use `/play-planet-escape`; the agent starts the chapter, lets the solver build, ticks, repairs with `pe_analyze`, moves on with `pe_next_chapter` and exports the save so you can load it in the browser.
 
 Tools (all return JSON): `pe_playbook` (agent guide), `pe_new_game` (story chapter or free play), `pe_next_chapter`, `pe_get_state`, `pe_map` (ASCII map with legend), `pe_list_buildings`, `pe_place`, `pe_remove`, `pe_configure` (rotate, recipe, filter, valve/mixer settings, contracts), `pe_route_belt` (auto-routed belt line between two buildings), `pe_build_chain` (whole production chain for an item at a target rate), `pe_solve_order` (builds everything the current KORA order needs, incl. power), `pe_tick` (advance time, stop when the order completes), `pe_analyze` (jams, starved machines, power), `pe_plan` (machine/miner counts for a rate), `pe_save` (export/import saves compatible with the browser game), `pe_chapters`.

@@ -171,6 +171,7 @@ export class Hud {
             <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
             <button class="btn ghost" data-act="howto">${t('how_to')}</button>
           </div>
+          <a class="btn ghost ai-link" href="./ai/">${t('ai_page')} →</a>
         </div>`;
     const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
     const freeView = `

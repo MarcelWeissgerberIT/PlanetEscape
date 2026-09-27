@@ -1,0 +1,47 @@
+/* Sub page: AI / MCP. Reuses the variables from style.css but is a normal scrolling document. */
+html.page, body.page { position: static; height: auto; overflow: auto; -webkit-user-select: text; user-select: text; }
+body.page { background: radial-gradient(1200px 600px at 20% -10%, rgba(34, 211, 238, 0.12), transparent), var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, system-ui, sans-serif; color: var(--text); margin: 0; line-height: 1.5; }
+.aiwrap { max-width: 980px; margin: 0 auto; padding: 16px 16px 60px; }
+.topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 18px; flex-wrap: wrap; }
+.brand { font-weight: 800; letter-spacing: 0.08em; text-decoration: none; color: var(--text); font-size: 15px; }
+.brand span { color: var(--accent); }
+.topbar nav { display: flex; gap: 8px; flex-wrap: wrap; }
+h1 { font-size: clamp(26px, 5vw, 40px); margin: 6px 0 8px; line-height: 1.15; }
+h1 em { color: var(--accent); font-style: normal; }
+h2 { font-size: 20px; margin: 34px 0 10px; }
+h3 { font-size: 15px; margin: 18px 0 6px; color: var(--muted); text-transform: uppercase; letter-spacing: 0.06em; }
+p.lead { color: var(--muted); font-size: 17px; max-width: 700px; margin: 0 0 18px; }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 14px; }
+.demo { display: grid; grid-template-columns: minmax(0, 1fr) 300px; gap: 14px; }
+@media (max-width: 800px) { .demo { grid-template-columns: 1fr; } }
+.stage { position: relative; border-radius: 14px; overflow: hidden; background: #1a1d23; aspect-ratio: 4 / 3; border: 1px solid var(--line); }
+.stage canvas { display: block; width: 100%; height: 100%; }
+.stage .badge { position: absolute; left: 10px; top: 10px; background: rgba(8, 12, 18, 0.85); border: 1px solid var(--accent); color: var(--accent); border-radius: 10px; padding: 4px 10px; font-size: 12px; font-weight: 700; }
+.stage .result { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); background: rgba(8, 12, 18, 0.9); border: 1px solid var(--ok); border-radius: 14px; padding: 14px 20px; text-align: center; font-weight: 700; }
+.stage .result.bad { border-color: var(--danger); }
+.panel { display: flex; flex-direction: column; gap: 10px; min-width: 0; }
+.chips { display: flex; gap: 6px; flex-wrap: wrap; }
+.chip { padding: 6px 11px; border-radius: 999px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); font-size: 13px; font-weight: 600; }
+.chip.active { background: var(--accent); color: #06202a; border-color: transparent; }
+.stat { display: flex; justify-content: space-between; font-size: 13px; padding: 5px 0; border-bottom: 1px solid var(--line); }
+.stat b { font-variant-numeric: tabular-nums; }
+.log { font: 12px/1.45 ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; background: rgba(0, 0, 0, 0.35); border-radius: 10px; padding: 8px 10px; height: 200px; overflow: auto; color: #b6c2d0; white-space: pre-wrap; }
+.log .ok { color: var(--ok); }
+.log .err { color: #fca5a5; }
+.log .hint { color: var(--accent-2); }
+pre { background: rgba(0, 0, 0, 0.4); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; overflow: auto; font-size: 13px; line-height: 1.45; }
+code { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 0.92em; background: rgba(255, 255, 255, 0.07); padding: 1px 5px; border-radius: 6px; }
+pre code { background: none; padding: 0; }
+table { width: 100%; border-collapse: collapse; font-size: 14px; margin: 8px 0 16px; }
+th, td { text-align: left; padding: 7px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12px; text-transform: uppercase; letter-spacing: 0.05em; }
+td code { white-space: nowrap; }
+.grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+@media (max-width: 700px) { .grid2 { grid-template-columns: 1fr; } }
+.playbook { font-size: 14.5px; }
+.playbook h1 { font-size: 22px; }
+.playbook h2 { font-size: 17px; margin-top: 22px; }
+.playbook li { margin: 3px 0; }
+.foot { color: var(--muted); font-size: 13px; margin-top: 40px; border-top: 1px solid var(--line); padding-top: 14px; }
+a { color: var(--accent); }
+.btn { width: auto; display: inline-block; }

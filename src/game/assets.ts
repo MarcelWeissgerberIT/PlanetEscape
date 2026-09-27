@@ -12,7 +12,8 @@ function load(key: string, url: string): HTMLImageElement {
   return img;
 }
 
-const base = import.meta.env.BASE_URL.replace(/\/$/, '');
+// sub pages (e.g. /ai/) set window.__PE_BASE so relative asset paths still point at the site root
+const base = ((window as unknown as { __PE_BASE?: string }).__PE_BASE ?? import.meta.env.BASE_URL).replace(/\/$/, '');
 
 export function buildingSprite(id: BuildingId | 'core_0' | 'core_1' | 'core_2'): HTMLImageElement {
   return load(`b:${id}`, `${base}/assets/buildings/${id}.webp`);
