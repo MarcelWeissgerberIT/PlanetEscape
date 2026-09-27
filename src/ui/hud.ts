@@ -7,7 +7,7 @@ import { ambientEnabled, setAmbient, setSound, sfx, soundEnabled, startAmbient }
 import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, TerrainId, UpgradeId } from '../game/types';
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
-import { hasSave, load as loadSave } from '../game/save';
+import { hasSave, load as loadSave, lastDropped } from '../game/save';
 import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
@@ -1955,7 +1955,8 @@ export class Hud {
       this.closeModal();
       this.cb.onImport(loaded);
       this.toast(`✓ ${t('imported')}`, 2500, 'success');
-      if (loaded.note) setTimeout(() => this.showNote(), 400);
+      if (lastDropped > 0) setTimeout(() => this.toast(`⚠ ${t('import_dropped', { n: lastDropped })}`, 9000, 'error'), 600);
+      else if (loaded.note) setTimeout(() => this.showNote(), 400);
     } catch (e) {
       const why = e instanceof SyntaxError ? 'JSON' : (e as Error)?.message === 'version' ? `v${SAVE_VERSION}` : String((e as Error)?.message ?? e).slice(0, 60);
       this.toast(`${t('import_failed')} (${why})`, 4000, 'error');

@@ -3,6 +3,8 @@ import { SAVE_VERSION } from './world';
 import { BUILDINGS, UPGRADE_DEFAULTS } from './data';
 
 const KEY = 'pe_save_v1';
+/** buildings the last load had to drop because this build does not know them (save from a newer version) */
+export let lastDropped = 0;
 
 export function save(state: GameState) {
   try {
@@ -42,7 +44,9 @@ export function load(): GameState | null {
     }
     if (st.version !== SAVE_VERSION) return null;
     // saves from a newer or older build may contain building types this build does not know: drop them
+    const before = st.buildings.length;
     st.buildings = st.buildings.filter((b) => b && b.type in BUILDINGS);
+    lastDropped = before - st.buildings.length;
     if (!st.buildings.length || st.buildings[0].type !== 'core') return null;
     // additive fields (no version bump needed)
     st.upgrades = { ...UPGRADE_DEFAULTS(), ...st.upgrades };
