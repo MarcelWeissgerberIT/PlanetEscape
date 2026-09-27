@@ -36,9 +36,11 @@ export class Renderer {
   time = 0;
   ghost: Ghost | null = null;
   selected: Building | null = null;
+  selectedTile: { x: number; y: number } | null = null;
   deleteMode = false;
   overlay = false;
   ping: { x: number; y: number; w: number; h: number } | null = null;
+  private panTarget: { x: number; y: number } | null = null;
   dpr = 1;
   private particles: Particle[] = [];
   private spawn = new Map<number, number>();
@@ -96,6 +98,16 @@ export class Renderer {
     this.cam.zoom = Math.max(0.3, Math.min(1.0, minDim / (TILE * 17)));
   }
 
+  /** Smoothly pan the camera so world point (px,py) lands at screen point (sx,sy). */
+  panTo(px: number, py: number, sx: number, sy: number) {
+    const z = this.cam.zoom;
+    this.panTarget = { x: px - (sx - this.cam.width / 2) / z, y: py - (sy - this.cam.height / 2) / z };
+  }
+
+  cancelPan() {
+    this.panTarget = null;
+  }
+
   centerOn(tx: number, ty: number, zoom?: number) {
     this.cam.x = (tx + 0.5) * TILE;
     this.cam.y = (ty + 0.5) * TILE;
@@ -139,6 +151,12 @@ export class Renderer {
   draw(dt: number) {
     this.time += dt;
     const { ctx, cam } = this;
+    if (this.panTarget) {
+      const k = Math.min(1, dt * 9);
+      cam.x += (this.panTarget.x - cam.x) * k;
+      cam.y += (this.panTarget.y - cam.y) * k;
+      if (Math.hypot(this.panTarget.x - cam.x, this.panTarget.y - cam.y) < 0.5) this.panTarget = null;
+    }
     const s = this.sim.state;
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#1a1d23';
@@ -220,6 +238,16 @@ export class Renderer {
       ctx.setLineDash([8 / cam.zoom, 6 / cam.zoom]);
       ctx.lineDashOffset = -this.time * 30;
       ctx.strokeRect(b.x * TILE + 2, b.y * TILE + 2, sz - 4, sz - 4);
+      ctx.setLineDash([]);
+    }
+
+    if (this.selectedTile) {
+      const t = this.selectedTile;
+      ctx.strokeStyle = '#fbbf24';
+      ctx.lineWidth = 3 / cam.zoom;
+      ctx.setLineDash([8 / cam.zoom, 6 / cam.zoom]);
+      ctx.lineDashOffset = -this.time * 30;
+      ctx.strokeRect(t.x * TILE + 2, t.y * TILE + 2, TILE - 4, TILE - 4);
       ctx.setLineDash([]);
     }
 

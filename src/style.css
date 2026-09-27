@@ -149,7 +149,7 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
   position: absolute; left: 8px; right: 8px; bottom: calc(150px + var(--sab));
   background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-  max-height: 46vh; overflow-y: auto;
+  max-height: 38vh; overflow-y: auto;
   animation: slideup 0.18s ease-out;
 }
 @keyframes slideup { from { transform: translateY(12px); opacity: 0; } to { transform: none; opacity: 1; } }

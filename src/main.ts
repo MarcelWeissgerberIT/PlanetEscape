@@ -47,6 +47,7 @@ const cbs = {
     hud.flashOutput(b);
   },
   onRotateKey: () => hud.rotateSelected(),
+  onSelectTile: (x: number, y: number) => hud.selectTile(x, y),
 };
 
 let input = new Input(canvas, sim, renderer, cbs);

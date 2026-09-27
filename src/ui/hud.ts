@@ -1,5 +1,5 @@
-import { buildingUrl, itemUrl, uiUrl } from '../game/assets';
-import { BUILDINGS, BUILD_ORDER, ITEM_ORDER, MISSIONS, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, recipesFor } from '../game/data';
+import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
+import { BUILDINGS, BUILD_ORDER, ITEM_ORDER, MISSIONS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import type { Problem, Sim } from '../game/sim';
@@ -66,6 +66,7 @@ export class Hud {
   private koraMsgT = 0;
   private storyIndex = 0;
   private minimapOpen = window.innerWidth > 900;
+  private panelOpenedAt = 0;
 
   constructor(
     public sim: Sim,
@@ -93,6 +94,7 @@ export class Hud {
     this.renderTop();
     // tapping any item icon (outside buttons that use icons as labels) opens its production chain
     this.root.addEventListener('click', (e) => {
+      if (this.panelJustOpened()) return;
       const img = (e.target as HTMLElement).closest('img[data-item]') as HTMLImageElement | null;
       if (!img) return;
       if (img.closest('.build-btn, .recipe, .inv-item, .r-in, .cost, .upgrade')) return;
@@ -273,6 +275,28 @@ export class Hud {
     return true;
   }
 
+  /** Frame the ping target and the core together inside the band between the top and bottom HUD. */
+  private focusTutorial() {
+    const p = this.renderer.ping;
+    const core = this.sim.state.buildings[0];
+    const cam = this.renderer.cam;
+    const cx = core.x + 1.5, cy = core.y + 1.5;
+    const topH = (this.top.getBoundingClientRect().height || 120) + 24;
+    const botH = (this.bottom.getBoundingClientRect().height || 180) + 24;
+    const bandH = Math.max(120, cam.height - topH - botH);
+    const bandCenter = topH + bandH / 2; // screen y where the midpoint should land
+    if (!p) {
+      this.renderer.centerOn(cx - 0.5, cy - 0.5);
+      return;
+    }
+    const px = p.x + p.w / 2, py = p.y + p.h / 2;
+    const spanX = Math.abs(px - cx) + 5, spanY = Math.abs(py - cy) + 5;
+    const zoom = Math.max(0.3, Math.min(1.1, Math.min(cam.width / (spanX * TILE), bandH / (spanY * TILE))));
+    cam.zoom = zoom;
+    cam.x = ((px + cx) / 2) * TILE;
+    cam.y = ((py + cy) / 2) * TILE - (bandCenter - cam.height / 2) / zoom;
+  }
+
   private tutorialPing(step: number) {
     const st = this.sim.state;
     const core = st.buildings[0];
@@ -288,6 +312,8 @@ export class Hud {
     else this.renderer.ping = null;
   }
 
+  private lastTutorialStep = -2;
+
   private tickTutorial() {
     const st = this.sim.state;
     if (st.tutorialStep < 0) {
@@ -298,6 +324,11 @@ export class Hud {
     while (st.tutorialStep >= 0 && st.tutorialStep < steps.length && this.tutorialCondition(st.tutorialStep)) {
       st.tutorialStep++;
       sfx.select();
+    }
+    if (st.tutorialStep !== this.lastTutorialStep && st.tutorialStep >= 0 && st.tutorialStep < steps.length) {
+      this.lastTutorialStep = st.tutorialStep;
+      this.tutorialPing(st.tutorialStep);
+      this.focusTutorial();
     }
     if (st.tutorialStep >= steps.length) {
       st.tutorialStep = -1;
@@ -495,11 +526,101 @@ export class Hud {
   selectBuilding(b: Building | null) {
     this.selected = b;
     this.renderer.selected = b;
+    this.renderer.selectedTile = null;
     if (b) this.showInfo(b);
     else {
       this.info.classList.add('hidden');
       this.floating.classList.add('hidden');
     }
+  }
+
+  /** Clicks that land on the panel right after it opened are the tail of the tap that opened it. */
+  private panelJustOpened(): boolean {
+    return performance.now() - this.panelOpenedAt < 350;
+  }
+
+  /** Pan the camera so a world rect (tiles) is not hidden under the HUD or the info panel. */
+  private ensureVisible(x: number, y: number, w: number, h: number) {
+    const cam = this.renderer.cam;
+    const [sx0, sy0] = cam.worldToScreen(x * TILE, y * TILE);
+    const [sx1, sy1] = cam.worldToScreen((x + w) * TILE, (y + h) * TILE);
+    const topH = (this.top.getBoundingClientRect().height || 120) + 16;
+    const panel = this.info.getBoundingClientRect();
+    const bottomLimit = this.info.classList.contains('hidden') ? cam.height - (this.bottom.getBoundingClientRect().height || 160) : Math.min(panel.top, cam.height - (this.bottom.getBoundingClientRect().height || 160)) - 12;
+    const bandCenter = (topH + bottomLimit) / 2;
+    const mid = (sy0 + sy1) / 2;
+    const clearY = sy0 > topH && sy1 < bottomLimit;
+    const clearX = sx0 > 8 && sx1 < cam.width - 8;
+    if (clearY && clearX) return;
+    this.renderer.panTo(((x + w / 2) * TILE), ((y + h / 2) * TILE), clearX ? (sx0 + sx1) / 2 : cam.width / 2, clearY ? mid : bandCenter);
+  }
+
+  /** Info for an empty tile: deposit, rock or ground. */
+  selectTile(x: number, y: number) {
+    const st = this.sim.state;
+    const terrain = st.terrain[y * st.width + x];
+    if (terrain === 'ground') {
+      // plain ground: just clear the selection
+      this.selectBuilding(null);
+      return;
+    }
+    this.selected = null;
+    this.renderer.selected = null;
+    this.renderer.selectedTile = { x, y };
+    this.floating.classList.add('hidden');
+    const item = TERRAIN_ITEM[terrain];
+    let body = '';
+    if (item) {
+      const left = this.sim.oreLeft(x, y);
+      const max = ORE_PER_TILE[1];
+      // what this ore turns into
+      const uses = RECIPES.filter((r) => r.inputs[item]).map((r) => `<span class="buf">${itemImg(r.output, 'icon sm')}${tItem(r.output)}</span>`).join(' ');
+      // size of the connected deposit
+      let tiles = 0, total = 0;
+      const seen = new Set<number>();
+      const stack = [y * st.width + x];
+      while (stack.length && tiles < 400) {
+        const i = stack.pop()!;
+        if (seen.has(i) || st.terrain[i] !== terrain) continue;
+        seen.add(i);
+        tiles++;
+        total += st.ore[i] ?? 0;
+        const ix = i % st.width, iy = (i - ix) / st.width;
+        if (ix > 0) stack.push(i - 1);
+        if (ix < st.width - 1) stack.push(i + 1);
+        if (iy > 0) stack.push(i - st.width);
+        if (iy < st.height - 1) stack.push(i + st.width);
+      }
+      body = `
+        <div class="bufs"><span class="lbl">${t('remaining')}</span><span class="buf">${itemImg(item, 'icon sm')}${left}</span><span class="buf">${tiles} × · ${total}</span></div>
+        <div class="pbar big"><div class="pfill" style="width:${Math.min(100, (left / max) * 100)}%"></div></div>
+        <div class="bufs"><span class="lbl">${t('becomes')}</span>${uses || '–'}</div>
+        <div class="status">${t('deposit_hint')}</div>`;
+    } else if (terrain === 'rock') body = `<div class="status bad">${t('rock_hint')}</div>`;
+    const canMine = item && st.unlockedBuildings.includes('miner');
+    this.info.innerHTML = `
+      <div class="info-head">
+        <img src="${terrainUrl(terrain)}" alt="" draggable="false">
+        <div class="info-title"><b>${item ? tItem(item) : t('rock')}</b><small>${item ? t('deposit') : t('rock')} · ${x}, ${y}</small></div>
+        <button class="iconbtn" data-act="close">✕</button>
+      </div>
+      <div class="info-body">${body}</div>
+      ${canMine ? `<div class="info-actions"><button class="btn small primary" data-act="miner">⛏ ${t('place_miner')}</button>${item ? `<button class="btn small" data-act="chain">${t('chain_for')}…</button>` : ''}</div>` : ''}`;
+    const wasHidden = this.info.classList.contains('hidden');
+    this.info.classList.remove('hidden');
+    if (wasHidden) this.panelOpenedAt = performance.now();
+    requestAnimationFrame(() => this.ensureVisible(x, y, 1, 1));
+    this.info.onclick = (e) => {
+      if (this.panelJustOpened()) return;
+      const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+      if (!target) return;
+      const act = target.dataset.act;
+      if (act === 'close') this.selectBuilding(null);
+      else if (act === 'miner') {
+        this.input.setTool({ kind: 'build', type: 'miner' });
+        sfx.select();
+      } else if (act === 'chain' && item) this.showChain(item);
+    };
   }
 
   /** Keep the floating rotate button glued to the selected building. Called every frame. */
@@ -598,8 +719,15 @@ export class Hud {
         ${def.rotatable ? `<button class="btn small" data-act="rotate">⟳ ${t('rotate')}</button>` : ''}
         <button class="btn small danger" data-act="remove">✕ ${t('delete')}</button>
       </div>` : ''}`;
+    const wasHidden = this.info.classList.contains('hidden');
     this.info.classList.remove('hidden');
+    if (wasHidden) {
+      this.panelOpenedAt = performance.now();
+      const sz = def.size;
+      requestAnimationFrame(() => this.ensureVisible(b.x, b.y, sz, sz));
+    }
     this.info.onclick = (e) => {
+      if (this.panelJustOpened()) return;
       const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
       if (!target) return;
       const recipe = target.dataset.recipe;
@@ -918,6 +1046,10 @@ export class Hud {
     this.tickTutorial();
     this.renderBottom();
     this.renderTop();
+    if (this.renderer.selectedTile && !this.info.classList.contains('hidden') && this.sim.state.buildings.length && this.sim.at(this.renderer.selectedTile.x, this.renderer.selectedTile.y)) {
+      // a building was placed on the selected tile: switch to its panel
+      this.selectBuilding(this.sim.at(this.renderer.selectedTile.x, this.renderer.selectedTile.y));
+    }
     if (this.selected) {
       if (!this.sim.state.buildings.includes(this.selected)) this.selectBuilding(null);
       else {

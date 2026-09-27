@@ -14,10 +14,12 @@ export interface InputCallbacks {
   onToolChange: (tool: Tool) => void;
   onRotate: (b: Building) => void;
   onRotateKey: () => void;
+  onSelectTile: (x: number, y: number) => void;
 }
 
 interface PointerInfo {
   id: number;
+  t: number;
   x: number;
   y: number;
   startX: number;
@@ -42,6 +44,7 @@ export class Input {
   private moved = false;
   private longPressTimer: number | null = null;
   private lastTap: { x: number; y: number; t: number } | null = null;
+  private lastTouch = -1e9;
 
   constructor(
     private canvas: HTMLCanvasElement,
@@ -100,8 +103,18 @@ export class Input {
   };
 
   private onDown = (e: PointerEvent) => {
-    this.canvas.setPointerCapture(e.pointerId);
-    const p: PointerInfo = { id: e.pointerId, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, button: e.button, type: e.pointerType };
+    // drop pointers whose 'up' never arrived (can happen when the OS steals a touch)
+    const now = performance.now();
+    for (const [id, p] of this.pointers) if (now - p.t > 3000) this.pointers.delete(id);
+    // ignore compatibility mouse events browsers synthesise shortly after a touch (ghost clicks)
+    if (e.pointerType === 'mouse' && now - this.lastTouch < 800) return;
+    if (e.pointerType === 'touch') this.lastTouch = now;
+    try {
+      this.canvas.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    const p: PointerInfo = { id: e.pointerId, t: now, x: e.clientX, y: e.clientY, startX: e.clientX, startY: e.clientY, button: e.button, type: e.pointerType };
     this.pointers.set(e.pointerId, p);
     this.moved = false;
     if (this.pointers.size === 2) {
@@ -168,6 +181,7 @@ export class Input {
     }
     const panButton = p.button === 1 || p.button === 2 || this.tool.kind === 'none' || (this.tool.kind === 'build' && this.tool.type !== 'conveyor') || this.tool.kind === 'delete';
     if (panButton && this.moved) {
+      this.renderer.cancelPan();
       this.cam.x -= dx / this.cam.zoom;
       this.cam.y -= dy / this.cam.zoom;
       this.cam.clamp(this.sim.state.width * TILE, this.sim.state.height * TILE);
@@ -180,6 +194,7 @@ export class Input {
   };
 
   private onUp = (e: PointerEvent) => {
+    if (e.pointerType === 'touch') this.lastTouch = performance.now();
     const p = this.pointers.get(e.pointerId);
     this.pointers.delete(e.pointerId);
     if (this.longPressTimer) {
@@ -230,7 +245,8 @@ export class Input {
     this.lastTap = { x: tx, y: ty, t: now };
     switch (this.tool.kind) {
       case 'none':
-        this.cb.onSelect(b);
+        if (b) this.cb.onSelect(b);
+        else if (this.sim.inBounds(tx, ty)) this.cb.onSelectTile(tx, ty);
         break;
       case 'delete':
         if (b && b.type !== 'core') this.cb.onRemove(b);
