@@ -27,6 +27,7 @@ interface Particle {
 }
 
 const BELT_STRIP = 0.26; // fraction of the tile width that is moving belt surface in the texture
+const BELT_TRIM = 0.085; // rail end caps in the texture, trimmed so consecutive tiles join
 
 export class Renderer {
   ctx: CanvasRenderingContext2D;
@@ -272,13 +273,12 @@ export class Renderer {
     const { ctx } = this;
     const cx = b.x * TILE + TILE / 2, cy = b.y * TILE + TILE / 2;
     const straight = buildingSprite('conveyor');
-    const curveImg = buildingSprite('conveyor_curve');
     const tunnelImg = buildingSprite('tunnel');
     const input = b.type === 'conveyor' ? this.beltInput(b) : 'back';
     ctx.save();
     ctx.translate(cx, cy);
     ctx.rotate((b.dir * Math.PI) / 2);
-    const curved = (input === 'left' || input === 'right') && ready(curveImg);
+    const curved = (input === 'left' || input === 'right') && ready(straight);
     if (b.type === 'tunnel' && !b.exit) {
       // entrance: belt comes in from behind and vanishes into the hatch
       if (ready(tunnelImg)) {
@@ -289,50 +289,59 @@ export class Renderer {
     } else if (b.type === 'tunnel') {
       // exit: belt continues forward, hatch at the back
       if (ready(straight)) {
-        ctx.drawImage(straight, -TILE / 2, -TILE / 2, TILE, TILE);
+        this.drawStraight(straight);
         this.scrollStrip(straight, -TILE / 2, TILE / 2, false);
         if (ready(tunnelImg)) {
           ctx.save();
           ctx.rotate(Math.PI);
-          // top half of the tunnel texture (the hatch), rotated to sit at the back
           ctx.drawImage(tunnelImg, 0, 0, tunnelImg.naturalWidth, tunnelImg.naturalHeight / 2, -TILE / 2, -TILE / 2, TILE, TILE / 2);
           ctx.restore();
         }
       } else this.fallbackBelt();
       if (b.pair == null) this.dot(0, TILE / 4, '#ef4444');
     } else if (curved) {
-      const sgn = input === 'left' ? -1 : 1;
+      // Mitred corner built from the straight texture: the incoming leg comes from the side,
+      // the outgoing leg points up. Split along the 45° diagonal so rails meet cleanly.
+      const sgn = input === 'left' ? -1 : 1; // side the items come from
       ctx.save();
-      // texture: enters bottom, exits right. Rotate -90deg -> enters right, exits top (= fed from the right side)
-      ctx.rotate(-Math.PI / 2);
-      if (sgn < 0) ctx.scale(1, -1); // mirror across the travel axis for a left feed
-      ctx.drawImage(curveImg, -TILE / 2, -TILE / 2, TILE, TILE);
-      ctx.restore();
-      // animated chevrons along the arc (the baked ones cannot scroll)
-      const ccx = sgn * (TILE / 2), ccy = -TILE / 2, r = TILE / 2;
-      const a0 = Math.PI / 2, a1 = sgn > 0 ? Math.PI : 0;
-      const off = ((this.time * this.beltSpeedPx()) / (TILE * 0.5)) % 1;
-      ctx.strokeStyle = 'rgba(103,232,249,0.9)';
-      ctx.lineWidth = 3;
-      ctx.lineCap = 'round';
+      if (sgn < 0) ctx.scale(-1, 1); // mirror for a left feed; below assumes feed from the right
+      // outgoing leg (points up): region above/left of the diagonal from bottom-left to top-right
+      ctx.save();
       ctx.beginPath();
-      for (let i = 0; i < 3; i++) {
-        const tt = ((i + off) / 3) % 1;
-        const a = a0 + (a1 - a0) * tt;
-        const px = ccx + Math.cos(a) * r, py = ccy + Math.sin(a) * r;
-        let tx = -Math.sin(a) * (a1 - a0), ty = Math.cos(a) * (a1 - a0);
-        const l = Math.hypot(tx, ty) || 1;
-        tx /= l; ty /= l;
-        chevron(ctx, px, py, tx, ty, 6);
-      }
-      ctx.stroke();
+      ctx.moveTo(-TILE / 2, TILE / 2);
+      ctx.lineTo(TILE / 2, -TILE / 2);
+      ctx.lineTo(-TILE / 2, -TILE / 2);
+      ctx.closePath();
+      ctx.clip();
+      this.drawStraight(straight);
+      this.scrollStrip(straight, -TILE / 2, TILE / 2, false);
+      ctx.restore();
+      // incoming leg (from the right, pointing left): region below/right of the diagonal
+      ctx.save();
+      ctx.beginPath();
+      ctx.moveTo(-TILE / 2, TILE / 2);
+      ctx.lineTo(TILE / 2, -TILE / 2);
+      ctx.lineTo(TILE / 2, TILE / 2);
+      ctx.closePath();
+      ctx.clip();
+      ctx.rotate(-Math.PI / 2); // texture points up; rotate so it points left (travel from right to centre)
+      this.drawStraight(straight);
+      this.scrollStrip(straight, -TILE / 2, TILE / 2, false);
+      ctx.restore();
+      ctx.restore();
     } else if (ready(straight)) {
-      ctx.drawImage(straight, -TILE / 2, -TILE / 2, TILE, TILE);
+      this.drawStraight(straight);
       this.scrollStrip(straight, -TILE / 2, TILE / 2, false);
     } else this.fallbackBelt();
     ctx.restore();
 
     if (this.overlay || b.status === 'jammed' || b.status === 'dead_end') this.drawBeltStatus(b);
+  }
+
+  /** Draw the straight belt texture edge to edge, trimming the rail end caps so tiles join seamlessly. */
+  private drawStraight(img: HTMLImageElement) {
+    const m = img.naturalHeight * BELT_TRIM;
+    this.ctx.drawImage(img, 0, m, img.naturalWidth, img.naturalHeight - 2 * m, -TILE / 2, -TILE / 2, TILE, TILE);
   }
 
   /** Redraw the moving belt surface of the straight texture scrolled by time, clipped to [y0,y1] in local space. */
@@ -346,9 +355,10 @@ export class Renderer {
     ctx.rect(-w / 2, y0, w, y1 - y0);
     ctx.clip();
     const sx = img.naturalWidth * (0.5 - BELT_STRIP / 2), sw = img.naturalWidth * BELT_STRIP;
+    const m = img.naturalHeight * BELT_TRIM, sh = img.naturalHeight - 2 * m;
     // two copies so the seam is never visible (belt moves "up" = towards -y)
-    ctx.drawImage(img, sx, 0, sw, img.naturalHeight, -w / 2, -TILE / 2 - off, w, TILE);
-    ctx.drawImage(img, sx, 0, sw, img.naturalHeight, -w / 2, TILE / 2 - off, w, TILE);
+    ctx.drawImage(img, sx, m, sw, sh, -w / 2, -TILE / 2 - off, w, TILE);
+    ctx.drawImage(img, sx, m, sw, sh, -w / 2, TILE / 2 - off, w, TILE);
     if (half) {
       // entrance: fade the belt into the hatch
       const g = ctx.createLinearGradient(0, 0, 0, -TILE / 6);
@@ -388,15 +398,11 @@ export class Renderer {
 
   private beltItemPos(b: Building, pos: number, input: string): [number, number] {
     let lx = 0, ly = 0;
-    if (input === 'left' || input === 'right') {
+    if ((input === 'left' || input === 'right') && pos >= 0.5) {
       const sgn = input === 'left' ? -1 : 1;
-      if (pos >= 0.5) {
-        const tt = (pos - 0.5) * 2;
-        const a0 = Math.PI / 2, a1 = sgn > 0 ? Math.PI : 0;
-        const a = a0 + (a1 - a0) * tt;
-        lx = sgn * (TILE / 2) + Math.cos(a) * (TILE / 2);
-        ly = -TILE / 2 + Math.sin(a) * (TILE / 2);
-      } else ly = TILE / 2 - pos * TILE;
+      const tt = (pos - 0.5) * 2; // 0 = side edge, 0.5 = centre, 1 = front edge
+      if (tt < 0.5) lx = sgn * (TILE / 2) * (1 - tt * 2);
+      else ly = -(TILE / 2) * ((tt - 0.5) * 2);
     } else ly = TILE / 2 - pos * TILE;
     const a = (b.dir * Math.PI) / 2;
     const rx = lx * Math.cos(a) - ly * Math.sin(a);
@@ -832,11 +838,4 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
-}
-
-function chevron(ctx: CanvasRenderingContext2D, x: number, y: number, tx: number, ty: number, s: number) {
-  const px = -ty, py = tx;
-  ctx.moveTo(x - tx * s * 0.5 + px * s, y - ty * s * 0.5 + py * s);
-  ctx.lineTo(x + tx * s * 0.5, y + ty * s * 0.5);
-  ctx.lineTo(x - tx * s * 0.5 - px * s, y - ty * s * 0.5 - py * s);
 }

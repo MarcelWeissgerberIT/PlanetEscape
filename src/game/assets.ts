@@ -14,7 +14,7 @@ function load(key: string, url: string): HTMLImageElement {
 
 const base = import.meta.env.BASE_URL.replace(/\/$/, '');
 
-export function buildingSprite(id: BuildingId | 'conveyor_curve' | 'core_0' | 'core_1' | 'core_2'): HTMLImageElement {
+export function buildingSprite(id: BuildingId | 'core_0' | 'core_1' | 'core_2'): HTMLImageElement {
   return load(`b:${id}`, `${base}/assets/buildings/${id}.webp`);
 }
 

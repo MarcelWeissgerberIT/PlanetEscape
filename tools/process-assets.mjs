@@ -7,7 +7,7 @@ const RAW = 'tools/raw';
 const OUT = 'public/assets';
 for (const d of ['buildings', 'items', 'terrain', 'ui']) mkdirSync(`${OUT}/${d}`, { recursive: true });
 
-const BUILDINGS = ['core', 'conveyor', 'conveyor_curve', 'tunnel', 'miner', 'smelter', 'assembler', 'refinery', 'solar', 'generator', 'storage', 'splitter', 'fabricator', 'printer', 'core_0', 'core_1', 'core_2'];
+const BUILDINGS = ['core', 'conveyor', 'tunnel', 'miner', 'smelter', 'assembler', 'refinery', 'solar', 'generator', 'storage', 'splitter', 'fabricator', 'printer', 'core_0', 'core_1', 'core_2'];
 const TERRAIN = ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'rock'];
 const ITEMS = [
   'iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'iron_plate', 'copper_plate', 'copper_wire', 'glass', 'silicon',
