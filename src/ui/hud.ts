@@ -1,5 +1,5 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
-import { BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_ORDER, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_ORDER, ITEMS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -11,6 +11,8 @@ import { hasSave, load as loadSave } from '../game/save';
 import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
+import { CHIP8_H, CHIP8_W } from '../game/chip8';
+import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
 export interface HudCallbacks {
   onNewGame: (seed: number | undefined, options: GameOptions) => void;
@@ -127,6 +129,7 @@ export class Hud {
     this.tip = el('div', 'tip hidden');
     this.root.append(this.title, this.story, this.top, this.bottom, this.info, this.floating, this.minimapBox, this.toolChip, this.tip, this.modal, this.toasts);
     this.installTips();
+    this.installTerminalKeys();
     this.toolChip.onclick = (e) => {
       const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
       if (b?.dataset.act === 'rot') this.input.rotate();
@@ -922,7 +925,7 @@ export class Hud {
     const ttt: Blueprint = grid(t('preset_ttt'), 3, 3);
     // a switch in front of every lamp column so single items can be steered into cells
     const board: Blueprint = { name: t('preset_ttt'), w: 3, h: 5, items: [...ttt.items.map((i) => ({ ...i, dy: i.dy + 2 })), ...[0, 1, 2].map((x) => ({ type: 'switch' as const, dx: x, dy: 1, dir: 2 as const, recipe: null, open: false })), ...[0, 1, 2].map((x) => ({ type: 'conveyor' as const, dx: x, dy: 0, dir: 2 as const, recipe: null }))] };
-    return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8)];
+    return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8), this.displayBlueprint()];
   }
 
   showBlueprints() {
@@ -1000,6 +1003,7 @@ export class Hud {
   selectBuilding(b: Building | null) {
     this.selected = b;
     this.renderer.selected = b;
+    this.input.captureKeys = b?.type === 'terminal';
     this.renderer.selectedTile = null;
     if (b) this.showInfo(b);
     else {
@@ -1206,6 +1210,25 @@ export class Hud {
         .join('');
       const p = Math.round(this.sim.shipProgress() * 100);
       body = `<div class="lbl">${t('ship_progress')} ${p}%</div><div class="pbar big"><div class="pfill" style="width:${p}%"></div></div><div class="mrows">${parts}</div>`;
+    } else if (b.type === 'terminal') {
+      const cpu = this.sim.cpu(b);
+      const errs = this.sim.cpuErrorsOf(b);
+      const keys = ['1', '2', '3', 'C', '4', '5', '6', 'D', '7', '8', '9', 'E', 'A', '0', 'B', 'F'];
+      const state = errs.length ? `<span class="bad">${t('term_error')}</span>` : cpu?.halted ? `<span class="bad">${t('term_halted')}: ${cpu.halted}</span>` : b.run ? `<span class="okline">${t('term_running')}</span>` : t('term_paused');
+      const switches = this.sim.terminalSwitches(b);
+      const items: ItemId[] = ['copper_wire', 'iron_plate', 'copper_plate', 'glass', 'circuit', 'quartz'];
+      body = `<canvas class="term-screen" id="term-screen" width="${CHIP8_W * 4}" height="${CHIP8_H * 4}"></canvas>
+        <div class="lbl">${state}</div>
+        <div class="term-btns">
+          <button class="btn small ${b.run ? '' : 'primary'}" data-act="term-run">${b.run ? '⏸ ' + t('pause') : '▶ ' + t('term_start')}</button>
+          <button class="btn small" data-act="term-reset">${icon('rotate', 'sm')} ${t('term_reset')}</button>
+          <button class="btn small" data-act="term-edit">✎ ${t('term_program')}</button>
+        </div>
+        <div class="keypad">${keys.map((k) => `<button class="key" data-key="${parseInt(k, 16)}">${k}</button>`).join('')}</div>
+        <p class="save-hint">${t('term_keys_hint')}${switches.length ? ` · ${t('term_switches', { n: switches.length })}` : ''}</p>
+        <div class="dirs"><span class="lbl">${t('term_pixel_item')}</span>${items.map((k) => `<button class="chip ${(b.recipe ?? 'copper_wire') === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon xs')}</button>`).join('')}</div>
+        <p class="save-hint">${t('term_display_hint')}</p>
+        <button class="btn small" data-act="term-display">${icon('blueprint', 'sm')} ${t('term_display_bp')}</button>`;
     } else if (b.type === 'tunnel') {
       body = `${statusLine()}${dirPicker}`;
     } else if (def.kind === 'logic') {
@@ -1220,7 +1243,8 @@ export class Hud {
       } else if (b.type === 'switch') {
         body = `<div class="lbl">${b.open === false ? t('switch_off') : t('switch_on')}</div><div class="dirs"><span class="lbl">${t('switch_state')}</span><button class="chip ${b.open !== false ? 'active' : ''}" data-open="1">${t('switch_on')}</button><button class="chip ${b.open === false ? 'active' : ''}" data-open="0">${t('switch_off')}</button></div>
           <div class="dirs"><span class="lbl">${t('switch_pulse')}</span><button class="chip ${b.mode === 'pulse' ? 'active' : ''}" data-mode="pulse">${t('on')}</button><button class="chip ${b.mode !== 'pulse' ? 'active' : ''}" data-mode="hold">${t('off')}</button></div>
-          <p class="save-hint">${t('switch_hint')}</p>${dirPicker}`;
+          <p class="save-hint">${t('switch_hint')}</p>
+          ${st.buildings.some((tb) => tb.type === 'terminal' && this.sim.terminalSwitches(tb).some((x) => x.sw === b)) ? `<div class="dirs wrap"><span class="lbl">${t('switch_key')}</span>${[1, 2, 3, 0xc, 4, 5, 6, 0xd, 7, 8, 9, 0xe, 0xa, 0, 0xb, 0xf].map((k) => `<button class="chip ${b.threshold === k ? 'active' : ''}" data-threshold="${k}">${k.toString(16).toUpperCase()}</button>`).join('')}</div>` : ''}${dirPicker}`;
       }
       else if (b.type === 'valve') {
         const have = b.recipe ? (st.inventory[b.recipe as ItemId] ?? 0) : 0;
@@ -1232,6 +1256,100 @@ export class Hud {
       } else body = `${statusLine()}${dirPicker}`;
     } else body = dirPicker;
     return body;
+  }
+
+  /** 64x32 lamps: the display a terminal drives. */
+  private displayBlueprint(): Blueprint {
+    const items: Blueprint['items'] = [];
+    for (let y = 0; y < CHIP8_H; y++) for (let x = 0; x < CHIP8_W; x++) items.push({ type: 'lamp', dx: x, dy: y, dir: 0, recipe: null, mode: 'hold' });
+    return { name: `${t('preset_display', { w: CHIP8_W, h: CHIP8_H })}`, w: CHIP8_W, h: CHIP8_H, items };
+  }
+
+  /** Draw the selected terminal's screen into the panel canvas (called from refresh). */
+  private drawTerminalScreen(b: Building) {
+    const canvas = this.info.querySelector('#term-screen') as HTMLCanvasElement | null;
+    const cpu = this.sim.cpu(b);
+    if (!canvas || !cpu) return;
+    const frame = this.sim.cpuFrameOf(b);
+    if ((canvas as unknown as { _f?: number })._f === frame) return;
+    (canvas as unknown as { _f?: number })._f = frame;
+    const c2 = canvas.getContext('2d')!;
+    c2.fillStyle = '#04141a';
+    c2.fillRect(0, 0, canvas.width, canvas.height);
+    c2.fillStyle = ITEMS[(b.recipe as ItemId) ?? 'copper_wire'].color;
+    const px = canvas.width / CHIP8_W, py = canvas.height / CHIP8_H;
+    for (let y = 0; y < CHIP8_H; y++) for (let x = 0; x < CHIP8_W; x++) if (cpu.display[y * CHIP8_W + x]) c2.fillRect(x * px, y * py, px - 0.5, py - 0.5);
+  }
+
+  private installTerminalKeys() {
+    const map: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 0xc, q: 4, w: 5, e: 6, r: 0xd, a: 7, s: 8, d: 9, f: 0xe, z: 0xa, y: 0xa, x: 0, c: 0xb, v: 0xf };
+    const handler = (down: boolean) => (e: KeyboardEvent) => {
+      const b = this.selected;
+      if (!b || b.type !== 'terminal') return;
+      const tag = (e.target as HTMLElement)?.tagName;
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      const k = map[e.key.toLowerCase()];
+      if (k === undefined) return;
+      e.preventDefault();
+      this.sim.terminalKey(b, k, down);
+    };
+    window.addEventListener('keydown', handler(true));
+    window.addEventListener('keyup', handler(false));
+    // on-screen keypad: press while held
+    const keyOf = (e: Event) => (e.target as HTMLElement).closest('.key') as HTMLElement | null;
+    this.info.addEventListener('pointerdown', (e) => {
+      const k = keyOf(e);
+      if (!k || !this.selected || this.selected.type !== 'terminal') return;
+      e.preventDefault();
+      this.sim.terminalKey(this.selected, Number(k.dataset.key), true);
+      k.classList.add('down');
+    });
+    const up = (e: Event) => {
+      const b = this.selected;
+      if (!b || b.type !== 'terminal') return;
+      this.info.querySelectorAll('.key.down').forEach((k) => {
+        k.classList.remove('down');
+        this.sim.terminalKey(b, Number((k as HTMLElement).dataset.key), false);
+      });
+      void e;
+    };
+    this.info.addEventListener('pointerup', up);
+    this.info.addEventListener('pointercancel', up);
+    this.info.addEventListener('pointerleave', up);
+  }
+
+  /** Program editor: assembly source, built-in programs, assemble & run. */
+  showProgramEditor(b: Building) {
+    const src = b.prog ?? CHIP8_PROGRAMS[0].source;
+    const errs = this.sim.cpuErrorsOf(b);
+    this.openModal(
+      `<h2>✎ ${t('term_program')}</h2>
+      <div class="chips" style="margin-bottom:8px">${CHIP8_PROGRAMS.map((p) => `<button class="chip" data-prog="${p.id}">${p.name}</button>`).join('')}<button class="chip" data-act="term-help">?</button></div>
+      <textarea id="prog-src" class="text-input code" rows="14" spellcheck="false">${src.replace(/</g, '&lt;')}</textarea>
+      <div class="asm-errors ${errs.length ? '' : 'hidden'}" id="asm-errors">${errs.slice(0, 6).map((e) => `<div>${e}</div>`).join('')}</div>
+      <div class="row2"><button class="btn" data-act="close">${t('cancel')}</button><button class="btn primary" data-act="term-assemble">▶ ${t('term_assemble')}</button></div>`,
+      (target) => {
+        const ta = this.modal.querySelector('#prog-src') as HTMLTextAreaElement;
+        if (target.dataset.prog) {
+          const p = CHIP8_PROGRAMS.find((x) => x.id === target.dataset.prog);
+          if (p) ta.value = p.source;
+        } else if (target.dataset.act === 'term-help') {
+          this.toast(t('term_help'), 9000);
+        } else if (target.dataset.act === 'term-assemble') {
+          const errors = this.sim.setProgram(b, ta.value);
+          const box = this.modal.querySelector('#asm-errors') as HTMLElement;
+          if (errors.length) {
+            box.innerHTML = errors.slice(0, 6).map((e) => `<div>${e}</div>`).join('');
+            box.classList.remove('hidden');
+            sfx.error();
+          } else {
+            this.closeModal();
+            sfx.mission();
+            this.showInfo(b);
+          }
+        }
+      },
+    );
   }
 
   showInfo(b: Building) {
@@ -1295,6 +1413,30 @@ export class Hud {
         b.open = target.dataset.open === '1';
         sfx.select();
         this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'term-run' && b.type === 'terminal') {
+        b.run = !b.run;
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'term-reset' && b.type === 'terminal') {
+        this.sim.resetTerminal(b);
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'term-edit' && b.type === 'terminal') {
+        this.showProgramEditor(b);
+        return;
+      }
+      if (target.dataset.act === 'term-display' && b.type === 'terminal') {
+        const bp = this.displayBlueprint();
+        this.clipboard = bp;
+        this.input.setTool({ kind: 'paste', bp });
+        const r = this.sim.terminalDisplayRect(b);
+        this.toast(t('term_display_paste', { x: r.x, y: r.y }), 5000);
         return;
       }
       if (target.dataset.act === 'clear' && b.type === 'lamp') {
@@ -2032,10 +2174,11 @@ export class Hud {
       if (!this.sim.state.buildings.includes(this.selected)) this.selectBuilding(null);
       else {
         const bodyEl = this.info.querySelector('.info-body');
-        if (bodyEl) {
+        if (bodyEl && this.selected.type !== 'terminal') {
           const html = this.infoBody(this.selected);
           if (bodyEl.innerHTML !== html) bodyEl.innerHTML = html;
         }
+        if (this.selected.type === 'terminal') this.drawTerminalScreen(this.selected);
       }
     }
     if (this.minimapOpen) this.renderer.drawMinimap(this.minimap);

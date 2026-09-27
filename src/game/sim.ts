@@ -31,7 +31,9 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { ORE_PER_TILE } from './data';
+import { ORE_PER_TILE, TERMINAL_DISPLAY, TERMINAL_HZ } from './data';
+import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
+import { CHIP8_PROGRAMS } from './chip8programs';
 
 export type SimEvent =
   | { type: 'mission'; index: number }
@@ -45,7 +47,8 @@ export type SimEvent =
   | { type: 'storm'; on: boolean }
   | { type: 'event'; event: GameEvent }
   | { type: 'event_done'; event: GameEvent; choice: 'a' | 'b' }
-  | { type: 'meteor'; x: number; y: number };
+  | { type: 'meteor'; x: number; y: number }
+  | { type: 'beep'; b: Building };
 
 export interface Problem {
   building: Building;
@@ -270,6 +273,10 @@ export class Sim {
       }
       if (type === 'lamp') b.mode = 'hold';
       if (type === 'switch') b.open = true;
+      if (type === 'terminal') {
+        b.run = false;
+        b.recipe = 'copper_wire';
+      }
     }
     this.state.buildings.push(b);
     this.index(b);
@@ -340,6 +347,11 @@ export class Sim {
   remove(b: Building) {
     if (b.type === 'core') return;
     const def = BUILDINGS[b.type];
+    if (b.type === 'terminal') {
+      this.clearTerminalDisplay(b);
+      this.cpus.delete(b.id);
+      this.cpuErrors.delete(b.id);
+    }
     // full refund incl. buffered items (player friendly)
     if (!this.creative) for (const k in def.cost) this.addInv(k as ItemId, def.cost[k as ItemId]!);
     const dump = (rec?: Partial<Record<ItemId, number>>) => {
@@ -394,6 +406,7 @@ export class Sim {
       case 'logic':
         if (b.type === 'mixer') return from === ((b.dir + 1) & 3) || from === ((b.dir + 3) & 3);
         if (b.type === 'lamp') return ((from + 2) & 3) !== b.dir; // a pixel takes input from every side except its front
+        if (b.type === 'terminal') return false;
         return from === b.dir;
     }
   }
@@ -476,6 +489,7 @@ export class Sim {
           buf.push(item);
           return true;
         }
+        if (b.type === 'terminal') return false;
         if (b.type === 'lamp') {
           if (((from + 2) & 3) === b.dir) return false;
           if (b.recipe && b.recipe !== item) return false; // optional colour filter
@@ -601,6 +615,9 @@ export class Sim {
         case 'generator':
           if (b.fuelSeconds! > 0) b.fuelSeconds = Math.max(0, b.fuelSeconds! - dt);
           break;
+        case 'terminal':
+          this.tickTerminal(b, dt, ratio);
+          break;
       }
     }
     this.tickWorld(dt);
@@ -664,6 +681,172 @@ export class Sim {
         this.events.push({ type: 'contract_offer', contract: c });
       }
     }
+  }
+
+  // ---------- KORA Terminal (CHIP-8) ----------
+
+  private cpus = new Map<number, Chip8>();
+  private cpuErrors = new Map<number, string[]>();
+  private cpuBeeping = new Set<number>();
+  private cpuFrame = new Map<number, number>(); // display version per terminal (renderer cache key)
+  private cpuStale = new Map<number, number>(); // ticks a dirty frame has waited for a sync point
+  private switchWas = new Map<number, boolean>(); // rim switch state last tick (keys act on transitions only)
+
+  /** The running CPU of a terminal, assembled from its program on first use. Null when the program has errors. */
+  cpu(b: Building): Chip8 | null {
+    const c = this.cpus.get(b.id);
+    if (c) return c;
+    if (this.cpuErrors.has(b.id)) return null;
+    const src = b.prog ?? CHIP8_PROGRAMS[0].source;
+    const asm = assemble(src);
+    if (asm.errors.length || !asm.rom.length) {
+      this.cpuErrors.set(b.id, asm.errors.length ? asm.errors : ['empty program']);
+      return null;
+    }
+    const cpu = new Chip8(asm.rom);
+    this.cpus.set(b.id, cpu);
+    return cpu;
+  }
+
+  cpuErrorsOf(b: Building): string[] {
+    return this.cpuErrors.get(b.id) ?? [];
+  }
+
+  cpuFrameOf(b: Building): number {
+    return this.cpuFrame.get(b.id) ?? 0;
+  }
+
+  /** Load a new program (assembly source or hex). Returns assembler errors; on success the terminal restarts. */
+  setProgram(b: Building, source: string): string[] {
+    b.prog = source;
+    this.cpus.delete(b.id);
+    this.cpuErrors.delete(b.id);
+    const cpu = this.cpu(b);
+    if (!cpu) return this.cpuErrorsOf(b);
+    b.run = true;
+    this.clearTerminalDisplay(b);
+    return [];
+  }
+
+  resetTerminal(b: Building) {
+    const cpu = this.cpu(b);
+    cpu?.reset();
+    this.clearTerminalDisplay(b);
+    if (cpu) this.pushDisplay(b, cpu, true);
+  }
+
+  terminalKey(b: Building, key: number, down: boolean) {
+    const cpu = this.cpu(b);
+    if (!cpu) return;
+    if (down) cpu.keyDown(key);
+    else cpu.keyUp(key);
+  }
+
+  /** Switches touching the terminal's rim act as keys: clockwise from the top-left corner = 1,2,3,...,C; a switch with a `threshold` uses that key. */
+  terminalSwitches(b: Building): { sw: Building; key: number }[] {
+    const s = BUILDINGS[b.type].size;
+    const ring: { x: number; y: number }[] = [];
+    for (let x = b.x - 1; x <= b.x + s; x++) ring.push({ x, y: b.y - 1 });
+    for (let y = b.y; y <= b.y + s; y++) ring.push({ x: b.x + s, y });
+    for (let x = b.x + s - 1; x >= b.x - 1; x--) ring.push({ x, y: b.y + s });
+    for (let y = b.y + s - 1; y >= b.y; y--) ring.push({ x: b.x - 1, y });
+    const out: { sw: Building; key: number }[] = [];
+    let i = 0;
+    for (const t of ring) {
+      const sw = this.at(t.x, t.y);
+      if (sw?.type === 'switch') {
+        out.push({ sw, key: sw.threshold !== undefined && sw.threshold >= 0 && sw.threshold <= 15 ? sw.threshold : (i + 1) & 15 });
+        i++;
+      }
+    }
+    return out;
+  }
+
+  /** The 64x32 tile region right of the terminal where lamps become pixels. */
+  terminalDisplayRect(b: Building): { x: number; y: number; w: number; h: number } {
+    return { x: b.x + TERMINAL_DISPLAY.dx, y: b.y + TERMINAL_DISPLAY.dy, w: CHIP8_W, h: CHIP8_H };
+  }
+
+  private clearTerminalDisplay(b: Building) {
+    const r = this.terminalDisplayRect(b);
+    for (let y = 0; y < r.h; y++)
+      for (let x = 0; x < r.w; x++) {
+        const l = this.at(r.x + x, r.y + y);
+        if (l?.type === 'lamp') l.output = {};
+      }
+  }
+
+  private pushDisplay(b: Building, cpu: Chip8, force = false) {
+    if (!cpu.dirty && !force) return;
+    // wait for the program's own frame boundary (timer read / key wait) so half-drawn frames never reach the lamps
+    const stale = (this.cpuStale.get(b.id) ?? 0) + 1;
+    if (!force && !cpu.syncHint && !cpu.halted && cpu.waitingKey < 0 && stale < 8) {
+      this.cpuStale.set(b.id, stale);
+      return;
+    }
+    this.cpuStale.set(b.id, 0);
+    cpu.syncHint = false;
+    cpu.dirty = false;
+    this.cpuFrame.set(b.id, (this.cpuFrame.get(b.id) ?? 0) + 1);
+    const r = this.terminalDisplayRect(b);
+    const item = (b.recipe as ItemId | null) ?? 'copper_wire';
+    for (let y = 0; y < r.h; y++)
+      for (let x = 0; x < r.w; x++) {
+        const l = this.at(r.x + x, r.y + y);
+        if (l?.type !== 'lamp') continue;
+        l.mode = 'hold';
+        const on = cpu.display[y * CHIP8_W + x] === 1;
+        const has = !!Object.keys(l.output ?? {}).length;
+        if (on && !has) l.output = { [item]: 1 };
+        else if (!on && has) l.output = {};
+        else if (on && has && !(item in l.output!)) l.output = { [item]: 1 };
+      }
+  }
+
+  private tickTerminal(b: Building, dt: number, ratio: number) {
+    const cpu = this.cpu(b);
+    if (!cpu) {
+      b.status = 'no_recipe';
+      return;
+    }
+    // rim switches are keys: only their transitions count, so keyboard and keypad can share the same keys
+    for (const { sw, key } of this.terminalSwitches(b)) {
+      const down = sw.open !== false;
+      const was = this.switchWas.get(sw.id);
+      if (was === undefined || was !== down) {
+        this.switchWas.set(sw.id, down);
+        if (was !== undefined) {
+          if (down) cpu.keyDown(key);
+          else cpu.keyUp(key);
+        }
+      }
+    }
+    if (!b.run) {
+      b.status = 'idle';
+      return;
+    }
+    if (cpu.halted) {
+      b.status = 'blocked';
+      return;
+    }
+    b.status = ratio < 1 ? 'low_power' : 'ok';
+    b.working = true;
+    // instructions scale with power; timers run at 60 Hz
+    b.progress = (b.progress ?? 0) + dt * TERMINAL_HZ * ratio;
+    const n = Math.floor(b.progress);
+    b.progress -= n;
+    cpu.run(n);
+    b.rateT = (b.rateT ?? 0) + dt * 60 * Math.max(0.25, ratio);
+    let beep = false;
+    while (b.rateT >= 1) {
+      b.rateT -= 1;
+      if (cpu.tickTimers()) beep = true;
+    }
+    if (beep && !this.cpuBeeping.has(b.id)) {
+      this.cpuBeeping.add(b.id);
+      this.events.push({ type: 'beep', b });
+    } else if (!beep) this.cpuBeeping.delete(b.id);
+    this.pushDisplay(b, cpu);
   }
 
   // ---------- Events ----------
@@ -1012,6 +1195,7 @@ export class Sim {
       if (key && b.mode === 'pass' && this.pushDir(b, key, b.dir)) b.output = {};
       return;
     }
+    if (b.type === 'terminal') return;
     if (b.type === 'switch') {
       b.status = b.open === false ? 'closed' : 'ok';
       if (key && b.open !== false && this.pushDir(b, key, b.dir)) {

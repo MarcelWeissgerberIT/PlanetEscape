@@ -25,6 +25,8 @@ export class Chip8 {
   keys = new Uint8Array(16);
   waitingKey = -1; // register waiting for a key press (Fx0A), -1 = none
   dirty = true;
+  /** set when the program reads the delay timer or waits for a key: a good moment to show the frame (no tearing) */
+  syncHint = false;
   halted: string | null = null; // error text when the program crashed
   cycles = 0;
   private rom: Uint8Array;
@@ -49,6 +51,7 @@ export class Chip8 {
     this.keys.fill(0);
     this.waitingKey = -1;
     this.dirty = true;
+    this.syncHint = true;
     this.halted = null;
     this.cycles = 0;
   }
@@ -94,6 +97,17 @@ export class Chip8 {
     }
   }
 
+  /** Like run, but stops early right after a frame sync point (timer read) once at least `min` instructions ran. */
+  runFrame(n: number, min: number) {
+    for (let c = 0; c < n; c++) {
+      if (this.halted || this.waitingKey >= 0) return c;
+      this.syncHint = false;
+      this.step();
+      if (this.syncHint && c >= min) return c + 1;
+    }
+    return n;
+  }
+
   step() {
     const pc = this.pc;
     if (pc < 0 || pc > 4094) {
@@ -110,6 +124,7 @@ export class Chip8 {
         if (op === 0x00e0) {
           this.display.fill(0);
           this.dirty = true;
+          this.syncHint = false;
         } else if (op === 0x00ee) {
           if (!this.stack.length) {
             this.halted = 'RET with empty stack';
@@ -222,6 +237,7 @@ export class Chip8 {
           }
         }
         this.dirty = true;
+        this.syncHint = false;
         break;
       }
       case 0xe:
@@ -233,8 +249,14 @@ export class Chip8 {
         break;
       case 0xf:
         switch (nn) {
-          case 0x07: v[x] = this.dt; break;
-          case 0x0a: this.waitingKey = x; break;
+          case 0x07:
+            v[x] = this.dt;
+            this.syncHint = true;
+            break;
+          case 0x0a:
+            this.waitingKey = x;
+            this.syncHint = true;
+            break;
           case 0x15: this.dt = v[x]; break;
           case 0x18: this.st = v[x]; break;
           case 0x1e: this.i = (this.i + v[x]) & 0xfff; break;

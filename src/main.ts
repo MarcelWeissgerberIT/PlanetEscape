@@ -172,6 +172,7 @@ function frame(now: number) {
         case 'event': hud.eventOffer(ev.event); break;
         case 'event_done': hud.eventDone(ev.event, ev.choice, sim.state.time >= ev.event.until); break;
         case 'meteor': hud.meteorLanded(ev.x, ev.y); break;
+        case 'beep': sfx.beep(); break;
       }
     }
     sim.events.length = 0;

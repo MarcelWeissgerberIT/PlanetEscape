@@ -176,6 +176,7 @@ export function setActivity(working: number) {
 }
 
 export const sfx = {
+  beep: () => tone(440, 0.09, 'square', 0.05),
   place: () => tone(520, 0.08, 'square', 0.05, 120),
   belt: () => tone(380, 0.05, 'triangle', 0.04, 60),
   remove: () => tone(300, 0.12, 'sawtooth', 0.05, -150),

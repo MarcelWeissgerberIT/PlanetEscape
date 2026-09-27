@@ -49,7 +49,8 @@ export type BuildingId =
   | 'mixer'
   | 'valve'
   | 'lamp'
-  | 'switch';
+  | 'switch'
+  | 'terminal';
 
 export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter' | 'tunnel' | 'logic';
 
@@ -116,6 +117,9 @@ export interface Building {
   mode?: 'hold' | 'pass' | 'pulse'; // lamp: hold keeps the item lit, pass forwards it; switch: pulse closes itself after one item
   ratio?: number;
   open?: boolean;
+  // terminal: program source and run flag (the CPU itself lives in the Sim and is rebuilt on load)
+  prog?: string;
+  run?: boolean;
   // tunnel: id of the paired tunnel (entrance <-> exit); `exit` marks the exit end
   pair?: number | null;
   exit?: boolean;

@@ -1,6 +1,7 @@
 import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
 import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
+import { CHIP8_H, CHIP8_W } from './chip8';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -56,6 +57,7 @@ export class Renderer {
   private miniT = 0;
   /** Low-resolution pre-rendered terrain used when zoomed out (large maps: one drawImage instead of thousands). */
   private terrainCache: HTMLCanvasElement | null = null;
+  private screens = new Map<number, { frame: number; canvas: HTMLCanvasElement }>();
   private cacheComplete = false;
   private cacheT = 0;
   private dirtyTiles: { x: number; y: number }[] = [];
@@ -666,6 +668,51 @@ export class Renderer {
       else if (b.type === 'assembler' || b.type === 'fabricator' || b.type === 'printer') this.animSparks(b, cx, cy);
     }
 
+    if (b.type === 'terminal') {
+      // the terminal shows its own 64x32 screen; the lamp display region is outlined in scan mode
+      const cpu = this.sim.cpu(b);
+      const frame = this.sim.cpuFrameOf(b);
+      let sc = this.screens.get(b.id);
+      if (!sc) {
+        const canvas = document.createElement('canvas');
+        canvas.width = CHIP8_W;
+        canvas.height = CHIP8_H;
+        sc = { frame: -1, canvas };
+        this.screens.set(b.id, sc);
+      }
+      if (cpu && sc.frame !== frame) {
+        sc.frame = frame;
+        const c2 = sc.canvas.getContext('2d')!;
+        const img = c2.createImageData(CHIP8_W, CHIP8_H);
+        const col = ITEMS[(b.recipe as ItemId) ?? 'copper_wire'].color;
+        const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(col);
+        const [cr, cg, cb] = m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [34, 211, 238];
+        for (let i = 0; i < CHIP8_W * CHIP8_H; i++) {
+          const on = cpu.display[i];
+          img.data[i * 4] = on ? cr : 4;
+          img.data[i * 4 + 1] = on ? cg : 20;
+          img.data[i * 4 + 2] = on ? cb : 26;
+          img.data[i * 4 + 3] = 255;
+        }
+        c2.putImageData(img, 0, 0);
+      }
+      const sx = b.x * TILE + sz * 0.135, sy = b.y * TILE + sz * 0.135, sw = sz * 0.73, sh = sz * 0.43;
+      ctx.imageSmoothingEnabled = false;
+      ctx.drawImage(sc.canvas, sx, sy, sw, sh);
+      ctx.imageSmoothingEnabled = true;
+      if (b.run && !cpu?.halted) this.animGlow(b.x * TILE + sz * 0.83, b.y * TILE + sz * 0.18, 5, '#34d399');
+      if (cpu?.halted) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, '!', '#ef4444');
+      if (this.overlay || this.selected === b) {
+        const r = this.sim.terminalDisplayRect(b);
+        ctx.strokeStyle = 'rgba(34,211,238,0.7)';
+        ctx.lineWidth = 2 / Math.max(0.5, this.cam.zoom);
+        ctx.setLineDash([10, 6]);
+        ctx.strokeRect(r.x * TILE, r.y * TILE, r.w * TILE, r.h * TILE);
+        ctx.setLineDash([]);
+        this.drawTag(r.x * TILE + (r.w * TILE) / 2, r.y * TILE - 6, `${CHIP8_W}×${CHIP8_H} display`, '#22d3ee');
+      }
+      return;
+    }
     if (b.type === 'lamp') {
       // pixel: glow in the colour of the item it holds
       const item = this.sim.lampItem(b);
@@ -997,7 +1044,7 @@ export class Renderer {
       if (b.type === 'miner') text += `  ${this.sim.oreLeft(b.x, b.y)}`;
       if (b.type === 'storage') text = String(Object.values(b.store ?? {}).reduce((a, c) => a + (c ?? 0), 0));
       if (b.type === 'generator') text = `${Math.ceil(b.fuelSeconds ?? 0)}s`;
-      if (b.type === 'lamp' || b.type === 'switch') continue;
+      if (b.type === 'lamp' || b.type === 'switch' || b.type === 'terminal') continue;
       if (def.kind === 'logic') {
         item = (b.type === 'sorter' || b.type === 'valve') && b.recipe ? (b.recipe as ItemId) : null;
         if (b.type === 'sorter') text = item ? '← ' : '?';

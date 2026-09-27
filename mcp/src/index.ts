@@ -149,7 +149,7 @@ function depositClusters() {
 }
 
 const TERRAIN_CHAR: Record<TerrainId, string> = { ground: '.', rock: '#', iron_ore: 'I', copper_ore: 'C', quartz: 'Q', ice: 'W', oil: 'O' };
-const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L', lamp: 'o', switch: '=' };
+const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L', lamp: 'o', switch: '=', terminal: 'Z' };
 const ARROWS = ['^', '>', 'v', '<'];
 
 function asciiMap(x0: number, y0: number, w: number, h: number): string {
@@ -168,12 +168,23 @@ function asciiMap(x0: number, y0: number, w: number, h: number): string {
   return rows.join('\n');
 }
 
+function screenText(cpu: { display: Uint8Array }): string {
+  const rows: string[] = [];
+  for (let y = 0; y < 32; y++) {
+    let r = '';
+    for (let x = 0; x < 64; x++) r += cpu.display[y * 64 + x] ? '#' : '.';
+    rows.push(r);
+  }
+  return rows.join('\n');
+}
+
 function describeBuilding(b: Building) {
   return {
     id: b.id, type: b.type, x: b.x, y: b.y, dir: b.dir, size: BUILDINGS[b.type].size, status: b.status ?? 'ok',
     recipe: b.recipe ?? undefined, ratePerMin: b.rate !== undefined ? Math.round(b.rate * 10) / 10 : undefined,
     input: b.input, output: b.output, store: b.store, missing: b.missing, threshold: b.threshold, ratio: b.ratio, pair: b.pair ?? undefined,
     items: b.items?.length,
+    terminal: b.type === 'terminal' ? { running: !!b.run, halted: sim.cpu(b)?.halted ?? null, errors: sim.cpuErrorsOf(b), screen: sim.cpu(b) ? screenText(sim.cpu(b)!) : undefined } : undefined,
   };
 }
 
@@ -322,12 +333,16 @@ server.registerTool(
       mode: z.enum(['hold', 'pass']).optional().describe('lamp: hold keeps the item lit, pass forwards it'),
       open: z.boolean().optional().describe('switch: true lets items through'),
       clear: z.boolean().optional().describe('lamp: remove the held item'),
+      program: z.string().optional().describe('terminal: CHIP-8 assembly source (or hex bytes) to load and run'),
+      run: z.boolean().optional().describe('terminal: start/stop the program'),
+      reset: z.boolean().optional().describe('terminal: restart the program'),
+      key: z.number().int().min(0).max(15).optional().describe('terminal: press this key for ~0.5 s of game time'),
       accept_contract: z.number().int().optional(),
       decline_contract: z.number().int().optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
-  async ({ id, dir, recipe, filter, threshold, ratio, mode, open, clear, accept_contract, decline_contract }) => {
+  async ({ id, dir, recipe, filter, threshold, ratio, mode, open, clear, program, run, reset, key, accept_contract, decline_contract }) => {
     if (accept_contract !== undefined || decline_contract !== undefined) {
       const cid = accept_contract ?? decline_contract!;
       const c = sim.state.contracts.find((x) => x.id === cid);
@@ -342,6 +357,19 @@ server.registerTool(
     if (mode !== undefined) b.mode = mode;
     if (open !== undefined) b.open = open;
     if (clear && b.type === 'lamp') sim.clearLamp(b);
+    if (b.type === 'terminal') {
+      if (program !== undefined) {
+        const errs = sim.setProgram(b, program);
+        if (errs.length) return fail(`assembler: ${errs.slice(0, 5).join('; ')}`);
+      }
+      if (run !== undefined) b.run = run;
+      if (reset) sim.resetTerminal(b);
+      if (key !== undefined) {
+        sim.terminalKey(b, key, true);
+        for (let i = 0; i < 15; i++) sim.tick(1 / 30);
+        sim.terminalKey(b, key, false);
+      }
+    }
     if (recipe !== undefined) {
       if (!RECIPE_BY_ID[recipe]) return fail(`unknown recipe ${recipe}`);
       sim.setRecipe(b, recipe);

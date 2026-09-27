@@ -57,6 +57,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   // display & control elements: a lamp is one pixel, a switch is a hand-operated gate
   lamp: { id: 'lamp', kind: 'logic', size: 1, cost: { iron_plate: 2, copper_wire: 1 }, power: 0, rotatable: true },
   switch: { id: 'switch', kind: 'logic', size: 1, cost: { iron_plate: 3 }, power: 0, rotatable: true },
+  // an 8-bit computer (CHIP-8): drives a 64x32 lamp display to its right, reads switches on its rim as keys
+  terminal: { id: 'terminal', kind: 'logic', size: 2, cost: { machine_part: 10, circuit: 8, glass: 4 }, power: 6, rotatable: false },
 };
 
 export const MIXER_RATIOS: [number, number][] = [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]];
@@ -80,6 +82,7 @@ export const BUILD_ORDER: BuildingId[] = [
   'valve',
   'lamp',
   'switch',
+  'terminal',
   'refinery',
   'generator',
   'fabricator',
@@ -130,7 +133,7 @@ export const MISSIONS: MissionDef[] = [
   { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
   { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'switch'], unlockRecipes: ['steel_frame'] },
   { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: [], unlockRecipes: ['circuit', 'glass'] },
-  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
+  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
   { id: 'm7', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
 ];
@@ -178,6 +181,8 @@ export const EVENT_DECIDE_SECONDS = 90;
 export const EVENT_MIN_MISSION = 2;
 export const METEOR_ORE: [number, number] = [140, 260];
 export const BOOST_SECONDS = 120;
+export const TERMINAL_HZ = 600; // CHIP-8 instructions per second at full power
+export const TERMINAL_DISPLAY = { dx: 3, dy: 0, w: 64, h: 32 }; // lamp display region relative to the terminal
 export const BOOST_FACTOR = 1.5;
 export const HARD_ORE_FACTOR = 0.6;
 export const HARD_STORM_FACTOR = 0.6;

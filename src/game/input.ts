@@ -49,6 +49,8 @@ interface PointerInfo {
 export class Input {
   tool: Tool = { kind: 'none' };
   dir: Dir = 1;
+  /** true while a terminal is selected: the keyboard belongs to the program, not to the shortcuts */
+  captureKeys = false;
   private pointers = new Map<number, PointerInfo>();
   private dragging = false;
   private layingBelts = false;
@@ -113,7 +115,8 @@ export class Input {
   }
 
   private onKey = (e: KeyboardEvent) => {
-    if ((e.target as HTMLElement)?.tagName === 'INPUT') return;
+    if ((e.target as HTMLElement)?.tagName === 'INPUT' || (e.target as HTMLElement)?.tagName === 'TEXTAREA') return;
+    if (this.captureKeys && e.key.toLowerCase() !== 'escape') return;
     switch (e.key.toLowerCase()) {
       case 'r':
         this.cb.onRotateKey();
