@@ -723,6 +723,12 @@ export class Renderer {
         ctx.strokeRect(r.x * TILE, r.y * TILE, r.w * TILE, r.h * TILE);
         ctx.setLineDash([]);
         this.drawTag(r.x * TILE + (r.w * TILE) / 2, r.y * TILE - 6, `${CHIP8_W}×${CHIP8_H} display`, '#22d3ee');
+        const tr = this.sim.terminalTraceRect(b);
+        ctx.strokeStyle = 'rgba(245,158,11,0.7)';
+        ctx.setLineDash([10, 6]);
+        ctx.strokeRect(tr.x * TILE, tr.y * TILE, tr.w * TILE, tr.h * TILE);
+        ctx.setLineDash([]);
+        this.drawTag(tr.x * TILE + (tr.w * TILE) / 2, tr.y * TILE - 6, 'PC · OP · I · V0…VF', '#f59e0b');
       }
       return;
     }

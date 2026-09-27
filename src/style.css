@@ -474,3 +474,8 @@ textarea.text-input { resize: vertical; min-height: 110px; font-family: inherit;
 .term-parts .btn.small { margin: 0; }
 .arith-val { font-size: 14px; margin: 4px 0 6px; }
 .arith-val .num { font-size: 26px; font-variant-numeric: tabular-nums; color: var(--accent); }
+.cpu-state { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 11px; margin: 4px 0 8px; }
+.cpu-line { display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: baseline; }
+.cpu-line small, .cpu-regs small { color: var(--muted); margin-right: 3px; font-size: 9px; }
+.cpu-line .mn { color: var(--accent); font-weight: 700; }
+.cpu-regs { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px 6px; margin-top: 4px; color: #cbd5e1; }

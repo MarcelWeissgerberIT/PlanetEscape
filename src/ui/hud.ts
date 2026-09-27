@@ -11,7 +11,7 @@ import { hasSave, load as loadSave, lastDropped } from '../game/save';
 import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
-import { CHIP8_H, CHIP8_W } from '../game/chip8';
+import { CHIP8_H, CHIP8_W, disasm } from '../game/chip8';
 import { TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from '../game/data';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
@@ -1232,7 +1232,10 @@ export class Hud {
           <button class="btn small ${b.run ? '' : 'primary'}" data-act="term-run">${b.run ? '⏸ ' + t('pause') : '▶ ' + t('term_start')}</button>
           <button class="btn small" data-act="term-reset">${icon('rotate', 'sm')} ${t('term_reset')}</button>
           <button class="btn small" data-act="term-edit">✎ ${t('term_program')}</button>
+          <button class="btn small ${b.trace ? 'primary' : ''}" data-act="term-trace">${t('term_trace')}</button>
+          <button class="btn small" data-act="term-step" ${b.run ? 'disabled' : ''}>${t('term_step')}</button>
         </div>
+        <div class="cpu-state" id="cpu-state">${this.cpuStateHtml(b)}</div>
         <div class="keypad">${keys.map((k) => `<button class="key" data-key="${parseInt(k, 16)}">${k}</button>`).join('')}</div>
         <p class="save-hint">${t('term_keys_hint')}${switches.length ? ` · ${t('term_switches', { n: switches.length })}` : ''}</p>
         <div class="dirs"><span class="lbl">${t('term_pixel_item')}</span>${items.map((k) => `<button class="chip ${(b.recipe ?? 'copper_wire') === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon xs')}</button>`).join('')}</div>
@@ -1280,6 +1283,16 @@ export class Hud {
     const items: Blueprint['items'] = [];
     for (let y = 0; y < CHIP8_H; y++) for (let x = 0; x < CHIP8_W; x++) items.push({ type: 'lamp', dx: x, dy: y, dir: 0, recipe: null, mode: 'hold' });
     return { name: `${t('preset_display', { w: CHIP8_W, h: CHIP8_H })}`, w: CHIP8_W, h: CHIP8_H, items };
+  }
+
+  /** PC, current instruction and registers of a terminal's CPU. */
+  private cpuStateHtml(b: Building): string {
+    const cpu = this.sim.cpu(b);
+    if (!cpu) return '';
+    const op = (cpu.mem[cpu.pc] << 8) | cpu.mem[cpu.pc + 1];
+    const hx = (v: number, w: number) => v.toString(16).toUpperCase().padStart(w, '0');
+    const regs = Array.from(cpu.v).map((v, i) => `<span><small>V${i.toString(16).toUpperCase()}</small>${hx(v, 2)}</span>`).join('');
+    return `<div class="cpu-line"><span><small>PC</small>${hx(cpu.pc, 3)}</span><span><small>OP</small>${hx(op, 4)}</span><span class="mn">${disasm(op)}</span><span><small>I</small>${hx(cpu.i, 3)}</span><span><small>DT</small>${cpu.dt}</span><span><small>${t('term_cycles')}</small>${cpu.cycles}</span></div><div class="cpu-regs">${regs}</div>`;
   }
 
   /** Draw the selected terminal's screen into the panel canvas (called from refresh). */
@@ -1454,6 +1467,19 @@ export class Hud {
         b.value = Number(target.dataset.value);
         sfx.select();
         this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'term-trace' && b.type === 'terminal') {
+        b.trace = !b.trace;
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'term-step' && b.type === 'terminal') {
+        this.sim.stepTerminal(b);
+        sfx.select();
+        const el = this.info.querySelector('#cpu-state');
+        if (el) el.innerHTML = this.cpuStateHtml(b);
         return;
       }
       if (target.dataset.act === 'term-run' && b.type === 'terminal') {
@@ -2220,7 +2246,14 @@ export class Hud {
           const html = this.infoBody(this.selected);
           if (bodyEl.innerHTML !== html) bodyEl.innerHTML = html;
         }
-        if (this.selected.type === 'terminal') this.drawTerminalScreen(this.selected);
+        if (this.selected.type === 'terminal') {
+          this.drawTerminalScreen(this.selected);
+          const el = this.info.querySelector('#cpu-state');
+          if (el) {
+            const html = this.cpuStateHtml(this.selected);
+            if (el.innerHTML !== html) el.innerHTML = html;
+          }
+        }
       }
     }
     if (this.minimapOpen) this.renderer.drawMinimap(this.minimap);

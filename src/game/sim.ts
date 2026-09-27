@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { ORE_PER_TILE, REGISTER_MAX, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_HZ, TERMINAL_RAM_BANKS } from './data';
+import { ORE_PER_TILE, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_HZ, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -520,8 +520,12 @@ export class Sim {
         }
         if (ARITH.has(b.type)) return this.acceptArith(b, item, from);
         if (b.type === 'switch' && from !== b.dir && from !== ((b.dir + 2) & 3)) {
-          // control pulse from a side: flips the switch (the pulse item is consumed)
-          b.open = b.open === false;
+          // control pulse from a side (the pulse item is consumed): in pulse mode it holds the switch open for a
+          // moment per item (a burst = a long press), otherwise it flips the switch
+          if (b.mode === 'pulse') {
+            b.timer = (b.timer ?? 0) + SWITCH_PULSE_SECONDS;
+            b.open = true;
+          } else b.open = b.open === false;
           return true;
         }
         if (b.type === 'lamp') {
@@ -762,7 +766,46 @@ export class Sim {
   }
 
   terminalHz(b: Building): number {
-    return Math.round((TERMINAL_HZ * (b.clock ?? 0)) / TERMINAL_CRYSTALS);
+    const full = Math.round((TERMINAL_HZ * (b.clock ?? 0)) / TERMINAL_CRYSTALS);
+    return b.trace ? Math.min(full, TERMINAL_TRACE_HZ) : full;
+  }
+
+  /** The 8x22 tile block above the terminal where lamps show PC, opcode, I and V0-VF as bits. */
+  terminalTraceRect(b: Building): { x: number; y: number; w: number; h: number } {
+    return { x: b.x + TERMINAL_TRACE.dx, y: b.y + TERMINAL_TRACE.dy, w: TERMINAL_TRACE.w, h: TERMINAL_TRACE.h };
+  }
+
+  /** Bytes shown in the trace block, top to bottom. */
+  traceBytes(cpu: Chip8): number[] {
+    const op = (cpu.mem[cpu.pc] << 8) | cpu.mem[cpu.pc + 1];
+    return [cpu.pc >> 8, cpu.pc & 0xff, op >> 8, op & 0xff, cpu.i >> 8, cpu.i & 0xff, ...Array.from(cpu.v)];
+  }
+
+  /** Execute exactly one instruction (trace mode, paused). */
+  stepTerminal(b: Building) {
+    const cpu = this.cpu(b);
+    if (!cpu || cpu.halted) return;
+    cpu.step();
+    this.pushDisplay(b, cpu, true);
+    this.pushTrace(b, cpu);
+  }
+
+  private pushTrace(b: Building, cpu: Chip8) {
+    const r = this.terminalTraceRect(b);
+    const item = (b.recipe as ItemId | null) ?? 'copper_wire';
+    const bytes = this.traceBytes(cpu);
+    for (let row = 0; row < r.h; row++) {
+      const v = bytes[row] ?? 0;
+      for (let col = 0; col < r.w; col++) {
+        const l = this.at(r.x + col, r.y + row);
+        if (l?.type !== 'lamp') continue;
+        l.mode = 'hold';
+        const on = (v >> (7 - col)) & 1;
+        const has = !!Object.keys(l.output ?? {}).length;
+        if (on && !has) l.output = { [item]: 1 };
+        else if (!on && has) l.output = {};
+      }
+    }
   }
 
   private applyMemory(b: Building) {
@@ -1010,7 +1053,8 @@ export class Sim {
       this.cpuBeeping.add(b.id);
       this.events.push({ type: 'beep', b });
     } else if (!beep) this.cpuBeeping.delete(b.id);
-    this.pushDisplay(b, cpu);
+    this.pushDisplay(b, cpu, !!b.trace && n > 0);
+    if (n > 0) this.pushTrace(b, cpu); // register lamps above the terminal follow every tick (a real CPU run to watch)
   }
 
   // ---------- Events ----------
@@ -1361,10 +1405,17 @@ export class Sim {
     }
     if (b.type === 'terminal' || ARITH.has(b.type)) return;
     if (b.type === 'switch') {
+      if ((b.timer ?? 0) > 0) {
+        b.timer = b.timer! - 1 / 30;
+        if (b.timer <= 0) {
+          b.timer = 0;
+          b.open = false;
+        }
+      }
       b.status = b.open === false ? 'closed' : 'ok';
       if (key && b.open !== false && this.pushDir(b, key, b.dir)) {
         b.output = {};
-        if (b.mode === 'pulse') b.open = false; // one item per tap
+        if (b.mode === 'pulse' && !(b.timer ?? 0)) b.open = false; // one item per tap
       }
       return;
     }

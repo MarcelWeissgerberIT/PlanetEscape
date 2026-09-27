@@ -297,6 +297,33 @@ export class Chip8 {
   }
 }
 
+/** Human readable form of one opcode (for the trace panel). */
+export function disasm(op: number): string {
+  const x = (op >> 8) & 0xf, y = (op >> 4) & 0xf, n = op & 0xf, nn = op & 0xff, nnn = op & 0xfff;
+  const h = (v: number, w = 2) => '0x' + v.toString(16).toUpperCase().padStart(w, '0');
+  const R = (r: number) => 'V' + r.toString(16).toUpperCase();
+  switch (op >> 12) {
+    case 0x0: return op === 0x00e0 ? 'CLS' : op === 0x00ee ? 'RET' : `SYS ${h(nnn, 3)}`;
+    case 0x1: return `JP ${h(nnn, 3)}`;
+    case 0x2: return `CALL ${h(nnn, 3)}`;
+    case 0x3: return `SE ${R(x)}, ${h(nn)}`;
+    case 0x4: return `SNE ${R(x)}, ${h(nn)}`;
+    case 0x5: return `SE ${R(x)}, ${R(y)}`;
+    case 0x6: return `LD ${R(x)}, ${h(nn)}`;
+    case 0x7: return `ADD ${R(x)}, ${h(nn)}`;
+    case 0x8: return `${['LD', 'OR', 'AND', 'XOR', 'ADD', 'SUB', 'SHR', 'SUBN', '?', '?', '?', '?', '?', '?', 'SHL', '?'][n]} ${R(x)}, ${R(y)}`;
+    case 0x9: return `SNE ${R(x)}, ${R(y)}`;
+    case 0xa: return `LD I, ${h(nnn, 3)}`;
+    case 0xb: return `JP V0, ${h(nnn, 3)}`;
+    case 0xc: return `RND ${R(x)}, ${h(nn)}`;
+    case 0xd: return `DRW ${R(x)}, ${R(y)}, ${n}`;
+    case 0xe: return nn === 0x9e ? `SKP ${R(x)}` : nn === 0xa1 ? `SKNP ${R(x)}` : '?';
+    case 0xf:
+      return nn === 0x07 ? `LD ${R(x)}, DT` : nn === 0x0a ? `LD ${R(x)}, K` : nn === 0x15 ? `LD DT, ${R(x)}` : nn === 0x18 ? `LD ST, ${R(x)}` : nn === 0x1e ? `ADD I, ${R(x)}` : nn === 0x29 ? `LD F, ${R(x)}` : nn === 0x33 ? `LD B, ${R(x)}` : nn === 0x55 ? `LD [I], ${R(x)}` : nn === 0x65 ? `LD ${R(x)}, [I]` : '?';
+  }
+  return '?';
+}
+
 // ---------- Assembler ----------
 
 export interface AsmResult {

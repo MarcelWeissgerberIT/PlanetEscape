@@ -125,6 +125,8 @@ export interface Building {
   // terminal: program source and run flag (the CPU itself lives in the Sim and is rebuilt on load)
   prog?: string;
   run?: boolean;
+  trace?: boolean; // terminal: slow clock (2 Hz) and register lamps above it
+  timer?: number; // switch in pulse mode: seconds it stays open (each side pulse adds 0.5 s)
   ram?: number; // installed memory banks (circuits delivered), 256 bytes each
   clock?: number; // installed oscillator crystals (quartz or glass delivered), 100 Hz each
   // arithmetic modules / register

@@ -337,6 +337,8 @@ server.registerTool(
       program: z.string().optional().describe('terminal: CHIP-8 assembly source (or hex bytes) to load and run'),
       run: z.boolean().optional().describe('terminal: start/stop the program'),
       reset: z.boolean().optional().describe('terminal: restart the program'),
+      trace: z.boolean().optional().describe('terminal: slow 2 Hz clock with register lamps'),
+      step: z.number().int().min(1).max(1000).optional().describe('terminal: execute N single instructions'),
       key: z.number().int().min(0).max(15).optional().describe('terminal: press this key for ~0.5 s of game time'),
       value: z.number().int().min(0).max(255).optional().describe('multiplier/divider: factor k (1-9); register: set the stored count'),
       accept_contract: z.number().int().optional(),
@@ -344,7 +346,7 @@ server.registerTool(
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
-  async ({ id, dir, recipe, filter, threshold, ratio, mode, open, clear, program, run, reset, key, value, accept_contract, decline_contract }) => {
+  async ({ id, dir, recipe, filter, threshold, ratio, mode, open, clear, program, run, reset, trace, step, key, value, accept_contract, decline_contract }) => {
     if (accept_contract !== undefined || decline_contract !== undefined) {
       const cid = accept_contract ?? decline_contract!;
       const c = sim.state.contracts.find((x) => x.id === cid);
@@ -367,6 +369,8 @@ server.registerTool(
       }
       if (run !== undefined) b.run = run;
       if (reset) sim.resetTerminal(b);
+      if (trace !== undefined) b.trace = trace;
+      if (step) for (let i = 0; i < step; i++) sim.stepTerminal(b);
       if (key !== undefined) {
         sim.terminalKey(b, key, true);
         for (let i = 0; i < 15; i++) sim.tick(1 / 30);
