@@ -54,6 +54,8 @@ const cbs = {
   onPaste: (bp: Blueprint, x: number, y: number) => hud.pasteBlueprint(bp, x, y),
   onTogglePause: () => hud.togglePause(),
   onCycleSpeed: () => hud.cycleSpeed(),
+  onBeltLine: (n: number) => hud.beltLineLaid(n),
+  onBeltTapHint: () => hud.toast(t('belt_tap_hint'), 2600),
 };
 
 let input = new Input(canvas, sim, renderer, cbs);

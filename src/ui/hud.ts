@@ -1535,6 +1535,19 @@ export class Hud {
       e.classList.remove('show');
       setTimeout(() => e.remove(), 300);
     }, ms);
+    return e;
+  }
+
+  /** After a belt line: a toast with an undo button, so accidental lines are one tap away from gone. */
+  beltLineLaid(n: number) {
+    this.toasts.querySelectorAll('.toast.action').forEach((x) => x.remove());
+    const e = this.toast(`${t('belts_laid', { n })} <button class="btn small" data-act="undo">${icon('undo', 'sm')} ${t('undo')}</button>`, 4500, 'action');
+    e.onclick = (ev) => {
+      if ((ev.target as HTMLElement).closest('[data-act="undo"]')) {
+        this.undo();
+        e.remove();
+      }
+    };
   }
 
   missionComplete(index: number) {

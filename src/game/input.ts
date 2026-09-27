@@ -27,6 +27,8 @@ export interface InputCallbacks {
   onPaste: (bp: Blueprint, x: number, y: number) => void;
   onTogglePause: () => void;
   onCycleSpeed: () => void;
+  onBeltLine: (placed: number) => void;
+  onBeltTapHint: () => void;
 }
 
 interface PointerInfo {
@@ -184,9 +186,15 @@ export class Input {
       this.renderer.selectRect = { x0: this.selStart[0], y0: this.selStart[1], x1: this.selStart[0], y1: this.selStart[1] };
     }
     if (this.tool.kind === 'build' && this.tool.type === 'conveyor' && e.button === 0) {
-      this.layingBelts = true;
-      this.beltStart = this.cam.screenToTile(e.clientX, e.clientY);
-      this.beltPath = [];
+      // a belt line starts on free ground or on a belt; dragging from a machine, deposit or rock pans instead
+      const [sx, sy] = this.cam.screenToTile(e.clientX, e.clientY);
+      const here = this.sim.at(sx, sy);
+      const canStart = this.sim.inBounds(sx, sy) && (here ? here.type === 'conveyor' : this.sim.terrain(sx, sy) === 'ground');
+      if (canStart) {
+        this.layingBelts = true;
+        this.beltStart = [sx, sy];
+        this.beltPath = [];
+      }
     }
     // long press in pan mode on touch = remove (mobile convenience)
     if (e.pointerType === 'touch' && this.tool.kind === 'none') {
@@ -242,7 +250,7 @@ export class Input {
       this.renderer.selectRect = { x0: this.selStart[0], y0: this.selStart[1], x1: this.hoverTile[0], y1: this.hoverTile[1] };
       return;
     }
-    const panButton = p.button === 1 || p.button === 2 || this.tool.kind === 'none' || (this.tool.kind === 'build' && this.tool.type !== 'conveyor') || this.tool.kind === 'delete' || this.tool.kind === 'paste';
+    const panButton = p.button === 1 || p.button === 2 || this.tool.kind === 'none' || (this.tool.kind === 'build' && (this.tool.type !== 'conveyor' || !this.layingBelts)) || this.tool.kind === 'delete' || this.tool.kind === 'paste';
     if (panButton && this.moved) {
       this.renderer.cancelPan();
       this.cam.x -= dx / this.cam.zoom;
@@ -351,6 +359,11 @@ export class Input {
           this.cb.onPlacementError(err);
           return;
         }
+        if (type === 'conveyor' && !this.hasNeighbour(px, py)) {
+          // a lone belt in the void is almost always an accident (tap to close a panel, tap to look)
+          this.cb.onBeltTapHint();
+          return;
+        }
         if (this.cb.onPlace(type, px, py, this.dir) && type !== 'conveyor' && this.lastPointerType === 'touch') {
           // on touch, leave build mode after placing a building so the next tap cannot build by accident
           this.setTool({ kind: 'none' });
@@ -358,6 +371,11 @@ export class Input {
         break;
       }
     }
+  }
+
+  /** Is there any building on one of the four neighbouring tiles? */
+  private hasNeighbour(x: number, y: number): boolean {
+    return !!(this.sim.at(x + 1, y) || this.sim.at(x - 1, y) || this.sim.at(x, y + 1) || this.sim.at(x, y - 1));
   }
 
   /** For multi-tile buildings the tapped tile becomes the centre-ish. */
@@ -422,7 +440,7 @@ export class Input {
       if (!here && !this.sim.placementError('conveyor', p.x, p.y) && this.cb.onPlace('conveyor', p.x, p.y, p.dir)) placed++;
     }
     if (path.length) this.dir = path[path.length - 1].dir;
-    void placed;
+    if (placed) this.cb.onBeltLine(placed);
   }
 
   updateGhost() {

@@ -430,3 +430,5 @@ label.btn { text-align: center; }
 .zbtn .ico.sm { width: 16px; height: 16px; }
 /* phones: the minimap sits below the stacked icon column instead of over it */
 @media (max-width: 900px) { .minimap-box { top: calc(var(--sat) + 312px); } }
+.toast.action { pointer-events: auto; display: flex; align-items: center; gap: 10px; }
+.toast.action .btn.small { margin: 0; padding: 5px 10px; font-size: 12px; }
