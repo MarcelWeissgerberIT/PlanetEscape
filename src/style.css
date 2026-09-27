@@ -1,7 +1,9 @@
 :root {
   --bg: #15171c;
-  --panel: rgba(22, 25, 32, 0.92);
-  --panel-2: rgba(38, 43, 54, 0.95);
+  --panel: rgba(16, 20, 28, 0.62);
+  --panel-2: rgba(40, 48, 62, 0.55);
+  --glass-line: rgba(34, 211, 238, 0.22);
+  --glass-glow: 0 0 0 1px rgba(34, 211, 238, 0.06) inset, 0 10px 30px rgba(0, 0, 0, 0.35);
   --line: rgba(255, 255, 255, 0.08);
   --text: #e6eaf0;
   --muted: #94a3b8;
@@ -151,8 +153,8 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 .info-panel {
   z-index: 30;
   position: absolute; left: 8px; right: 8px; bottom: calc(150px + var(--sab));
-  background: var(--panel); border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px;
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+  background: var(--panel); border: 1px solid var(--glass-line); border-radius: var(--radius); padding: 10px 12px;
+  backdrop-filter: blur(16px) saturate(1.2); -webkit-backdrop-filter: blur(16px) saturate(1.2); box-shadow: var(--glass-glow);
   max-height: 38vh; overflow-y: auto;
   animation: slideup 0.18s ease-out;
 }
@@ -185,9 +187,18 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 /* ---------- Modal ---------- */
 .modal { z-index: 50; position: absolute; inset: 0; background: rgba(0, 0, 0, 0.55); display: flex; align-items: center; justify-content: center; padding: calc(12px + var(--sat)) 12px calc(12px + var(--sab)); }
 .modal-card {
-  width: min(460px, 100%); max-height: 100%; overflow-y: auto; background: var(--panel); border: 1px solid var(--line);
-  border-radius: 18px; padding: 18px; backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
+  width: min(460px, 100%); max-height: 100%; overflow-y: auto; position: relative;
+  background: linear-gradient(160deg, rgba(20, 26, 36, 0.72), rgba(10, 14, 20, 0.66));
+  border: 1px solid var(--glass-line); box-shadow: var(--glass-glow), 0 0 40px rgba(34, 211, 238, 0.08);
+  border-radius: 18px; padding: 18px; backdrop-filter: blur(18px) saturate(1.2); -webkit-backdrop-filter: blur(18px) saturate(1.2);
 }
+/* holographic corner marks */
+.modal-card::before, .modal-card::after, .info-panel::before, .info-panel::after {
+  content: ''; position: absolute; width: 14px; height: 14px; pointer-events: none; border-color: var(--accent); border-style: solid; opacity: 0.7;
+}
+.modal-card::before, .info-panel::before { left: 6px; top: 6px; border-width: 2px 0 0 2px; border-radius: 4px 0 0 0; }
+.modal-card::after, .info-panel::after { right: 6px; bottom: 6px; border-width: 0 2px 2px 0; border-radius: 0 0 4px 0; }
+.modal { background: rgba(4, 8, 14, 0.42); backdrop-filter: blur(2px); -webkit-backdrop-filter: blur(2px); }
 .modal-card h2 { margin: 0 0 10px; font-size: 20px; }
 .modal-card p { color: var(--muted); font-size: 14px; line-height: 1.5; }
 .pre { white-space: pre-line; }
@@ -401,3 +412,19 @@ label.btn { text-align: center; }
 .power .ico.sm { color: var(--accent); }
 .power.low .ico.sm { color: #fbbf24; }
 .ai-link { text-decoration: none; text-align: center; font-size: 13px; color: var(--accent); }
+/* glass look for the remaining HUD surfaces */
+.kora-card, .inv-strip, .build-strip, .tool-col .iconbtn, .iconbtn, .pill, .power, .minimap-box, .toast {
+  border-color: var(--glass-line);
+  backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
+}
+.kora-card, .inv-strip, .minimap-box { box-shadow: var(--glass-glow); }
+.title-content { background: rgba(14, 17, 23, 0.58); border-color: var(--glass-line); box-shadow: var(--glass-glow); }
+.text-input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--glass-line); background: rgba(255, 255, 255, 0.06); color: var(--text); font: inherit; margin: 8px 0 12px; outline: none; }
+.text-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15); }
+.modal-card .row2 .btn { margin: 4px 0 0; }
+/* zoom buttons under the minimap */
+.minimap-box { display: flex; flex-direction: column; gap: 4px; }
+.zoom-bar { display: flex; gap: 4px; }
+.zbtn { flex: 1; height: 30px; border-radius: 8px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--glass-line); font-size: 18px; font-weight: 800; color: var(--accent); display: inline-flex; align-items: center; justify-content: center; }
+.zbtn:active { background: rgba(34, 211, 238, 0.25); }
+.zbtn .ico.sm { width: 16px; height: 16px; }

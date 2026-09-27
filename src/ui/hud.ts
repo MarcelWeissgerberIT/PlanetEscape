@@ -103,7 +103,18 @@ export class Hud {
     this.minimap = document.createElement('canvas');
     this.minimap.width = 160;
     this.minimap.height = 160;
-    this.minimapBox.append(this.minimap);
+    const zoomBar = el('div', 'zoom-bar', `<button class="zbtn" data-zoom="in" title="+">+</button><button class="zbtn" data-zoom="out" title="−">−</button><button class="zbtn" data-zoom="fit" title="⌖">${icon('center', 'sm')}</button>`);
+    zoomBar.onclick = (e) => {
+      const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+      if (!b) return;
+      e.stopPropagation();
+      const cam = this.renderer.cam;
+      if (b.dataset.zoom === 'in') cam.zoomAt(cam.width / 2, cam.height / 2, 1.3);
+      else if (b.dataset.zoom === 'out') cam.zoomAt(cam.width / 2, cam.height / 2, 1 / 1.3);
+      else this.cb.onCenter();
+      sfx.select();
+    };
+    this.minimapBox.append(this.minimap, zoomBar);
     this.toolChip = el('div', 'tool-chip hidden');
     this.root.append(this.title, this.story, this.top, this.bottom, this.info, this.floating, this.minimapBox, this.toolChip, this.modal, this.toasts);
     this.toolChip.onclick = (e) => {
@@ -126,6 +137,7 @@ export class Hud {
       this.showChain(img.dataset.item as ItemId);
     });
     this.minimapBox.addEventListener('pointerdown', (e) => {
+      if ((e.target as HTMLElement).closest('.zoom-bar')) return;
       const r = this.minimap.getBoundingClientRect();
       const tx = ((e.clientX - r.left) / r.width) * this.sim.state.width;
       const ty = ((e.clientY - r.top) / r.height) * this.sim.state.height;
@@ -230,7 +242,8 @@ export class Hud {
       };
       if (act === 'continue') this.cb.onContinue();
       else if (act === 'story') {
-        if (!hasSave() || confirm(t('new_game_confirm'))) this.cb.onNewGame(seedOf(), { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true });
+        const seed = seedOf();
+        void this.confirmNewGame().then((yes) => yes && this.cb.onNewGame(seed, { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true }));
       } else if (act === 'freeview') {
         this.titleView = 'free';
         this.renderTitle();
@@ -238,10 +251,17 @@ export class Hud {
         this.titleView = 'main';
         this.renderTitle();
       } else if (act === 'free') {
-        if (!hasSave() || confirm(t('new_game_confirm'))) this.cb.onNewGame(seedOf(), { ...this.freeOptions, mode: 'free' });
+        const seed = seedOf();
+        void this.confirmNewGame().then((yes) => yes && this.cb.onNewGame(seed, { ...this.freeOptions, mode: 'free' }));
       } else if (act === 'howto') this.showHowTo();
       else if (act === 'chapters') this.showChapters();
     };
+  }
+
+  /** Ask before a saved base is thrown away. */
+  private confirmNewGame(): Promise<boolean> {
+    if (!hasSave()) return Promise.resolve(true);
+    return this.confirmModal(t('new_game_confirm'), t('new_game'));
   }
 
   private starsSummary(): string {
@@ -269,10 +289,7 @@ export class Hud {
     }).join('');
     this.openModal(`<h2>${t('chapter_select')}</h2><div class="chapter-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
       const ch = Number(target.dataset.chapter);
-      if (ch && (!hasSave() || confirm(t('new_game_confirm')))) {
-        this.closeModal();
-        this.cb.onPlayChapter(ch);
-      }
+      if (ch) void this.confirmNewGame().then((yes) => yes && this.cb.onPlayChapter(ch));
     });
   }
 
@@ -744,12 +761,13 @@ export class Hud {
   saveClipboard() {
     const bp = this.tool.kind === 'paste' ? this.tool.bp : this.clipboard;
     if (!bp) return;
-    const name = prompt(t('bp_name'), bp.name || `${t('blueprint')} ${this.savedBlueprints().length + 1}`);
-    if (name === null) return;
-    const list = this.savedBlueprints().filter((b) => b.name !== name);
-    list.unshift({ ...bp, name });
-    this.storeBlueprints(list);
-    this.toast(`${icon('save', 'sm')} ${t('saved')}: ${name}`, 2000, 'success');
+    void this.promptModal(t('bp_name'), bp.name || `${t('blueprint')} ${this.savedBlueprints().length + 1}`).then((name) => {
+      if (!name) return;
+      const list = this.savedBlueprints().filter((b) => b.name !== name);
+      list.unshift({ ...bp, name });
+      this.storeBlueprints(list);
+      this.toast(`${icon('save', 'sm')} ${t('saved')}: ${name}`, 2000, 'success');
+    });
   }
 
   showBlueprints() {
@@ -1114,6 +1132,61 @@ export class Hud {
   }
 
   // ---------- Modals ----------
+
+  /** Styled replacement for window.confirm. */
+  confirmModal(text: string, okLabel = t('ok')): Promise<boolean> {
+    return new Promise((resolve) => {
+      this.openModal(
+        `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b></div></div>
+        <p>${text}</p>
+        <div class="row2"><button class="btn" data-act="close">${t('cancel')}</button><button class="btn primary" data-act="yes">${okLabel}</button></div>`,
+        (target) => {
+          if (target.dataset.act === 'yes') {
+            this.closeModal();
+            resolve(true);
+          }
+        },
+      );
+      const prev = this.modal.onclick!;
+      this.modal.onclick = (e) => {
+        const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+        if (e.target === this.modal || target?.dataset.act === 'close') resolve(false);
+        prev.call(this.modal, e);
+      };
+    });
+  }
+
+  /** Styled replacement for window.prompt. Resolves null when cancelled. */
+  promptModal(text: string, value = ''): Promise<string | null> {
+    return new Promise((resolve) => {
+      this.openModal(
+        `<h2>${text}</h2>
+        <input id="prompt-input" class="text-input" type="text" maxlength="40" value="${value.replace(/"/g, '&quot;')}">
+        <div class="row2"><button class="btn" data-act="close">${t('cancel')}</button><button class="btn primary" data-act="yes">${t('ok')}</button></div>`,
+        (target) => {
+          if (target.dataset.act === 'yes') {
+            const v = (this.modal.querySelector('#prompt-input') as HTMLInputElement).value.trim();
+            this.closeModal();
+            resolve(v);
+          }
+        },
+      );
+      const input = this.modal.querySelector('#prompt-input') as HTMLInputElement;
+      setTimeout(() => {
+        input.focus();
+        input.select();
+      }, 50);
+      input.onkeydown = (e) => {
+        if (e.key === 'Enter') (this.modal.querySelector('[data-act="yes"]') as HTMLButtonElement).click();
+      };
+      const prev = this.modal.onclick!;
+      this.modal.onclick = (e) => {
+        const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+        if (e.target === this.modal || target?.dataset.act === 'close') resolve(null);
+        prev.call(this.modal, e);
+      };
+    });
+  }
 
   private openModal(html: string, onClick?: (target: HTMLButtonElement) => void) {
     this.modal.innerHTML = `<div class="modal-card">${html}</div>`;
