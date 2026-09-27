@@ -180,3 +180,26 @@ export const STORM_INTERVAL: [number, number] = [420, 900];
 export const STORM_SECONDS = 60;
 export const STORM_SOLAR_FACTOR = 0.35;
 export const ORE_PER_TILE: [number, number] = [220, 420];
+
+// ---------- Story chapters: small fixed maps that grow with each order ----------
+export interface LevelDef {
+  seed: number;
+  size: number;
+  basics: { type: TerrainId; dist: number; r: number }[]; // guaranteed deposits near the core
+  extraTypes: TerrainId[];
+  extra: number; // additional random deposits
+  rocks: number; // rock formations
+  storms: boolean;
+  contracts: boolean;
+  inventory: Partial<Record<ItemId, number>>;
+}
+
+export const LEVELS: LevelDef[] = [
+  { seed: 1101, size: 36, basics: [{ type: 'iron_ore', dist: 5, r: 2.2 }], extraTypes: [], extra: 0, rocks: 0, storms: false, contracts: false, inventory: { iron_plate: 60, copper_plate: 10 } },
+  { seed: 1202, size: 40, basics: [{ type: 'iron_ore', dist: 6, r: 2.4 }, { type: 'copper_ore', dist: 7, r: 2.2 }], extraTypes: [], extra: 0, rocks: 0, storms: false, contracts: false, inventory: { iron_plate: 90, copper_plate: 20 } },
+  { seed: 1303, size: 44, basics: [{ type: 'iron_ore', dist: 6, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.4 }, { type: 'iron_ore', dist: 12, r: 2.2 }], extraTypes: [], extra: 0, rocks: 3, storms: false, contracts: false, inventory: { iron_plate: 130, copper_plate: 45 } },
+  { seed: 1404, size: 52, basics: [{ type: 'iron_ore', dist: 7, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.0 }, { type: 'iron_ore', dist: 14, r: 2.4 }], extraTypes: ['copper_ore'], extra: 1, rocks: 6, storms: false, contracts: true, inventory: { iron_plate: 120, copper_plate: 50, machine_part: 24 } },
+  { seed: 1505, size: 60, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 11, r: 2.4 }, { type: 'iron_ore', dist: 15, r: 2.4 }, { type: 'copper_ore', dist: 17, r: 2.2 }], extraTypes: ['quartz', 'iron_ore'], extra: 2, rocks: 10, storms: false, contracts: true, inventory: { iron_plate: 150, copper_plate: 60, machine_part: 36, copper_wire: 30, steel_frame: 12 } },
+  { seed: 1606, size: 72, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.4 }, { type: 'ice', dist: 12, r: 2.4 }, { type: 'oil', dist: 15, r: 2.0 }, { type: 'iron_ore', dist: 18, r: 2.6 }], extraTypes: ['copper_ore', 'ice', 'quartz'], extra: 3, rocks: 16, storms: true, contracts: true, inventory: { iron_plate: 180, copper_plate: 70, machine_part: 48, copper_wire: 30, steel_frame: 24, circuit: 24, glass: 24 } },
+  { seed: 1707, size: 96, basics: [{ type: 'iron_ore', dist: 7, r: 3.0 }, { type: 'copper_ore', dist: 9, r: 2.8 }, { type: 'quartz', dist: 12, r: 2.6 }, { type: 'ice', dist: 13, r: 2.6 }, { type: 'oil', dist: 15, r: 2.4 }, { type: 'iron_ore', dist: 19, r: 3.0 }, { type: 'copper_ore', dist: 21, r: 2.6 }], extraTypes: ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'], extra: 10, rocks: 30, storms: true, contracts: true, inventory: { iron_plate: 240, copper_plate: 90, machine_part: 70, copper_wire: 40, steel_frame: 40, circuit: 40, glass: 40, precision_part: 24 } },
+];

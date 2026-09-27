@@ -1,5 +1,5 @@
 import type { Building, GameOptions, GameState, TerrainId } from './types';
-import { BUILD_ORDER, MISSIONS, ORE_PER_TILE, RECIPES, STARTING_BUILDINGS, STARTING_INVENTORY, STARTING_RECIPES } from './data';
+import { BUILD_ORDER, LEVELS, MISSIONS, ORE_PER_TILE, RECIPES, STARTING_BUILDINGS, STARTING_RECIPES } from './data';
 
 export const SAVE_VERSION = 4;
 
@@ -26,45 +26,59 @@ function blob(terrain: TerrainId[], w: number, h: number, cx: number, cy: number
   }
 }
 
-export function generateTerrain(seed: number, w: number, h: number): TerrainId[] {
+export interface TerrainParams {
+  basics: { type: TerrainId; dist: number; r: number }[];
+  extraTypes: TerrainId[];
+  extra: number;
+  rocks: number;
+}
+
+/** Free-play parameters scale with the map. */
+export function freeParams(w: number, h: number, rand: () => number): TerrainParams {
+  const pick = <T,>(arr: T[]) => arr[Math.floor(rand() * arr.length)];
+  return {
+    basics: [
+      { type: 'iron_ore', dist: 6 + rand() * 3, r: 2.4 + rand() * 0.8 },
+      { type: 'copper_ore', dist: 7 + rand() * 3, r: 2.1 + rand() * 0.7 },
+      { type: pick(['quartz', 'ice']), dist: 10 + rand() * 3, r: 2.0 + rand() * 0.6 },
+      { type: pick(['ice', 'quartz']), dist: 11 + rand() * 3, r: 2.0 + rand() * 0.6 },
+      { type: 'oil', dist: 13 + rand() * 3, r: 1.8 + rand() * 0.6 },
+      { type: 'iron_ore', dist: 12 + rand() * 4, r: 2.2 + rand() * 1.0 },
+    ],
+    extraTypes: ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'iron_ore', 'copper_ore'],
+    extra: Math.round((w * h) / 380) + Math.floor(rand() * 8),
+    rocks: Math.round((w * h) / 200) + Math.floor(rand() * 8),
+  };
+}
+
+export function generateTerrain(seed: number, w: number, h: number, params?: TerrainParams): TerrainId[] {
   const rand = rng(seed);
+  const p = params ?? freeParams(w, h, rand);
   const terrain: TerrainId[] = new Array(w * h).fill('ground');
   const cx = Math.floor(w / 2);
   const cy = Math.floor(h / 2);
-  // Guaranteed basics close to the core, then a varied scatter of everything further out.
   const pick = <T,>(arr: T[]) => arr[Math.floor(rand() * arr.length)];
-  const plan: { type: TerrainId; dist: number; r: number }[] = [
-    { type: 'iron_ore', dist: 6 + rand() * 3, r: 2.4 + rand() * 0.8 },
-    { type: 'copper_ore', dist: 7 + rand() * 3, r: 2.1 + rand() * 0.7 },
-    { type: pick(['quartz', 'ice']), dist: 10 + rand() * 3, r: 2.0 + rand() * 0.6 },
-    { type: pick(['ice', 'quartz']), dist: 11 + rand() * 3, r: 2.0 + rand() * 0.6 },
-    { type: 'oil', dist: 13 + rand() * 3, r: 1.8 + rand() * 0.6 },
-    { type: 'iron_ore', dist: 12 + rand() * 4, r: 2.2 + rand() * 1.0 },
-  ];
   const maxDist = Math.min(w, h) / 2 - 4;
-  const extra = Math.round((w * h) / 380) + Math.floor(rand() * 8);
-  const types: TerrainId[] = ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'iron_ore', 'copper_ore'];
-  for (let i = 0; i < extra; i++) {
+  const plan = p.basics.map((b) => ({ ...b, dist: Math.min(b.dist, maxDist) }));
+  for (let i = 0; i < p.extra && p.extraTypes.length; i++) {
     const far = rand();
-    plan.push({ type: pick(types), dist: 14 + far * (maxDist - 14), r: 1.6 + rand() * 1.8 + far * 1.2 });
+    plan.push({ type: pick(p.extraTypes), dist: Math.min(maxDist, 14 + far * (maxDist - 14)), r: 1.6 + rand() * 1.8 + far * 1.2 });
   }
   let angle = rand() * Math.PI * 2;
   const goldenStep = Math.PI * (3 - Math.sqrt(5));
-  for (const p of plan) {
+  for (const d of plan) {
     angle += goldenStep + (rand() - 0.5) * 1.2;
     const stretch = 0.75 + rand() * 0.5;
-    const px = Math.round(cx + Math.cos(angle) * p.dist);
-    const py = Math.round(cy + Math.sin(angle) * p.dist * stretch);
+    const px = Math.round(cx + Math.cos(angle) * d.dist);
+    const py = Math.round(cy + Math.sin(angle) * d.dist * stretch);
     if (px < 2 || py < 2 || px > w - 3 || py > h - 3) continue;
-    blob(terrain, w, h, px, py, p.r, p.type, rand);
-    // occasionally a second lobe for irregular shapes
-    if (rand() < 0.45) blob(terrain, w, h, px + Math.round((rand() - 0.5) * 5), py + Math.round((rand() - 0.5) * 5), p.r * 0.7, p.type, rand);
+    blob(terrain, w, h, px, py, d.r, d.type, rand);
+    if (rand() < 0.45) blob(terrain, w, h, px + Math.round((rand() - 0.5) * 5), py + Math.round((rand() - 0.5) * 5), d.r * 0.7, d.type, rand);
   }
   // rock formations: impassable, force routing decisions (never on deposits, never near the core)
-  const rocks = Math.round((w * h) / 200) + Math.floor(rand() * 8);
-  for (let i = 0; i < rocks; i++) {
+  for (let i = 0; i < p.rocks; i++) {
     const a = rand() * Math.PI * 2;
-    const d = 13 + rand() * (Math.min(w, h) / 2 - 15);
+    const d = 13 + rand() * Math.max(2, Math.min(w, h) / 2 - 15);
     const px = Math.round(cx + Math.cos(a) * d), py = Math.round(cy + Math.sin(a) * d);
     const len = 3 + Math.floor(rand() * 9);
     const horiz = rand() < 0.5;
@@ -84,20 +98,14 @@ export function generateTerrain(seed: number, w: number, h: number): TerrainId[]
 export const DEFAULT_OPTIONS: GameOptions = { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
 
 export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOptions = DEFAULT_OPTIONS): GameState {
+  if (options.mode === 'story') return levelState(null, 0, options);
   const width = options.mapSize === 'small' ? 80 : options.mapSize === 'large' ? 160 : 120;
   const height = width;
-  const free = options.mode === 'free';
-  const all = free && options.allUnlocked;
+  const all = options.allUnlocked;
   const terrain = generateTerrain(seed, width, height);
   const r2 = rng(seed ^ 0x5bd1e995);
-  const ore = terrain.map((t) => (t === 'ground' ? 0 : Math.round(ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0]))));
-  const core: Building = {
-    id: 1,
-    type: 'core',
-    x: Math.floor(width / 2) - 1,
-    y: Math.floor(height / 2) - 1,
-    dir: 0,
-  };
+  const ore = terrain.map((t) => (t === 'ground' || t === 'rock' ? 0 : Math.round(ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0]))));
+  const core: Building = { id: 1, type: 'core', x: Math.floor(width / 2) - 1, y: Math.floor(height / 2) - 1, dir: 0 };
   return {
     version: SAVE_VERSION,
     options: { ...options },
@@ -107,7 +115,7 @@ export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOpt
     terrain,
     buildings: [core],
     nextId: 2,
-    inventory: all ? { iron_plate: 400, copper_plate: 200, copper_wire: 100, glass: 60, machine_part: 80, precision_part: 30, steel_frame: 60, circuit: 40 } : free ? { iron_plate: 120, copper_plate: 30 } : { ...STARTING_INVENTORY },
+    inventory: all ? { iron_plate: 400, copper_plate: 200, copper_wire: 100, glass: 60, machine_part: 80, precision_part: 30, steel_frame: 60, circuit: 40 } : { iron_plate: 120, copper_plate: 30 },
     delivered: {},
     missionIndex: all ? MISSIONS.length - 1 : 0,
     ship: {},
@@ -118,12 +126,54 @@ export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOpt
     nextContractAt: 300,
     storm: 0,
     nextStormAt: 600,
-    tutorialStep: free ? -1 : 0,
-    introSeen: free,
+    tutorialStep: -1,
+    introSeen: true,
     stats: { produced: {}, delivered: {} },
     unlockedBuildings: all ? [...BUILD_ORDER] : [...STARTING_BUILDINGS],
     unlockedRecipes: all ? RECIPES.map((r) => r.id) : [...STARTING_RECIPES],
     time: 0,
+    launched: false,
+    powerSupply: 10,
+    powerDemand: 0,
+  };
+}
+
+/** A story chapter: a fixed small map. Unlocks, upgrades and stats carry over from `prev`. */
+export function levelState(prev: GameState | null, level: number, options: GameOptions = DEFAULT_OPTIONS): GameState {
+  const def = LEVELS[Math.min(level, LEVELS.length - 1)];
+  const width = def.size, height = def.size;
+  const terrain = generateTerrain(def.seed, width, height, { basics: def.basics, extraTypes: def.extraTypes, extra: def.extra, rocks: def.rocks });
+  const r2 = rng(def.seed ^ 0x5bd1e995);
+  const ore = terrain.map((t) => (t === 'ground' || t === 'rock' ? 0 : Math.round(ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0]))));
+  const core: Building = { id: 1, type: 'core', x: Math.floor(width / 2) - 1, y: Math.floor(height / 2) - 1, dir: 0 };
+  const unlockedBuildings = prev ? [...prev.unlockedBuildings] : [...STARTING_BUILDINGS];
+  const unlockedRecipes = prev ? [...prev.unlockedRecipes] : [...STARTING_RECIPES];
+  return {
+    version: SAVE_VERSION,
+    options: { ...options, mode: 'story', storms: def.storms },
+    seed: def.seed,
+    width,
+    height,
+    terrain,
+    buildings: [core],
+    nextId: 2,
+    inventory: { ...def.inventory },
+    delivered: {},
+    missionIndex: level,
+    ship: {},
+    ore,
+    upgrades: prev ? { ...prev.upgrades } : { belt: 0, miner: 0, machine: 0, power: 0 },
+    contracts: [],
+    contractsDone: prev?.contractsDone ?? 0,
+    nextContractAt: def.contracts ? 240 : 1e12,
+    storm: 0,
+    nextStormAt: def.storms ? 420 : 1e12,
+    tutorialStep: prev ? prev.tutorialStep : 0,
+    introSeen: prev?.introSeen ?? false,
+    stats: prev ? { produced: { ...prev.stats.produced }, delivered: { ...prev.stats.delivered } } : { produced: {}, delivered: {} },
+    unlockedBuildings,
+    unlockedRecipes,
+    time: prev?.time ?? 0,
     launched: false,
     powerSupply: 10,
     powerDemand: 0,

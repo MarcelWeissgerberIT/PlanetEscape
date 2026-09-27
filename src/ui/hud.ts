@@ -1,5 +1,5 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
-import { BUILDINGS, BUILD_ORDER, ITEM_ORDER, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { BUILDINGS, BUILD_ORDER, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import type { Problem, Sim } from '../game/sim';
@@ -12,6 +12,7 @@ import { hasSave } from '../game/save';
 export interface HudCallbacks {
   onNewGame: (seed: number | undefined, options: GameOptions) => void;
   onContinue: () => void;
+  onNextLevel: () => void;
   onSave: () => void;
   onCenter: () => void;
 }
@@ -384,7 +385,7 @@ export class Hud {
             })
             .join('')
         : '';
-      body = `<div class="mtitle"><span class="mnum">${t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}</span> ${mt.title}</div>
+      body = `<div class="mtitle"><span class="mnum">${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}</span> ${mt.title}</div>
         <div class="mtext">${this.koraMsg && this.koraMsgT > 0 ? this.koraMsg : mt.text}</div>
         <div class="mrows">${builds}${rows}</div>`;
     } else body = `<div class="mtitle">🚀 ${t('launch_title')}</div>`;
@@ -1024,7 +1025,7 @@ export class Hud {
         <span><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
       <div class="menu-row"><span>${t('sound')}</span>
         <span><button class="chip ${soundEnabled() ? 'active' : ''}" data-sound="on">${t('on')}</button><button class="chip ${soundEnabled() ? '' : 'active'}" data-sound="off">${t('off')}</button></span></div>
-      <div class="menu-row"><span>${t('mode')}</span><span>${st.options.mode === 'story' ? t('mode_story') : t('mode_free')}</span></div>
+      <div class="menu-row"><span>${t('mode')}</span><span>${st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}/${MISSIONS.length}` : t('mode_free')}</span></div>
       <div class="menu-row"><span>${t('seed')}</span><span class="mono">${st.seed}</span></div>
       <div class="menu-row"><span>${t('playtime')}</span><span>${fmtTime(st.time)}</span></div>
       <div class="menu-row"><span>${t('produced')}</span><span class="wrap">${produced || '–'}</span></div>
@@ -1091,8 +1092,40 @@ export class Hud {
     const m = MISSIONS[index];
     const mt = tMission(m.id);
     const unlocks = [...m.unlocks.map((u) => tBuilding(u)), ...m.unlockRecipes.map((r) => tItem(RECIPE_BY_ID[r].output))];
-    this.toast(`✓ ${t('mission_done')} <b>${mt.title}</b>${unlocks.length ? `<br><small>${t('unlocked')}: ${unlocks.join(', ')}</small>` : ''}`, 5000, 'success');
     sfx.mission();
+    const st = this.sim.state;
+    if (st.options.mode === 'story' && index < MISSIONS.length - 1) {
+      // story: every order is a chapter on its own map -> hand over to the next map
+      const next = MISSIONS[index + 1];
+      const nt = tMission(next.id);
+      const lvl = LEVELS[Math.min(index + 1, LEVELS.length - 1)];
+      this.openModal(
+        `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('chapter_done', { n: index + 1 })}</small></div></div>
+        <h2>✓ ${mt.title}</h2>
+        <p>${tChapter(index)}</p>
+        ${unlocks.length ? `<div class="unlocks">${t('unlocked')}: ${unlocks.join(', ')}</div>` : ''}
+        <h3>${t('chapter')} ${index + 2}: ${nt.title}</h3>
+        <p>${nt.text}</p>
+        <p class="save-hint">${t('chapter_next_hint', { size: `${lvl.size}×${lvl.size}` })}</p>
+        <button class="btn primary" data-act="next">${t('chapter_next', { n: index + 2 })}</button>`,
+        (target) => {
+          if (target.dataset.act === 'next') {
+            this.closeModal();
+            this.cb.onNextLevel();
+          }
+        },
+      );
+      // the story modal has no close: clicking the backdrop must not dismiss it
+      this.modal.onclick = (e) => {
+        const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+        if (target?.dataset.act === 'next') {
+          this.closeModal();
+          this.cb.onNextLevel();
+        }
+      };
+      return;
+    }
+    this.toast(`✓ ${t('mission_done')} <b>${mt.title}</b>${unlocks.length ? `<br><small>${t('unlocked')}: ${unlocks.join(', ')}</small>` : ''}`, 5000, 'success');
     const next = MISSIONS[index + 1];
     const chapter = this.sim.state.options.mode === 'story' ? tChapter(index) : '';
     if (chapter) this.koraSay(chapter, 14);
@@ -1100,6 +1133,22 @@ export class Hud {
       const nt = tMission(next.id);
       setTimeout(() => this.koraSay(nt.text, 20), chapter ? 14000 : 0);
     }
+  }
+
+  /** Called when a new chapter map has been loaded. */
+  chapterStart() {
+    const st = this.sim.state;
+    const m = MISSIONS[st.missionIndex];
+    if (m) {
+      const mt = tMission(m.id);
+      this.koraSay(mt.text, 20);
+      this.toast(`▶ ${t('chapter')} ${st.missionIndex + 1}: <b>${mt.title}</b>`, 4000);
+    }
+    this.lastTutorialStep = -2;
+    this.lastTopHtml = '';
+    this.lastBottomHtml = '';
+    this.undoStack = [];
+    this.refresh();
   }
 
   contractOffer(c: Contract) {

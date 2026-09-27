@@ -7,7 +7,7 @@ import * as Save from './game/save';
 import { sfx } from './game/sfx';
 import { Sim } from './game/sim';
 import type { GameState, TerrainId } from './game/types';
-import { newGame } from './game/world';
+import { levelState, newGame } from './game/world';
 import { t } from './i18n';
 import { Hud } from './ui/hud';
 
@@ -62,6 +62,13 @@ const hud = new Hud(sim, input, renderer, {
     start();
   },
   onContinue: () => start(),
+  onNextLevel: () => {
+    const next = levelState(sim.state, sim.state.missionIndex, sim.state.options);
+    swapState(next);
+    Save.save(sim.state);
+    start();
+    hud.chapterStart();
+  },
   onSave: () => Save.save(sim.state),
   onCenter: () => renderer.centerOnCore(),
 });
