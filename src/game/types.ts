@@ -50,7 +50,12 @@ export type BuildingId =
   | 'valve'
   | 'lamp'
   | 'switch'
-  | 'terminal';
+  | 'terminal'
+  | 'register'
+  | 'adder'
+  | 'subtractor'
+  | 'multiplier'
+  | 'divider';
 
 export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter' | 'tunnel' | 'logic';
 
@@ -120,6 +125,12 @@ export interface Building {
   // terminal: program source and run flag (the CPU itself lives in the Sim and is rebuilt on load)
   prog?: string;
   run?: boolean;
+  ram?: number; // installed memory banks (circuits delivered), 256 bytes each
+  clock?: number; // installed oscillator crystals (quartz or glass delivered), 100 Hz each
+  // arithmetic modules / register
+  value?: number; // register content, multiplier factor, divisor
+  acc?: number; // running counter (items seen on the primary input)
+  debt?: number; // subtractor: right-hand items waiting to cancel left-hand ones
   // tunnel: id of the paired tunnel (entrance <-> exit); `exit` marks the exit end
   pair?: number | null;
   exit?: boolean;
@@ -223,6 +234,7 @@ export interface BlueprintItem {
   ratio?: number;
   mode?: 'hold' | 'pass' | 'pulse';
   open?: boolean;
+  value?: number;
 }
 
 export interface Blueprint {

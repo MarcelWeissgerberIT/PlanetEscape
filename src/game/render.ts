@@ -2,6 +2,8 @@ import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
 import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W } from './chip8';
+import { ARITH } from './sim';
+import { TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -700,7 +702,18 @@ export class Renderer {
       ctx.imageSmoothingEnabled = false;
       ctx.drawImage(sc.canvas, sx, sy, sw, sh);
       ctx.imageSmoothingEnabled = true;
-      if (b.run && !cpu?.halted) this.animGlow(b.x * TILE + sz * 0.83, b.y * TILE + sz * 0.18, 5, '#34d399');
+      // installed parts: memory banks (green) along the bottom, oscillator crystals (cyan) on the right
+      const ram = b.ram ?? 0, clock = b.clock ?? 0;
+      for (let i = 0; i < TERMINAL_RAM_BANKS; i++) {
+        ctx.fillStyle = i < ram ? '#34d399' : 'rgba(255,255,255,0.12)';
+        ctx.fillRect(b.x * TILE + sz * 0.14 + i * sz * 0.045, b.y * TILE + sz * 0.9, sz * 0.032, sz * 0.05);
+      }
+      for (let i = 0; i < TERMINAL_CRYSTALS; i++) {
+        ctx.fillStyle = i < clock ? '#22d3ee' : 'rgba(255,255,255,0.12)';
+        ctx.fillRect(b.x * TILE + sz * 0.9, b.y * TILE + sz * 0.62 + i * sz * 0.045, sz * 0.05, sz * 0.032);
+      }
+      if (b.run && !cpu?.halted && b.status === 'ok') this.animGlow(b.x * TILE + sz * 0.83, b.y * TILE + sz * 0.18, 5, '#34d399');
+      if (b.status === 'starved') this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, '!', '#f59e0b');
       if (cpu?.halted) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, '!', '#ef4444');
       if (this.overlay || this.selected === b) {
         const r = this.sim.terminalDisplayRect(b);
@@ -711,6 +724,25 @@ export class Renderer {
         ctx.setLineDash([]);
         this.drawTag(r.x * TILE + (r.w * TILE) / 2, r.y * TILE - 6, `${CHIP8_W}×${CHIP8_H} display`, '#22d3ee');
       }
+      return;
+    }
+    if (ARITH.has(b.type)) {
+      // arithmetic modules: output arrow, side inputs, and the number they hold
+      this.drawArrow(b, b.dir, '#22d3ee');
+      const back = ((b.dir + 2) & 3) as Dir;
+      if (b.type !== 'adder') this.drawArrow(b, ((b.dir + 1) & 3) as Dir, b.type === 'register' ? '#f59e0b' : '#c084fc');
+      if (b.type === 'adder' || b.type === 'subtractor') this.drawArrow(b, ((b.dir + 3) & 3) as Dir, '#c084fc');
+      void back;
+      const txt = b.type === 'register' ? String(b.value ?? 0) : b.type === 'multiplier' ? `×${b.value ?? 1}` : b.type === 'divider' ? `÷${b.value ?? 1}` : b.type === 'subtractor' ? `−${b.debt ?? 0}` : `${b.acc ?? 0}`;
+      ctx.fillStyle = 'rgba(0,0,0,0.65)';
+      roundRect(ctx, cx - 16, b.y * TILE + 4, 32, 15, 4);
+      ctx.fill();
+      ctx.fillStyle = '#e6eaf0';
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(txt, cx, b.y * TILE + 12);
+      if (b.bufL?.length) this.drawBadge(b.x * TILE + TILE - 11, b.y * TILE + TILE - 11, String(Math.min(99, b.bufL.length)), '#22d3ee');
       return;
     }
     if (b.type === 'lamp') {
@@ -1044,7 +1076,7 @@ export class Renderer {
       if (b.type === 'miner') text += `  ${this.sim.oreLeft(b.x, b.y)}`;
       if (b.type === 'storage') text = String(Object.values(b.store ?? {}).reduce((a, c) => a + (c ?? 0), 0));
       if (b.type === 'generator') text = `${Math.ceil(b.fuelSeconds ?? 0)}s`;
-      if (b.type === 'lamp' || b.type === 'switch' || b.type === 'terminal') continue;
+      if (b.type === 'lamp' || b.type === 'switch' || b.type === 'terminal' || ARITH.has(b.type)) continue;
       if (def.kind === 'logic') {
         item = (b.type === 'sorter' || b.type === 'valve') && b.recipe ? (b.recipe as ItemId) : null;
         if (b.type === 'sorter') text = item ? '← ' : '?';

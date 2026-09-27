@@ -17,6 +17,7 @@ const place = (type: Building['type'], x: number, y: number, dir: Dir): Building
   return b;
 };
 const term = place('terminal', tx, ty, 0);
+sim.installAll(term); // 16 circuits and 6 crystals already delivered
 for (let y = 0; y < 32; y++) for (let x = 0; x < 64; x++) place('lamp', tx + 3 + x, ty + y, 0);
 // keys: left paddle 1 (up) / 4 (down) on the left rim, right paddle C / D on the bottom rim
 const keyAt = (x: number, y: number, key: number) => {
@@ -41,8 +42,8 @@ st.time = 0;
 st.inventory = { iron_plate: 300, copper_plate: 150, copper_wire: 100, machine_part: 40, circuit: 20, glass: 20 };
 st.note = {
   title: 'KORA Terminal · PONG',
-  de: 'Das Terminal (links vom großen Display) führt PONG aus. Tippe es an: Im Panel siehst du den Bildschirm, ein Tastenfeld, Start/Pause, Neustart und „Programm“ mit dem Assembler-Editor (PONG, BRIX, Demo eingebaut).\\nSteuerung: Tastenfeld halten, Tastatur 1/Q (links hoch/runter) und 4/R (rechts hoch/runter), oder die vier Schalter am Rand des Terminals antippen (links: 1 und 4, unten: C und D).\\nDie 2048 LED-Lampen rechts sind das Display. Der Prozessor läuft mit deinem Strom: zu wenig Energie, und das Spiel wird langsamer.',
-  en: 'The terminal (left of the big display) runs PONG. Tap it: the panel shows the screen, a keypad, start/pause, restart and “Program” with the assembler editor (PONG, BRIX, demo built in).\\nControls: hold the keypad, keyboard 1/Q (left paddle up/down) and 4/R (right paddle), or tap the four switches on the terminal rim (left: 1 and 4, bottom: C and D).\\nThe 2048 LED lamps on the right are the display. The CPU runs on your power: too little energy and the game slows down.',
+  de: 'Das Terminal (links vom großen Display) ist eine 8-Bit-Hauptplatine: 16 Schaltkreise sind als Speicherbänke eingebaut, 6 Quarze als Takt (600 Hz). Ohne diese Teile läuft nichts, neue Terminals bekommen sie per Band.\nEs führt PONG aus: KORA spielt beide Schläger, solange du keine Taste drückst. Übernimm eine Seite, wann du willst. Tippe es an: Im Panel siehst du den Bildschirm, ein Tastenfeld, Start/Pause, Neustart und „Programm“ mit dem Assembler-Editor (PONG, BRIX, Demo eingebaut).\\nSteuerung: Tastenfeld halten, Tastatur 1/Q (links hoch/runter) und 4/R (rechts hoch/runter), oder die vier Schalter am Rand des Terminals antippen (links: 1 und 4, unten: C und D).\\nDie 2048 LED-Lampen rechts sind das Display. Der Prozessor läuft mit deinem Strom: zu wenig Energie, und das Spiel wird langsamer.',
+  en: 'The terminal (left of the big display) is an 8-bit mainboard: 16 circuits are installed as memory banks, 6 crystals as the clock (600 Hz). Nothing runs without these parts; new terminals get them by belt.\nIt runs PONG: KORA plays both paddles while you press nothing. Take over a side whenever you like. Tap it: the panel shows the screen, a keypad, start/pause, restart and “Program” with the assembler editor (PONG, BRIX, demo built in).\\nControls: hold the keypad, keyboard 1/Q (left paddle up/down) and 4/R (right paddle), or tap the four switches on the terminal rim (left: 1 and 4, bottom: C and D).\\nThe 2048 LED lamps on the right are the display. The CPU runs on your power: too little energy and the game slows down.',
 };
 writeFileSync('saves/kora-terminal.json', JSON.stringify(st));
 console.log('saves/kora-terminal.json written:', st.buildings.length, 'buildings, lit', lit);

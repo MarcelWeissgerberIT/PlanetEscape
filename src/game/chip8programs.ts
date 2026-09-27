@@ -10,9 +10,10 @@ export const CHIP8_PROGRAMS: Chip8Program[] = [
   {
     id: 'pong',
     name: 'PONG',
-    keys: '1 / 4 = left paddle, C / D = right paddle',
-    source: `; PONG for two players
+    keys: '1 / 4 = left paddle, C / D = right paddle. KORA steers every paddle nobody touches: leave both and watch the match.',
+    source: `; PONG: KORA vs KORA, or take a paddle yourself
 ; keys: 1 up / 4 down (left)   C up / D down (right)
+; a paddle nobody touches is steered by KORA; each serve she picks a new aim, sometimes a bad one
 start:
   LD V2, 13        ; left paddle y
   LD V3, 13        ; right paddle y
@@ -23,20 +24,71 @@ serve:
   LD V5, 15        ; ball y
   LD V6, 1         ; ball dx
   LD V7, 1         ; ball dy
+  RND VD, 7        ; KORA's aim for the left paddle (0-4 hits, 5-7 misses)
+  RND VE, 7        ; ... and for the right paddle
 loop:
   CLS
+  ADD VB, 1        ; frame counter
+  LD VA, 1
+  SKNP VA
+  JP lkeys
+  LD VA, 4
+  SKNP VA
+  JP lkeys
+  ; left KORA: only while the ball comes closer; aims paddle top + VD at the ball
+  SNE V6, 0xFF
+  JP lai
+  JP lafter
+lai:
+  LD V0, V2
+  ADD V0, VD
+  SUB V0, V5
+  SE VF, 1
+  JP laidown
+  SE V0, 0
+  CALL lup
+  JP lafter
+laidown:
+  CALL ldown
+  JP lafter
+lkeys:
   LD VA, 1
   SKNP VA
   CALL lup
   LD VA, 4
   SKNP VA
   CALL ldown
+lafter:
+  LD VA, 0xC
+  SKNP VA
+  JP rkeys
+  LD VA, 0xD
+  SKNP VA
+  JP rkeys
+  ; right KORA: only while the ball comes closer; aims paddle top + VE at the ball
+  SNE V6, 1
+  JP ai
+  JP afterkeys
+ai:
+  LD V0, V3
+  ADD V0, VE
+  SUB V0, V5       ; aim - ball y, VF = 1 when aim >= ball
+  SE VF, 1
+  JP aidown
+  SE V0, 0
+  CALL rup
+  JP afterkeys
+aidown:
+  CALL rdown
+  JP afterkeys
+rkeys:
   LD VA, 0xC
   SKNP VA
   CALL rup
   LD VA, 0xD
   SKNP VA
   CALL rdown
+afterkeys:
   ADD V4, V6
   ADD V5, V7
   SNE V5, 0

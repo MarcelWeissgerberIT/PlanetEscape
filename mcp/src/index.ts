@@ -149,7 +149,7 @@ function depositClusters() {
 }
 
 const TERRAIN_CHAR: Record<TerrainId, string> = { ground: '.', rock: '#', iron_ore: 'I', copper_ore: 'C', quartz: 'Q', ice: 'W', oil: 'O' };
-const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L', lamp: 'o', switch: '=', terminal: 'Z' };
+const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L', lamp: 'o', switch: '=', terminal: 'Z', register: 'r', adder: '+', subtractor: '-', multiplier: '*', divider: '/' };
 const ARROWS = ['^', '>', 'v', '<'];
 
 function asciiMap(x0: number, y0: number, w: number, h: number): string {
@@ -184,7 +184,8 @@ function describeBuilding(b: Building) {
     recipe: b.recipe ?? undefined, ratePerMin: b.rate !== undefined ? Math.round(b.rate * 10) / 10 : undefined,
     input: b.input, output: b.output, store: b.store, missing: b.missing, threshold: b.threshold, ratio: b.ratio, pair: b.pair ?? undefined,
     items: b.items?.length,
-    terminal: b.type === 'terminal' ? { running: !!b.run, halted: sim.cpu(b)?.halted ?? null, errors: sim.cpuErrorsOf(b), screen: sim.cpu(b) ? screenText(sim.cpu(b)!) : undefined } : undefined,
+    value: b.value, acc: b.acc, debt: b.debt, queued: b.bufL?.length,
+    terminal: b.type === 'terminal' ? { running: !!b.run, ram: b.ram ?? 0, clock: b.clock ?? 0, hz: sim.terminalHz(b), memory: sim.terminalMemory(b), halted: sim.cpu(b)?.halted ?? null, errors: sim.cpuErrorsOf(b), screen: sim.cpu(b) ? screenText(sim.cpu(b)!) : undefined } : undefined,
   };
 }
 
@@ -337,12 +338,13 @@ server.registerTool(
       run: z.boolean().optional().describe('terminal: start/stop the program'),
       reset: z.boolean().optional().describe('terminal: restart the program'),
       key: z.number().int().min(0).max(15).optional().describe('terminal: press this key for ~0.5 s of game time'),
+      value: z.number().int().min(0).max(255).optional().describe('multiplier/divider: factor k (1-9); register: set the stored count'),
       accept_contract: z.number().int().optional(),
       decline_contract: z.number().int().optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
-  async ({ id, dir, recipe, filter, threshold, ratio, mode, open, clear, program, run, reset, key, accept_contract, decline_contract }) => {
+  async ({ id, dir, recipe, filter, threshold, ratio, mode, open, clear, program, run, reset, key, value, accept_contract, decline_contract }) => {
     if (accept_contract !== undefined || decline_contract !== undefined) {
       const cid = accept_contract ?? decline_contract!;
       const c = sim.state.contracts.find((x) => x.id === cid);
@@ -357,6 +359,7 @@ server.registerTool(
     if (mode !== undefined) b.mode = mode;
     if (open !== undefined) b.open = open;
     if (clear && b.type === 'lamp') sim.clearLamp(b);
+    if (value !== undefined && b.value !== undefined) b.value = value;
     if (b.type === 'terminal') {
       if (program !== undefined) {
         const errs = sim.setProgram(b, program);

@@ -29,11 +29,15 @@ export class Chip8 {
   syncHint = false;
   halted: string | null = null; // error text when the program crashed
   cycles = 0;
+  /** installed memory in bytes; accesses beyond it halt the machine (missing RAM bank) */
+  memLimit = 4096;
+  readonly romLength: number;
   private rom: Uint8Array;
   private rnd = 0x12345678;
 
   constructor(rom: Uint8Array) {
     this.rom = rom;
+    this.romLength = rom.length;
     this.reset();
   }
 
@@ -112,6 +116,10 @@ export class Chip8 {
     const pc = this.pc;
     if (pc < 0 || pc > 4094) {
       this.halted = `pc out of range: ${pc.toString(16)}`;
+      return;
+    }
+    if (pc + 1 >= this.memLimit) {
+      this.halted = `memory bank ${Math.floor(pc / 256) + 1} not installed`;
       return;
     }
     const op = (this.mem[pc] << 8) | this.mem[pc + 1];
@@ -222,6 +230,10 @@ export class Chip8 {
         v[x] = this.random() & nn;
         break;
       case 0xd: {
+        if (this.i + n > this.memLimit) {
+          this.halted = `memory bank ${Math.floor((this.i + n) / 256) + 1} not installed`;
+          return;
+        }
         // sprite: n rows of 8 pixels at (Vx, Vy), XOR drawn, VF = collision, wraps around the edges
         const px = v[x] % CHIP8_W, py = v[y] % CHIP8_H;
         v[0xf] = 0;
@@ -269,10 +281,13 @@ export class Chip8 {
             break;
           }
           case 0x55:
-            for (let k = 0; k <= x; k++) this.mem[(this.i + k) & 0xfff] = v[k];
-            break;
           case 0x65:
-            for (let k = 0; k <= x; k++) v[k] = this.mem[(this.i + k) & 0xfff];
+            if (this.i + x >= this.memLimit) {
+              this.halted = `memory bank ${Math.floor((this.i + x) / 256) + 1} not installed`;
+              return;
+            }
+            if (nn === 0x55) for (let k = 0; k <= x; k++) this.mem[(this.i + k) & 0xfff] = v[k];
+            else for (let k = 0; k <= x; k++) v[k] = this.mem[(this.i + k) & 0xfff];
             break;
           default:
             this.halted = `bad opcode ${op.toString(16)}`;

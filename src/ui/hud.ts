@@ -12,6 +12,7 @@ import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 import { CHIP8_H, CHIP8_W } from '../game/chip8';
+import { TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from '../game/data';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
 export interface HudCallbacks {
@@ -1217,8 +1218,16 @@ export class Hud {
       const state = errs.length ? `<span class="bad">${t('term_error')}</span>` : cpu?.halted ? `<span class="bad">${t('term_halted')}: ${cpu.halted}</span>` : b.run ? `<span class="okline">${t('term_running')}</span>` : t('term_paused');
       const switches = this.sim.terminalSwitches(b);
       const items: ItemId[] = ['copper_wire', 'iron_plate', 'copper_plate', 'glass', 'circuit', 'quartz'];
+      const mem = this.sim.terminalMemory(b);
+      const ram = b.ram ?? 0, clock = b.clock ?? 0;
+      const parts = `<div class="term-parts">
+          <div class="tp"><span>${itemImg('circuit', 'icon xs')} ${t('term_ram')}</span><b class="${mem.have < mem.need ? 'bad' : ''}">${ram}/${TERMINAL_RAM_BANKS} · ${ram * TERMINAL_BANK_BYTES} B</b><small>${t('term_ram_need', { n: mem.banksNeeded, b: mem.need })}</small></div>
+          <div class="tp"><span>${itemImg('quartz', 'icon xs')} ${t('term_clock')}</span><b class="${clock ? '' : 'bad'}">${clock}/${TERMINAL_CRYSTALS} · ${this.sim.terminalHz(b)} Hz</b><small>${t('term_clock_hint')}</small></div>
+          ${this.editor ? `<button class="btn small" data-act="term-install">${t('term_install')}</button>` : ''}
+        </div>`;
       body = `<canvas class="term-screen" id="term-screen" width="${CHIP8_W * 4}" height="${CHIP8_H * 4}"></canvas>
         <div class="lbl">${state}</div>
+        ${parts}
         <div class="term-btns">
           <button class="btn small ${b.run ? '' : 'primary'}" data-act="term-run">${b.run ? '⏸ ' + t('pause') : '▶ ' + t('term_start')}</button>
           <button class="btn small" data-act="term-reset">${icon('rotate', 'sm')} ${t('term_reset')}</button>
@@ -1229,6 +1238,14 @@ export class Hud {
         <div class="dirs"><span class="lbl">${t('term_pixel_item')}</span>${items.map((k) => `<button class="chip ${(b.recipe ?? 'copper_wire') === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon xs')}</button>`).join('')}</div>
         <p class="save-hint">${t('term_display_hint')}</p>
         <button class="btn small" data-act="term-display">${icon('blueprint', 'sm')} ${t('term_display_bp')}</button>`;
+    } else if (b.type === 'register' || b.type === 'adder' || b.type === 'subtractor' || b.type === 'multiplier' || b.type === 'divider') {
+      const val = b.value ?? 0;
+      const held = b.recipe ? itemImg(b.recipe as ItemId, 'icon xs') : '';
+      const big = b.type === 'register' ? `${held} <b class="num">${val}</b>` : b.type === 'multiplier' ? `<b class="num">× ${val}</b>` : b.type === 'divider' ? `<b class="num">÷ ${val}</b>` : b.type === 'subtractor' ? `<b class="num">−${b.debt ?? 0}</b> <small>${t('arith_pending')}</small>` : `<b class="num">${b.acc ?? 0}</b> <small>${t('arith_total')}</small>`;
+      const factor = b.type === 'multiplier' || b.type === 'divider' ? `<div class="dirs wrap"><span class="lbl">${t('arith_factor')}</span>${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<button class="chip ${val === k ? 'active' : ''}" data-value="${k}">${k}</button>`).join('')}</div>` : '';
+      body = `<div class="arith-val">${big}${b.bufL?.length ? ` <small>· ${t('arith_queue', { n: b.bufL.length })}</small>` : ''}</div>
+        <p class="save-hint">${t(`arith_${b.type}` as 'arith_register')}</p>${factor}
+        <div class="term-btns"><button class="btn small" data-act="arith-clear">${t('lamp_clear')}</button></div>${dirPicker}`;
     } else if (b.type === 'tunnel') {
       body = `${statusLine()}${dirPicker}`;
     } else if (def.kind === 'logic') {
@@ -1411,6 +1428,30 @@ export class Hud {
       }
       if (target.dataset.open !== undefined) {
         b.open = target.dataset.open === '1';
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'term-install' && b.type === 'terminal') {
+        this.sim.installAll(b);
+        sfx.mission();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'arith-clear' && b.value !== undefined) {
+        if (b.type === 'register') {
+          const n = b.value ?? 0;
+          if (n && b.recipe) this.sim.addInv(b.recipe as ItemId, n);
+          b.value = 0;
+        } else b.acc = 0;
+        b.debt = 0;
+        b.bufL = [];
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.value !== undefined) {
+        b.value = Number(target.dataset.value);
         sfx.select();
         this.showInfo(b);
         return;

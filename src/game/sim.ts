@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { ORE_PER_TILE, TERMINAL_DISPLAY, TERMINAL_HZ } from './data';
+import { ORE_PER_TILE, REGISTER_MAX, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_HZ, TERMINAL_RAM_BANKS } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -49,6 +49,8 @@ export type SimEvent =
   | { type: 'event_done'; event: GameEvent; choice: 'a' | 'b' }
   | { type: 'meteor'; x: number; y: number }
   | { type: 'beep'; b: Building };
+
+export const ARITH = new Set<BuildingId>(['register', 'adder', 'subtractor', 'multiplier', 'divider']);
 
 export interface Problem {
   building: Building;
@@ -276,6 +278,14 @@ export class Sim {
       if (type === 'terminal') {
         b.run = false;
         b.recipe = 'copper_wire';
+        b.ram = 0;
+        b.clock = 0;
+      }
+      if (ARITH.has(type)) {
+        b.value = type === 'multiplier' ? 2 : type === 'divider' ? 2 : 0;
+        b.acc = 0;
+        b.debt = 0;
+        b.bufL = []; // pending output items (unary result)
       }
     }
     this.state.buildings.push(b);
@@ -351,6 +361,10 @@ export class Sim {
       this.clearTerminalDisplay(b);
       this.cpus.delete(b.id);
       this.cpuErrors.delete(b.id);
+      if (!this.creative) {
+        if (b.ram) this.addInv('circuit', b.ram);
+        if (b.clock) this.addInv('glass', b.clock);
+      }
     }
     // full refund incl. buffered items (player friendly)
     if (!this.creative) for (const k in def.cost) this.addInv(k as ItemId, def.cost[k as ItemId]!);
@@ -406,7 +420,9 @@ export class Sim {
       case 'logic':
         if (b.type === 'mixer') return from === ((b.dir + 1) & 3) || from === ((b.dir + 3) & 3);
         if (b.type === 'lamp') return ((from + 2) & 3) !== b.dir; // a pixel takes input from every side except its front
-        if (b.type === 'terminal') return false;
+        if (b.type === 'terminal') return true; // parts are installed from any side
+        if (ARITH.has(b.type)) return from === b.dir || from === ((b.dir + 1) & 3) || from === ((b.dir + 3) & 3); // back = main input, sides = second operand / signal
+        if (b.type === 'switch') return from !== ((b.dir + 2) & 3); // behind = items to gate, sides = control pulses
         return from === b.dir;
     }
   }
@@ -489,7 +505,25 @@ export class Sim {
           buf.push(item);
           return true;
         }
-        if (b.type === 'terminal') return false;
+        if (b.type === 'terminal') {
+          // the computer is assembled from delivered parts: circuits become memory banks, quartz/glass become oscillator crystals
+          if (item === 'circuit' && (b.ram ?? 0) < TERMINAL_RAM_BANKS) {
+            b.ram = (b.ram ?? 0) + 1;
+            this.applyMemory(b);
+            return true;
+          }
+          if ((item === 'quartz' || item === 'glass') && (b.clock ?? 0) < TERMINAL_CRYSTALS) {
+            b.clock = (b.clock ?? 0) + 1;
+            return true;
+          }
+          return false;
+        }
+        if (ARITH.has(b.type)) return this.acceptArith(b, item, from);
+        if (b.type === 'switch' && from !== b.dir && from !== ((b.dir + 2) & 3)) {
+          // control pulse from a side: flips the switch (the pulse item is consumed)
+          b.open = b.open === false;
+          return true;
+        }
         if (b.type === 'lamp') {
           if (((from + 2) & 3) === b.dir) return false;
           if (b.recipe && b.recipe !== item) return false; // optional colour filter
@@ -618,6 +652,16 @@ export class Sim {
         case 'terminal':
           this.tickTerminal(b, dt, ratio);
           break;
+        case 'register':
+          this.tickArith(b);
+          this.pushRegisterLamps(b);
+          break;
+        case 'adder':
+        case 'subtractor':
+        case 'multiplier':
+        case 'divider':
+          this.tickArith(b);
+          break;
       }
     }
     this.tickWorld(dt);
@@ -705,7 +749,118 @@ export class Sim {
     }
     const cpu = new Chip8(asm.rom);
     this.cpus.set(b.id, cpu);
+    this.applyMemory(b);
     return cpu;
+  }
+
+  /** Bytes the current program needs (interpreter area + code) and bytes installed. */
+  terminalMemory(b: Building): { need: number; have: number; banksNeeded: number } {
+    const cpu = this.cpus.get(b.id);
+    const romLen = cpu ? cpu.romLength : assemble(b.prog ?? CHIP8_PROGRAMS[0].source).rom.length;
+    const need = 0x200 + romLen;
+    return { need, have: (b.ram ?? 0) * TERMINAL_BANK_BYTES, banksNeeded: Math.ceil(need / TERMINAL_BANK_BYTES) };
+  }
+
+  terminalHz(b: Building): number {
+    return Math.round((TERMINAL_HZ * (b.clock ?? 0)) / TERMINAL_CRYSTALS);
+  }
+
+  private applyMemory(b: Building) {
+    const cpu = this.cpus.get(b.id);
+    if (!cpu) return;
+    cpu.memLimit = Math.min(4096, (b.ram ?? 0) * TERMINAL_BANK_BYTES);
+    if (cpu.halted?.startsWith('memory bank')) cpu.halted = null; // continues once the bank arrived
+  }
+
+  /** Creative / editor helper: install every part at once. */
+  installAll(b: Building) {
+    b.ram = TERMINAL_RAM_BANKS;
+    b.clock = TERMINAL_CRYSTALS;
+    this.applyMemory(b);
+  }
+
+  // ---------- Arithmetic modules: numbers are item counts ----------
+
+  private acceptArith(b: Building, item: ItemId, from: Dir): boolean {
+    const fromBack = from === b.dir;
+    const out = b.bufL!;
+    if (out.length >= 32) return false; // output queue full: back-pressure like a belt
+    switch (b.type) {
+      case 'register': {
+        if (fromBack) {
+          // store
+          if ((b.value ?? 0) >= REGISTER_MAX) return false;
+          b.value = (b.value ?? 0) + 1;
+          b.recipe = item; // remembers what it holds
+          return true;
+        }
+        // signal from a side: release the whole stored count as items (the signal item itself is consumed)
+        const n = b.value ?? 0;
+        const what = (b.recipe as ItemId | null) ?? item;
+        for (let k = 0; k < n; k++) out.push(what);
+        b.value = 0;
+        b.acc = (b.acc ?? 0) + 1;
+        return true;
+      }
+      case 'adder':
+        out.push(item); // a + b: everything arriving leaves again
+        b.acc = (b.acc ?? 0) + 1;
+        return true;
+      case 'subtractor':
+        if (fromBack) {
+          if ((b.debt ?? 0) > 0) b.debt = b.debt! - 1; // cancelled by a right-hand item
+          else out.push(item);
+          b.acc = (b.acc ?? 0) + 1;
+          return true;
+        }
+        b.debt = Math.min(255, (b.debt ?? 0) + 1); // each side item cancels one future/back item
+        return true;
+      case 'multiplier':
+        if (fromBack) {
+          const k = Math.max(1, b.value ?? 1);
+          if (out.length + k > 64) return false;
+          for (let i = 0; i < k; i++) out.push(item);
+          b.acc = (b.acc ?? 0) + 1;
+          return true;
+        }
+        b.value = Math.min(9, (b.value ?? 0) + 1); // side items raise the factor (wraps at 9 -> 1)
+        if (b.value === 9 && (b.acc ?? 0) < 0) b.value = 1;
+        return true;
+      case 'divider':
+        if (fromBack) {
+          const k = Math.max(1, b.value ?? 1);
+          b.acc = (b.acc ?? 0) + 1;
+          if (b.acc % k === 0) out.push(item); // one out per k in; remainder stays inside
+          return true;
+        }
+        b.value = Math.min(9, (b.value ?? 0) + 1);
+        return true;
+    }
+    return false;
+  }
+
+  private tickArith(b: Building) {
+    const out = b.bufL!;
+    b.status = 'ok';
+    if (!out.length) return;
+    if (this.pushDir(b, out[0], b.dir)) out.shift();
+    else b.status = 'blocked';
+  }
+
+  /** Value a register shows on lamps in front of it: up to 8 lamps in a row = bits (MSB nearest). */
+  private pushRegisterLamps(b: Building) {
+    const v = b.value ?? 0;
+    const item = (b.recipe as ItemId | null) ?? 'copper_wire';
+    for (let i = 0; i < 8; i++) {
+      const x = b.x + DX[b.dir] * (i + 1), y = b.y + DY[b.dir] * (i + 1);
+      const l = this.at(x, y);
+      if (l?.type !== 'lamp') break;
+      const on = (v >> (7 - i)) & 1;
+      l.mode = 'hold';
+      const has = !!Object.keys(l.output ?? {}).length;
+      if (on && !has) l.output = { [item]: 1 };
+      else if (!on && has) l.output = {};
+    }
   }
 
   cpuErrorsOf(b: Building): string[] {
@@ -821,6 +976,15 @@ export class Sim {
         }
       }
     }
+    // parts first: no crystal = no clock, too little memory = the program does not fit
+    const mem = this.terminalMemory(b);
+    if (!(b.clock ?? 0) || mem.have < mem.need) {
+      b.status = 'starved';
+      b.missing = [...(!(b.clock ?? 0) ? (['quartz'] as ItemId[]) : []), ...(mem.have < mem.need ? (['circuit'] as ItemId[]) : [])];
+      b.working = false;
+      return;
+    }
+    b.missing = undefined;
     if (!b.run) {
       b.status = 'idle';
       return;
@@ -831,8 +995,8 @@ export class Sim {
     }
     b.status = ratio < 1 ? 'low_power' : 'ok';
     b.working = true;
-    // instructions scale with power; timers run at 60 Hz
-    b.progress = (b.progress ?? 0) + dt * TERMINAL_HZ * ratio;
+    // instructions scale with installed crystals and power; timers run at 60 Hz
+    b.progress = (b.progress ?? 0) + dt * this.terminalHz(b) * ratio;
     const n = Math.floor(b.progress);
     b.progress -= n;
     cpu.run(n);
@@ -1195,7 +1359,7 @@ export class Sim {
       if (key && b.mode === 'pass' && this.pushDir(b, key, b.dir)) b.output = {};
       return;
     }
-    if (b.type === 'terminal') return;
+    if (b.type === 'terminal' || ARITH.has(b.type)) return;
     if (b.type === 'switch') {
       b.status = b.open === false ? 'closed' : 'ok';
       if (key && b.open !== false && this.pushDir(b, key, b.dir)) {
@@ -1253,7 +1417,7 @@ export class Sim {
       if (b.type === 'core') continue;
       const s = BUILDINGS[b.type].size;
       if (b.x < minX || b.y < minY || b.x + s - 1 > maxX || b.y + s - 1 > maxY) continue;
-      items.push({ type: b.type, dx: b.x - minX, dy: b.y - minY, dir: b.dir, recipe: b.recipe ?? null, threshold: b.threshold, ratio: b.ratio, mode: b.mode, open: b.type === 'switch' ? b.open : undefined });
+      items.push({ type: b.type, dx: b.x - minX, dy: b.y - minY, dir: b.dir, recipe: b.recipe ?? null, threshold: b.threshold, ratio: b.ratio, mode: b.mode, open: b.type === 'switch' ? b.open : undefined, value: ARITH.has(b.type) ? b.value : undefined });
     }
     if (!items.length) return null;
     // normalise to the bounding box of the copied buildings
@@ -1309,6 +1473,7 @@ export class Sim {
       if (i.ratio !== undefined) b.ratio = i.ratio;
       if (i.mode !== undefined) b.mode = i.mode;
       if (i.open !== undefined) b.open = i.open;
+      if (i.value !== undefined && (b.type === 'multiplier' || b.type === 'divider')) b.value = i.value;
       placed.push(b);
     }
     return { placed, skipped, reason };
