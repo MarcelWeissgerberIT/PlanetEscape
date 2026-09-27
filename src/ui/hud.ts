@@ -9,6 +9,7 @@ import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave, load as loadSave } from '../game/save';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, starString } from '../game/progress';
+import { icon } from './icons';
 
 export interface HudCallbacks {
   onNewGame: (seed: number | undefined, options: GameOptions) => void;
@@ -468,18 +469,18 @@ export class Hud {
       </button>
       <div class="top-right">
         <div class="power ${low ? 'low' : ''} ${st.storm > 0 ? 'storm' : ''}" title="${t('power')}">
-          <span class="plabel">${st.storm > 0 ? '🌪' : '⚡'} ${demand}/${supply}</span>
+          <span class="plabel">${st.storm > 0 ? icon('storm', 'sm') : icon('bolt', 'sm')} ${demand}/${supply}</span>
           <div class="pbar"><div class="pfill" style="width:${ratio * 100}%"></div></div>
         </div>
-        <button class="pill ${nProblems ? 'warn' : 'ok'}" data-act="diag">${nProblems ? `⚠ ${nProblems}` : '✓'}</button>
-        <button class="iconbtn ${this.cb.getSpeed() === 0 ? 'active' : ''}" data-act="pause" title="${t('pause')} (Space)">${this.cb.getSpeed() === 0 ? '▶' : '⏸'}</button>
-        <button class="iconbtn speed ${this.cb.getSpeed() > 1 ? 'active' : ''}" data-act="speed" title="${t('speed')} (F)">${this.cb.getSpeed() > 1 ? this.cb.getSpeed() + '×' : '⏩'}</button>
-        <button class="iconbtn ${this.renderer.overlay ? 'active' : ''}" data-act="overlay" title="${t('overlay')}">◎</button>
-        <button class="iconbtn ${openContracts ? 'badge' : ''}" data-act="contracts" title="${t('contracts')}" data-badge="${openContracts}">📋</button>
-        <button class="iconbtn" data-act="upgrades" title="${t('upgrades')}">⬆</button>
-        <button class="iconbtn ${this.minimapOpen ? 'active' : ''}" data-act="minimap" title="${t('minimap')}">▦</button>
-        <button class="iconbtn" data-act="center" title="${t('reset_view')}">⌖</button>
-        <button class="iconbtn" data-act="menu" title="${t('menu')}">☰</button>
+        <button class="pill ${nProblems ? 'warn' : 'ok'}" data-act="diag">${nProblems ? `${icon('warn')} ${nProblems}` : icon('check')}</button>
+        <button class="iconbtn ${this.cb.getSpeed() === 0 ? 'active' : ''}" data-act="pause" title="${t('pause')} (Space)">${this.cb.getSpeed() === 0 ? icon('play') : icon('pause')}</button>
+        <button class="iconbtn speed ${this.cb.getSpeed() > 1 ? 'active' : ''}" data-act="speed" title="${t('speed')} (F)">${this.cb.getSpeed() > 1 ? `<b>${this.cb.getSpeed()}×</b>` : icon('fast')}</button>
+        <button class="iconbtn ${this.renderer.overlay ? 'active' : ''}" data-act="overlay" title="${t('overlay')}">${icon('scan')}</button>
+        <button class="iconbtn ${openContracts ? 'badge' : ''}" data-act="contracts" title="${t('contracts')}" data-badge="${openContracts}">${icon('contracts')}</button>
+        <button class="iconbtn" data-act="upgrades" title="${t('upgrades')}">${icon('research')}</button>
+        <button class="iconbtn ${this.minimapOpen ? 'active' : ''}" data-act="minimap" title="${t('minimap')}">${icon('minimap')}</button>
+        <button class="iconbtn" data-act="center" title="${t('reset_view')}">${icon('center')}</button>
+        <button class="iconbtn" data-act="menu" title="${t('menu')}">${icon('menu')}</button>
       </div>`;
     if (topHtml === this.lastTopHtml) return;
     this.lastTopHtml = topHtml;
@@ -609,10 +610,10 @@ export class Hud {
       <div class="build-row">
         <div class="build-bar">${buildHtml}</div>
         <div class="tool-col">
-          <button class="iconbtn big" data-act="rotate" title="${t('rotate')} (R)">⟳</button>
-          <button class="iconbtn big ${delActive ? 'danger-active' : ''}" data-act="delete" title="${t('delete')} (X)">✕</button>
-          <button class="iconbtn big ${this.undoStack.length ? '' : 'dim'}" data-act="undo" title="${t('undo')} (Z)">↶</button>
-          <button class="iconbtn big ${this.tool.kind === 'select' ? 'active' : ''}" data-act="copy" title="${t('copy')} (C)">⧉</button>
+          <button class="iconbtn big" data-act="rotate" title="${t('rotate')} (R)">${icon('rotate')}</button>
+          <button class="iconbtn big ${delActive ? 'danger-active' : ''}" data-act="delete" title="${t('delete')} (X)">${icon('close')}</button>
+          <button class="iconbtn big ${this.undoStack.length ? '' : 'dim'}" data-act="undo" title="${t('undo')} (Z)">${icon('undo')}</button>
+          <button class="iconbtn big ${this.tool.kind === 'select' ? 'active' : ''}" data-act="copy" title="${t('copy')} (C)">${icon('copy')}</button>
         </div>
       </div>`;
     if (bottomHtml === this.lastBottomHtml) return;
@@ -683,17 +684,17 @@ export class Hud {
     this.tool = tool;
     this.renderBottom();
     if (tool.kind === 'build') {
-      this.toolChip.innerHTML = `<img src="${buildingUrl(tool.type)}" alt=""><span>${t('build')}: <b>${tBuilding(tool.type)}</b> · ${tool.type === 'conveyor' ? t('chip_belt') : t('chip_place')}</span><span class="x">✕</span>`;
+      this.toolChip.innerHTML = `<img src="${buildingUrl(tool.type)}" alt=""><span>${t('build')}: <b>${tBuilding(tool.type)}</b> · ${tool.type === 'conveyor' ? t('chip_belt') : t('chip_place')}</span><span class="x">${icon('close', 'sm')}</span>`;
       this.toolChip.classList.remove('hidden');
     } else if (tool.kind === 'delete') {
-      this.toolChip.innerHTML = `<span>${t('delete_mode')}</span><span class="x">✕</span>`;
+      this.toolChip.innerHTML = `<span>${t('delete_mode')}</span><span class="x">${icon('close', 'sm')}</span>`;
       this.toolChip.classList.remove('hidden');
     } else if (tool.kind === 'select') {
-      this.toolChip.innerHTML = `<span>⧉ ${t('select_hint')}</span><span class="x">✕</span>`;
+      this.toolChip.innerHTML = `<span>${icon('copy', 'sm')} ${t('select_hint')}</span><span class="x">${icon('close', 'sm')}</span>`;
       this.toolChip.classList.remove('hidden');
     } else if (tool.kind === 'paste') {
       const cost = Sim.blueprintCost(tool.bp);
-      this.toolChip.innerHTML = `<span>⧉ <b>${tool.bp.name || t('blueprint')}</b> · ${tool.bp.items.length} · ${costHtml(cost, this.sim.state.inventory)}</span><button class="mini" data-act="rot">⟳</button><button class="mini" data-act="save">💾</button><span class="x">✕</span>`;
+      this.toolChip.innerHTML = `<span>${icon('blueprint', 'sm')} <b>${tool.bp.name || t('blueprint')}</b> · ${tool.bp.items.length} · ${costHtml(cost, this.sim.state.inventory)}</span><button class="mini" data-act="rot">${icon('rotate', 'sm')}</button><button class="mini" data-act="save">${icon('save', 'sm')}</button><span class="x">${icon('close', 'sm')}</span>`;
       this.toolChip.classList.remove('hidden');
     } else this.toolChip.classList.add('hidden');
   }
@@ -747,7 +748,7 @@ export class Hud {
     const list = this.savedBlueprints().filter((b) => b.name !== name);
     list.unshift({ ...bp, name });
     this.storeBlueprints(list);
-    this.toast(`💾 ${t('saved')}: ${name}`, 2000, 'success');
+    this.toast(`${icon('save', 'sm')} ${t('saved')}: ${name}`, 2000, 'success');
   }
 
   showBlueprints() {
@@ -755,14 +756,14 @@ export class Hud {
     const rows = list
       .map(
         (bp, i) => `<div class="prob"><span class="pname"><b>${bp.name}</b><br><small>${bp.items.length} · ${bp.w}×${bp.h} · ${costHtml(Sim.blueprintCost(bp), this.sim.state.inventory)}</small></span>
-        <button class="btn small primary" data-use="${i}">${t('bp_use')}</button><button class="btn small danger" data-del="${i}">✕</button></div>`,
+        <button class="btn small primary" data-use="${i}">${t('bp_use')}</button><button class="btn small danger" data-del="${i}">${icon('close', 'sm')}</button></div>`,
       )
       .join('');
     this.openModal(
-      `<h2>⧉ ${t('blueprints')}</h2>
-      ${this.clipboard ? `<div class="prob"><span class="pname"><b>${t('bp_clipboard')}</b><br><small>${this.clipboard.items.length} · ${this.clipboard.w}×${this.clipboard.h}</small></span><button class="btn small primary" data-act="useclip">${t('bp_use')}</button><button class="btn small" data-act="saveclip">💾</button></div>` : ''}
+      `<h2>${icon('blueprint', 'sm')} ${t('blueprints')}</h2>
+      ${this.clipboard ? `<div class="prob"><span class="pname"><b>${t('bp_clipboard')}</b><br><small>${this.clipboard.items.length} · ${this.clipboard.w}×${this.clipboard.h}</small></span><button class="btn small primary" data-act="useclip">${t('bp_use')}</button><button class="btn small" data-act="saveclip">${icon('save', 'sm')}</button></div>` : ''}
       <div class="prob-list">${rows || `<p>${t('bp_none')}</p>`}</div>
-      <button class="btn" data-act="select">⧉ ${t('copy')}</button>
+      <button class="btn" data-act="select">${icon('copy', 'sm')} ${t('copy')}</button>
       <button class="btn primary" data-act="close">${t('close')}</button>`,
       (target) => {
         if (target.dataset.use !== undefined) {
@@ -794,7 +795,7 @@ export class Hud {
   togglePause() {
     const sp = this.cb.getSpeed();
     this.cb.onSpeed(sp === 0 ? 1 : 0);
-    this.toast(sp === 0 ? `▶ ${t('resume')}` : `⏸ ${t('pause')}`, 1200);
+    this.toast(sp === 0 ? `${icon('play', 'sm')} ${t('resume')}` : `${icon('pause', 'sm')} ${t('pause')}`, 1200);
     this.lastTopHtml = '';
     this.renderTop();
   }
@@ -803,7 +804,7 @@ export class Hud {
     const sp = this.cb.getSpeed();
     const next = sp === 0 || sp === 3 ? 1 : sp === 1 ? 2 : 3;
     this.cb.onSpeed(next);
-    this.toast(`⏩ ${next}×`, 1000);
+    this.toast(`${icon('fast', 'sm')} ${next}×`, 1000);
     this.lastTopHtml = '';
     this.renderTop();
   }
@@ -921,7 +922,7 @@ export class Hud {
       <div class="info-head">
         <img src="${terrainUrl(terrain)}" alt="" draggable="false">
         <div class="info-title"><b>${item ? tItem(item) : t('rock')}</b><small>${item ? t('deposit') : t('rock')} · ${x}, ${y}</small></div>
-        <button class="iconbtn" data-act="close">✕</button>
+        <button class="iconbtn" data-act="close">${icon('close')}</button>
       </div>
       <div class="info-body">${body}</div>
       ${canMine ? `<div class="info-actions"><button class="btn small primary" data-act="miner">⛏ ${t('place_miner')}</button>${item ? `<button class="btn small" data-act="chain">${t('chain_for')}…</button>` : ''}</div>` : ''}`;
@@ -952,7 +953,7 @@ export class Hud {
     const sz = BUILDINGS[b.type].size * TILE;
     const [sx, sy] = this.renderer.cam.worldToScreen(b.x * TILE + sz, b.y * TILE);
     if (this.floating.classList.contains('hidden')) {
-      this.floating.innerHTML = `<button class="fab" title="${t('rotate')}">⟳</button>`;
+      this.floating.innerHTML = `<button class="fab" title="${t('rotate')}">${icon('rotate')}</button>`;
       this.floating.onclick = () => this.rotateSelected();
       this.floating.classList.remove('hidden');
     }
@@ -1043,13 +1044,13 @@ export class Hud {
       <div class="info-head">
         <img src="${buildingUrl(b.type)}" alt="" draggable="false">
         <div class="info-title"><b>${tBuilding(b.type)}</b><small>${tBuildingDesc(b.type)}</small></div>
-        <button class="iconbtn" data-act="close">✕</button>
+        <button class="iconbtn" data-act="close">${icon('close')}</button>
       </div>
       <div class="info-body">${this.infoBody(b)}</div>
       ${b.type !== 'core' ? `<div class="info-actions">
-        ${def.rotatable ? `<button class="btn small" data-act="rotate">⟳ ${t('rotate')}</button>` : ''}
-        ${this.sim.state.unlockedBuildings.includes(b.type) ? `<button class="btn small" data-act="pick" title="Q">⤴ ${t('pipette')}</button>` : ''}
-        <button class="btn small danger" data-act="remove">${b.status === 'depleted' ? '♻ ' + t('recycle') : '✕ ' + t('delete')}</button>
+        ${def.rotatable ? `<button class="btn small" data-act="rotate">${icon('rotate', 'sm')} ${t('rotate')}</button>` : ''}
+        ${this.sim.state.unlockedBuildings.includes(b.type) ? `<button class="btn small" data-act="pick" title="Q">${icon('pipette', 'sm')} ${t('pipette')}</button>` : ''}
+        <button class="btn small danger" data-act="remove">${b.status === 'depleted' ? icon('rotate', 'sm') + ' ' + t('recycle') : icon('close', 'sm') + ' ' + t('delete')}</button>
       </div>` : ''}`;
     const wasHidden = this.info.classList.contains('hidden');
     this.info.classList.remove('hidden');
@@ -1330,9 +1331,9 @@ export class Hud {
       <div class="menu-row"><span>${t('seed')}</span><span class="mono">${st.seed}</span></div>
       <div class="menu-row"><span>${t('playtime')}</span><span>${fmtTime(st.time)}</span></div>
       <div class="menu-row"><span>${t('produced')}</span><span class="wrap">${produced || '–'}</span></div>
-      <button class="btn" data-act="save">💾 ${t('save')}</button>
-      <button class="btn" data-act="transfer">⇄ ${t('transfer')}</button>
-      <button class="btn" data-act="blueprints">⧉ ${t('blueprints')}</button>
+      <button class="btn" data-act="save">${icon('save', 'sm')} ${t('save')}</button>
+      <button class="btn" data-act="transfer">${icon('transfer', 'sm')} ${t('transfer')}</button>
+      <button class="btn" data-act="blueprints">${icon('blueprint', 'sm')} ${t('blueprints')}</button>
       <button class="btn" data-act="howto">${t('how_to')}</button>
       <button class="btn danger" data-act="new">${t('new_game')}</button>
       <button class="btn primary" data-act="close">${t('close')}</button>
@@ -1353,7 +1354,7 @@ export class Hud {
         else if (target.dataset.act === 'blueprints') this.showBlueprints();
         else if (target.dataset.act === 'save') {
           this.cb.onSave();
-          this.toast(`💾 ${t('saved')}`, 1500, 'success');
+          this.toast(`${icon('save', 'sm')} ${t('saved')}`, 1500, 'success');
         } else if (target.dataset.act === 'new') {
           this.closeModal();
           this.cb.onSave();
@@ -1370,7 +1371,7 @@ export class Hud {
     const raw = JSON.stringify(this.sim.state);
     const encoded = 'PE1.' + btoa(unescape(encodeURIComponent(raw)));
     this.openModal(
-      `<h2>⇄ ${t('transfer')}</h2>
+      `<h2>${icon('transfer', 'sm')} ${t('transfer')}</h2>
       <p>${t('transfer_hint')}</p>
       <div class="cbtns"><button class="btn small primary" data-act="copy">${t('copy_clip')}</button><button class="btn small" data-act="download">${t('download')}</button></div>
       <h3>${t('import')}</h3>
@@ -1575,7 +1576,7 @@ export class Hud {
   }
 
   contractOffer(c: Contract) {
-    this.toast(`📋 ${t('contract_new')}: ${t('contract_text', { n: c.amount, item: tItem(c.item), time: fmtTime(c.deadline - this.sim.state.time) })}`, 6000);
+    this.toast(`${icon('contracts', 'sm')} ${t('contract_new')}: ${t('contract_text', { n: c.amount, item: tItem(c.item), time: fmtTime(c.deadline - this.sim.state.time) })}`, 6000);
     sfx.select();
   }
 

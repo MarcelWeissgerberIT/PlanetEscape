@@ -383,3 +383,20 @@ label.btn { text-align: center; }
 .score-box { background: rgba(255, 255, 255, 0.04); border: 1px solid var(--line); border-radius: 12px; padding: 8px 12px; margin: 8px 0; text-align: left; }
 .score-total { font-size: 18px; text-align: center; margin-bottom: 6px; }
 .score-total .rec { color: #fbbf24; font-size: 13px; font-weight: 700; }
+/* SVG icon set */
+.ico { width: 22px; height: 22px; display: block; flex: 0 0 auto; filter: drop-shadow(0 0 3px rgba(34, 211, 238, 0.45)); }
+.ico.sm { width: 16px; height: 16px; display: inline-block; vertical-align: -3px; filter: none; }
+.iconbtn { color: #cfe9f3; }
+.iconbtn.big .ico { width: 26px; height: 26px; }
+.iconbtn.active .ico, .iconbtn.active { color: var(--accent); }
+.iconbtn.danger-active .ico { filter: drop-shadow(0 0 3px rgba(255, 255, 255, 0.5)); }
+.iconbtn.speed b { font-size: 14px; font-weight: 800; color: var(--accent); }
+.pill .ico { width: 18px; height: 18px; display: inline-block; vertical-align: -4px; filter: none; }
+.pill.ok .ico { color: var(--ok); }
+.pill.warn .ico { color: #fbbf24; }
+.btn .ico.sm { margin-right: 2px; }
+.tool-chip .ico.sm, .tool-chip .x .ico.sm { color: var(--accent); }
+.info-head .iconbtn .ico { width: 20px; height: 20px; }
+.power .plabel { display: inline-flex; align-items: center; gap: 4px; }
+.power .ico.sm { color: var(--accent); }
+.power.low .ico.sm { color: #fbbf24; }
