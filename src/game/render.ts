@@ -656,8 +656,34 @@ export class Renderer {
       else if (b.type === 'assembler' || b.type === 'fabricator' || b.type === 'printer') this.animSparks(b, cx, cy);
     }
 
+    if (b.type === 'lamp') {
+      // pixel: glow in the colour of the item it holds
+      const item = this.sim.lampItem(b);
+      if (item) {
+        const col = ITEMS[item].color;
+        const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, sz * 0.62);
+        g.addColorStop(0, col);
+        g.addColorStop(0.45, col);
+        g.addColorStop(1, 'rgba(0,0,0,0)');
+        ctx.globalAlpha = 0.95;
+        ctx.fillStyle = g;
+        ctx.fillRect(b.x * TILE - 8, b.y * TILE - 8, TILE + 16, TILE + 16);
+        ctx.globalAlpha = 1;
+        ctx.fillStyle = col;
+        ctx.beginPath();
+        ctx.arc(cx, cy, sz * 0.26, 0, Math.PI * 2);
+        ctx.fill();
+        ctx.fillStyle = 'rgba(255,255,255,0.55)';
+        ctx.beginPath();
+        ctx.arc(cx - sz * 0.08, cy - sz * 0.08, sz * 0.09, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (b.mode === 'pass' && !this.lowDetail) this.drawArrow(b, b.dir, '#22d3ee');
+      if (b.recipe && !this.lowDetail) this.drawItem(b.recipe as ItemId, b.x * TILE + TILE - 11, b.y * TILE + 11, 16);
+      return;
+    }
     if (def.kind === 'miner' || def.kind === 'machine' || def.kind === 'storage' || def.kind === 'splitter' || def.kind === 'logic') {
-      this.drawArrow(b, b.dir, b.type === 'valve' && b.open === false ? '#ef4444' : '#22d3ee');
+      this.drawArrow(b, b.dir, (b.type === 'valve' || b.type === 'switch') && b.open === false ? '#ef4444' : '#22d3ee');
       if (def.kind === 'splitter' || b.type === 'overflow') {
         this.drawArrow(b, ((b.dir + 1) & 3) as Dir, b.type === 'overflow' ? '#f59e0b' : '#22d3ee');
         this.drawArrow(b, ((b.dir + 3) & 3) as Dir, b.type === 'overflow' ? '#f59e0b' : '#22d3ee');
@@ -668,8 +694,8 @@ export class Renderer {
       // configuration badge: filter item (sorter / valve) or ratio (mixer)
       if ((b.type === 'sorter' || b.type === 'valve') && b.recipe) this.drawItem(b.recipe as ItemId, b.x * TILE + TILE - 13, b.y * TILE + 13, 20);
       else if (b.type === 'sorter' || (b.type === 'valve' && !b.recipe)) this.drawBadge(b.x * TILE + TILE - 13, b.y * TILE + 13, '?', '#f59e0b');
-      if (b.type === 'valve') {
-        ctx.fillStyle = b.open === false ? 'rgba(239,68,68,0.55)' : 'rgba(52,211,153,0.35)';
+      if (b.type === 'valve' || b.type === 'switch') {
+        ctx.fillStyle = b.open === false ? 'rgba(239,68,68,0.7)' : 'rgba(52,211,153,0.6)';
         ctx.fillRect(b.x * TILE + 6, b.y * TILE + TILE - 10, TILE - 12, 4);
       }
       if (b.type === 'mixer') {
@@ -955,6 +981,7 @@ export class Renderer {
       if (b.type === 'miner') text += `  ${this.sim.oreLeft(b.x, b.y)}`;
       if (b.type === 'storage') text = String(Object.values(b.store ?? {}).reduce((a, c) => a + (c ?? 0), 0));
       if (b.type === 'generator') text = `${Math.ceil(b.fuelSeconds ?? 0)}s`;
+      if (b.type === 'lamp' || b.type === 'switch') continue;
       if (def.kind === 'logic') {
         item = (b.type === 'sorter' || b.type === 'valve') && b.recipe ? (b.recipe as ItemId) : null;
         if (b.type === 'sorter') text = item ? '← ' : '?';

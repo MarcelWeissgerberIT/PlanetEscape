@@ -77,6 +77,7 @@ Seven orders unlock buildings and recipes step by step. The last one is the ship
 * **Events with decisions**: meteorite (new deposit vs. salvage), buried wreck (plates vs. machine parts), solar flare (overclock the grid vs. ride out a storm).
 * **Endgame score** (speed, ship parts, lean factory, contracts) with best scores; **hard mode** for free play (half the material, thinner deposits, more storms, 1.5× score).
 * **Ambient soundscape**: procedural wind, drone and a factory hum that grows with activity (toggle in the menu).
+* **Displays & games inside the game**: the *LED lamp* is one pixel (lights in the colour of the item it holds, hold or pass mode, optional filter) and the *switch* a hand-operated gate you flip by tapping. Blueprint presets ship a 3×3 tic-tac-toe board and 5×7 / 8×8 displays; two item types are X and O.
 * **Large maps**: pre-rendered terrain cache and low-detail rendering when zoomed out keep 160×160 maps smooth.
 
 ## MCP server: let an AI play / KI spielt mit

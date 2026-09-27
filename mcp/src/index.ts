@@ -149,7 +149,7 @@ function depositClusters() {
 }
 
 const TERRAIN_CHAR: Record<TerrainId, string> = { ground: '.', rock: '#', iron_ore: 'I', copper_ore: 'C', quartz: 'Q', ice: 'W', oil: 'O' };
-const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L' };
+const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L', lamp: 'o', switch: '=' };
 const ARROWS = ['^', '>', 'v', '<'];
 
 function asciiMap(x0: number, y0: number, w: number, h: number): string {
@@ -160,7 +160,7 @@ function asciiMap(x0: number, y0: number, w: number, h: number): string {
     for (let x = x0; x < x0 + w; x++) {
       if (!sim.inBounds(x, y)) { row += ' '; continue; }
       const b = sim.at(x, y);
-      if (b) row += b.type === 'conveyor' ? ARROWS[b.dir] : (BUILDING_CHAR[b.type] ?? '?');
+      if (b) row += b.type === 'conveyor' ? ARROWS[b.dir] : b.type === 'lamp' && sim.lampItem(b) ? '*' : b.type === 'switch' && b.open === false ? 'x' : (BUILDING_CHAR[b.type] ?? '?');
       else row += TERRAIN_CHAR[st.terrain[y * st.width + x]];
     }
     rows.push(row);
@@ -311,7 +311,7 @@ server.registerTool(
   'pe_configure',
   {
     title: 'Configure building',
-    description: `Rotate or configure a building. dir sets the output direction. recipe sets a machine recipe (assembler: copper_wire, steel_frame, circuit; printer: machine_part, precision_part; refinery: water, fuel, silicon; fabricator: hull_plate, engine, nav_computer, fuel_cell, life_support; smelter: iron_plate, copper_plate, glass). filter sets the item of a sorter (goes left), valve (watched item) or depot (only this item leaves). threshold (valve) closes when the Core holds >= N. ratio index (mixer): 0=1:1 1=1:2 2=2:1 3=1:3 4=3:1. accept_contract / decline_contract take a contract id.`,
+    description: `Rotate or configure a building. dir sets the output direction. recipe sets a machine recipe (assembler: copper_wire, steel_frame, circuit; printer: machine_part, precision_part; refinery: water, fuel, silicon; fabricator: hull_plate, engine, nav_computer, fuel_cell, life_support; smelter: iron_plate, copper_plate, glass). filter sets the item of a sorter (goes left), valve (watched item) or depot (only this item leaves). threshold (valve) closes when the Core holds >= N. ratio index (mixer): 0=1:1 1=1:2 2=2:1 3=1:3 4=3:1. Lamps (pixels) take mode hold/pass, an item filter and clear; switches take open true/false. In pe_map a lit lamp is '*', an unlit one 'o', an open switch '=', a blocked one 'x'. accept_contract / decline_contract take a contract id.`,
     inputSchema: {
       id: z.number().int().optional(),
       dir: DirSchema.optional(),
@@ -319,12 +319,15 @@ server.registerTool(
       filter: z.string().nullable().optional(),
       threshold: z.number().int().optional(),
       ratio: z.number().int().min(0).max(4).optional(),
+      mode: z.enum(['hold', 'pass']).optional().describe('lamp: hold keeps the item lit, pass forwards it'),
+      open: z.boolean().optional().describe('switch: true lets items through'),
+      clear: z.boolean().optional().describe('lamp: remove the held item'),
       accept_contract: z.number().int().optional(),
       decline_contract: z.number().int().optional(),
     },
     annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
   },
-  async ({ id, dir, recipe, filter, threshold, ratio, accept_contract, decline_contract }) => {
+  async ({ id, dir, recipe, filter, threshold, ratio, mode, open, clear, accept_contract, decline_contract }) => {
     if (accept_contract !== undefined || decline_contract !== undefined) {
       const cid = accept_contract ?? decline_contract!;
       const c = sim.state.contracts.find((x) => x.id === cid);
@@ -336,6 +339,9 @@ server.registerTool(
     const b = id !== undefined ? sim.byId(id) : null;
     if (!b) return fail('unknown building id');
     if (dir !== undefined) sim.rotate(b, dir as Dir);
+    if (mode !== undefined) b.mode = mode;
+    if (open !== undefined) b.open = open;
+    if (clear && b.type === 'lamp') sim.clearLamp(b);
     if (recipe !== undefined) {
       if (!RECIPE_BY_ID[recipe]) return fail(`unknown recipe ${recipe}`);
       sim.setRecipe(b, recipe);

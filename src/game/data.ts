@@ -54,6 +54,9 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   overflow: { id: 'overflow', kind: 'logic', size: 1, cost: { iron_plate: 6 }, power: 0, rotatable: true },
   mixer: { id: 'mixer', kind: 'logic', size: 1, cost: { iron_plate: 8, copper_wire: 4 }, power: 0, rotatable: true },
   valve: { id: 'valve', kind: 'logic', size: 1, cost: { iron_plate: 6, circuit: 2 }, power: 0, rotatable: true },
+  // display & control elements: a lamp is one pixel, a switch is a hand-operated gate
+  lamp: { id: 'lamp', kind: 'logic', size: 1, cost: { iron_plate: 2, copper_wire: 1 }, power: 0, rotatable: true },
+  switch: { id: 'switch', kind: 'logic', size: 1, cost: { iron_plate: 3 }, power: 0, rotatable: true },
 };
 
 export const MIXER_RATIOS: [number, number][] = [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]];
@@ -75,6 +78,8 @@ export const BUILD_ORDER: BuildingId[] = [
   'overflow',
   'mixer',
   'valve',
+  'lamp',
+  'switch',
   'refinery',
   'generator',
   'fabricator',
@@ -123,7 +128,7 @@ export const SHIP_TOTAL = Object.values(SHIP_PARTS).reduce((a, c) => a + (c ?? 0
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
   { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
-  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow'], unlockRecipes: ['steel_frame'] },
+  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'switch'], unlockRecipes: ['steel_frame'] },
   { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: [], unlockRecipes: ['circuit', 'glass'] },
   { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },

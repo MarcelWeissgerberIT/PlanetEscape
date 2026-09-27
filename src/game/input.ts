@@ -332,6 +332,7 @@ export class Input {
     this.lastTap = { x: tx, y: ty, t: now };
     switch (this.tool.kind) {
       case 'none':
+        if (b?.type === 'switch') this.sim.toggleSwitch(b); // a switch flips on tap, like a real one
         if (b) this.cb.onSelect(b);
         else if (this.sim.inBounds(tx, ty)) this.cb.onSelectTile(tx, ty);
         break;

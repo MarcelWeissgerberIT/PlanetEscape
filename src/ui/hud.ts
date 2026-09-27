@@ -777,8 +777,25 @@ export class Hud {
     });
   }
 
+  /** Built-in blueprints: pixel displays made of lamps, with a feed line of switches. */
+  private presetBlueprints(): Blueprint[] {
+    const grid = (name: string, w: number, h: number): Blueprint => {
+      const items: Blueprint['items'] = [];
+      for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) items.push({ type: 'lamp', dx: x, dy: y, dir: 0, recipe: null, mode: 'hold' });
+      return { name, w, h, items };
+    };
+    const ttt: Blueprint = grid(t('preset_ttt'), 3, 3);
+    // a switch in front of every lamp column so single items can be steered into cells
+    const board: Blueprint = { name: t('preset_ttt'), w: 3, h: 5, items: [...ttt.items.map((i) => ({ ...i, dy: i.dy + 2 })), ...[0, 1, 2].map((x) => ({ type: 'switch' as const, dx: x, dy: 1, dir: 2 as const, recipe: null, open: false })), ...[0, 1, 2].map((x) => ({ type: 'conveyor' as const, dx: x, dy: 0, dir: 2 as const, recipe: null }))] };
+    return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8)];
+  }
+
   showBlueprints() {
     const list = this.savedBlueprints();
+    const presets = this.presetBlueprints();
+    const presetRows = presets
+      .map((bp, i) => `<div class="prob"><span class="pname"><b>${bp.name}</b><br><small>${bp.items.length} · ${bp.w}×${bp.h} · ${costHtml(Sim.blueprintCost(bp), this.sim.state.inventory)}</small></span><button class="btn small primary" data-preset="${i}">${t('bp_use')}</button></div>`)
+      .join('');
     const rows = list
       .map(
         (bp, i) => `<div class="prob"><span class="pname"><b>${bp.name}</b><br><small>${bp.items.length} · ${bp.w}×${bp.h} · ${costHtml(Sim.blueprintCost(bp), this.sim.state.inventory)}</small></span>
@@ -789,11 +806,19 @@ export class Hud {
       `<h2>${icon('blueprint', 'sm')} ${t('blueprints')}</h2>
       ${this.clipboard ? `<div class="prob"><span class="pname"><b>${t('bp_clipboard')}</b><br><small>${this.clipboard.items.length} · ${this.clipboard.w}×${this.clipboard.h}</small></span><button class="btn small primary" data-act="useclip">${t('bp_use')}</button><button class="btn small" data-act="saveclip">${icon('save', 'sm')}</button></div>` : ''}
       <div class="prob-list">${rows || `<p>${t('bp_none')}</p>`}</div>
+      <h3>${t('presets')}</h3>
+      <p class="save-hint">${t('presets_hint')}</p>
+      <div class="prob-list">${presetRows}</div>
       <button class="btn" data-act="select">${icon('copy', 'sm')} ${t('copy')}</button>
       <button class="btn primary" data-act="close">${t('close')}</button>`,
       (target) => {
         if (target.dataset.use !== undefined) {
           const bp = list[Number(target.dataset.use)];
+          this.clipboard = bp;
+          this.closeModal();
+          this.input.setTool({ kind: 'paste', bp });
+        } else if (target.dataset.preset !== undefined) {
+          const bp = presets[Number(target.dataset.preset)];
           this.clipboard = bp;
           this.closeModal();
           this.input.setTool({ kind: 'paste', bp });
@@ -1052,6 +1077,14 @@ export class Hud {
       const known = ITEM_ORDER.filter((id) => (st.inventory[id] ?? 0) > 0 || st.stats.produced[id] || RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id)) || TERRAIN_ITEM[st.terrain[0]] === id || ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'].includes(id));
       const picker = (label: string) => `<div class="lbl">${label}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('any_item')}</button>${known.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
       if (b.type === 'sorter') body = `${statusLine()}${dirPicker}${picker(t('sort_item'))}`;
+      else if (b.type === 'lamp') {
+        const item = this.sim.lampItem(b);
+        body = `<div class="lbl">${t('lamp_state')}</div><div class="bufs">${item ? `${itemImg(item, 'icon')} <b>${tItem(item)}</b> <button class="btn small" data-act="clear">${t('lamp_clear')}</button>` : `<span class="dim">${t('lamp_off')}</span>`}</div>
+          <div class="dirs"><span class="lbl">${t('lamp_mode')}</span><button class="chip ${(b.mode ?? 'hold') === 'hold' ? 'active' : ''}" data-mode="hold">${t('lamp_hold')}</button><button class="chip ${b.mode === 'pass' ? 'active' : ''}" data-mode="pass">${t('lamp_pass')}</button></div>
+          ${b.mode === 'pass' ? dirPicker : ''}${picker(t('lamp_filter'))}`;
+      } else if (b.type === 'switch') {
+        body = `${statusLine()}<div class="dirs"><span class="lbl">${t('switch_state')}</span><button class="chip ${b.open !== false ? 'active' : ''}" data-open="1">${t('switch_on')}</button><button class="chip ${b.open === false ? 'active' : ''}" data-open="0">${t('switch_off')}</button></div>${dirPicker}`;
+      }
       else if (b.type === 'valve') {
         const have = b.recipe ? (st.inventory[b.recipe as ItemId] ?? 0) : 0;
         body = `${statusLine(b.recipe ? ` · ${have}/${b.threshold ?? 50}` : '')}${dirPicker}${picker(t('watch_item'))}
@@ -1111,6 +1144,24 @@ export class Hud {
       if (target.dataset.ratio !== undefined) {
         b.ratio = Number(target.dataset.ratio);
         b.rr = 0;
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.mode !== undefined) {
+        b.mode = target.dataset.mode as 'hold' | 'pass';
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.open !== undefined) {
+        b.open = target.dataset.open === '1';
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'clear' && b.type === 'lamp') {
+        this.sim.clearLamp(b);
         sfx.select();
         this.showInfo(b);
         return;

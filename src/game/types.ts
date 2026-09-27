@@ -47,7 +47,9 @@ export type BuildingId =
   | 'sorter'
   | 'overflow'
   | 'mixer'
-  | 'valve';
+  | 'valve'
+  | 'lamp'
+  | 'switch';
 
 export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter' | 'tunnel' | 'logic';
 
@@ -111,6 +113,7 @@ export interface Building {
   bufL?: ItemId[];
   bufR?: ItemId[];
   threshold?: number;
+  mode?: 'hold' | 'pass'; // lamp: keep the item (stays lit) or let it pass (lit while an item is inside)
   ratio?: number;
   open?: boolean;
   // tunnel: id of the paired tunnel (entrance <-> exit); `exit` marks the exit end
@@ -213,6 +216,8 @@ export interface BlueprintItem {
   recipe?: string | null;
   threshold?: number;
   ratio?: number;
+  mode?: 'hold' | 'pass';
+  open?: boolean;
 }
 
 export interface Blueprint {

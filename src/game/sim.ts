@@ -103,6 +103,23 @@ export class Sim {
     return Math.round(STORAGE_CAP * this.factor('buffer'));
   }
 
+  /** The item a lamp currently shows, if any. */
+  lampItem(b: Building): ItemId | null {
+    const k = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+    return k ?? null;
+  }
+
+  /** Empty a lamp; the item goes back to the core stock. */
+  clearLamp(b: Building) {
+    const k = this.lampItem(b);
+    if (k) this.addInv(k, 1);
+    b.output = {};
+  }
+
+  toggleSwitch(b: Building) {
+    b.open = b.open === false;
+  }
+
   /** Remaining ore under a miner (sum of its tile). */
   oreLeft(x: number, y: number): number {
     return this.state.ore[y * this.state.width + x] ?? 0;
@@ -213,6 +230,8 @@ export class Sim {
         b.threshold = 50;
         b.open = true;
       }
+      if (type === 'lamp') b.mode = 'hold';
+      if (type === 'switch') b.open = true;
     }
     this.state.buildings.push(b);
     this.index(b);
@@ -336,6 +355,7 @@ export class Sim {
         return from === b.dir;
       case 'logic':
         if (b.type === 'mixer') return from === ((b.dir + 1) & 3) || from === ((b.dir + 3) & 3);
+        if (b.type === 'lamp') return ((from + 2) & 3) !== b.dir; // a pixel takes input from every side except its front
         return from === b.dir;
     }
   }
@@ -418,7 +438,11 @@ export class Sim {
           buf.push(item);
           return true;
         }
-        if (from !== b.dir) return false;
+        if (b.type === 'lamp') {
+          if (((from + 2) & 3) === b.dir) return false;
+          if (b.recipe && b.recipe !== item) return false; // optional colour filter
+        } else if (from !== b.dir) return false;
+        if (b.type === 'switch' && b.open === false) return false;
         if (b.output && Object.keys(b.output).length) return false;
         if (b.type === 'valve' && !b.recipe) b.recipe = item; // valve watches the first item it sees
         b.output = { [item]: 1 };
@@ -532,6 +556,8 @@ export class Sim {
         case 'overflow':
         case 'valve':
         case 'mixer':
+        case 'lamp':
+        case 'switch':
           this.tickLogic(b);
           break;
         case 'generator':
@@ -942,6 +968,17 @@ export class Sim {
       return;
     }
     const key = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+    if (b.type === 'lamp') {
+      // hold: the pixel keeps its item and stays lit; pass: it forwards the item and is lit while one is inside
+      b.status = 'ok';
+      if (key && b.mode === 'pass' && this.pushDir(b, key, b.dir)) b.output = {};
+      return;
+    }
+    if (b.type === 'switch') {
+      b.status = b.open === false ? 'closed' : 'ok';
+      if (key && b.open !== false && this.pushDir(b, key, b.dir)) b.output = {};
+      return;
+    }
     if (b.type === 'valve') {
       const limit = b.threshold ?? 50;
       const have = b.recipe ? (this.state.inventory[b.recipe as ItemId] ?? 0) : 0;
@@ -991,7 +1028,7 @@ export class Sim {
       if (b.type === 'core') continue;
       const s = BUILDINGS[b.type].size;
       if (b.x < minX || b.y < minY || b.x + s - 1 > maxX || b.y + s - 1 > maxY) continue;
-      items.push({ type: b.type, dx: b.x - minX, dy: b.y - minY, dir: b.dir, recipe: b.recipe ?? null, threshold: b.threshold, ratio: b.ratio });
+      items.push({ type: b.type, dx: b.x - minX, dy: b.y - minY, dir: b.dir, recipe: b.recipe ?? null, threshold: b.threshold, ratio: b.ratio, mode: b.mode, open: b.type === 'switch' ? b.open : undefined });
     }
     if (!items.length) return null;
     // normalise to the bounding box of the copied buildings
@@ -1045,6 +1082,8 @@ export class Sim {
       if (i.recipe !== undefined) b.recipe = i.recipe ?? null;
       if (i.threshold !== undefined) b.threshold = i.threshold;
       if (i.ratio !== undefined) b.ratio = i.ratio;
+      if (i.mode !== undefined) b.mode = i.mode;
+      if (i.open !== undefined) b.open = i.open;
       placed.push(b);
     }
     return { placed, skipped, reason };
