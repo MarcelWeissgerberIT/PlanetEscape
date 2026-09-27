@@ -1,6 +1,6 @@
 import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
-import { BUILDINGS, ITEMS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
+import { BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import type { Sim } from './sim';
 import type { Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -288,7 +288,9 @@ export class Renderer {
   private feedsInto(from: Building, to: Building, dir: Dir): boolean {
     if (from.type === 'conveyor') return from.dir === dir;
     if (from.type === 'tunnel') return from.exit === true && from.dir === dir;
-    if (from.type === 'splitter') return from.dir !== ((dir + 2) & 3);
+    if (from.type === 'splitter' || from.type === 'overflow') return from.dir !== ((dir + 2) & 3);
+    if (from.type === 'sorter') return dir === from.dir || dir === ((from.dir + 3) & 3);
+    if (from.type === 'mixer' || from.type === 'valve') return dir === from.dir;
     if (from.type === 'core' || from.type === 'solar' || from.type === 'generator') return false;
     return this.sim.frontTiles(from).some((t) => t.x === to.x && t.y === to.y);
   }
@@ -515,11 +517,33 @@ export class Renderer {
       else if (b.type === 'assembler' || b.type === 'fabricator' || b.type === 'printer') this.animSparks(b, cx, cy);
     }
 
-    if (def.kind === 'miner' || def.kind === 'machine' || def.kind === 'storage' || def.kind === 'splitter') {
-      this.drawArrow(b, b.dir, '#22d3ee');
-      if (def.kind === 'splitter') {
-        this.drawArrow(b, ((b.dir + 1) & 3) as Dir, '#22d3ee');
-        this.drawArrow(b, ((b.dir + 3) & 3) as Dir, '#22d3ee');
+    if (def.kind === 'miner' || def.kind === 'machine' || def.kind === 'storage' || def.kind === 'splitter' || def.kind === 'logic') {
+      this.drawArrow(b, b.dir, b.type === 'valve' && b.open === false ? '#ef4444' : '#22d3ee');
+      if (def.kind === 'splitter' || b.type === 'overflow') {
+        this.drawArrow(b, ((b.dir + 1) & 3) as Dir, b.type === 'overflow' ? '#f59e0b' : '#22d3ee');
+        this.drawArrow(b, ((b.dir + 3) & 3) as Dir, b.type === 'overflow' ? '#f59e0b' : '#22d3ee');
+      }
+      if (b.type === 'sorter') this.drawArrow(b, ((b.dir + 3) & 3) as Dir, '#c084fc');
+    }
+    if (def.kind === 'logic') {
+      // configuration badge: filter item (sorter / valve) or ratio (mixer)
+      if ((b.type === 'sorter' || b.type === 'valve') && b.recipe) this.drawItem(b.recipe as ItemId, b.x * TILE + TILE - 13, b.y * TILE + 13, 20);
+      else if (b.type === 'sorter' || (b.type === 'valve' && !b.recipe)) this.drawBadge(b.x * TILE + TILE - 13, b.y * TILE + 13, '?', '#f59e0b');
+      if (b.type === 'valve') {
+        ctx.fillStyle = b.open === false ? 'rgba(239,68,68,0.55)' : 'rgba(52,211,153,0.35)';
+        ctx.fillRect(b.x * TILE + 6, b.y * TILE + TILE - 10, TILE - 12, 4);
+      }
+      if (b.type === 'mixer') {
+        const r = MIXER_RATIOS[b.ratio ?? 0];
+        ctx.fillStyle = 'rgba(0,0,0,0.6)';
+        roundRect(ctx, b.x * TILE + TILE / 2 - 16, b.y * TILE + 3, 32, 14, 4);
+        ctx.fill();
+        ctx.fillStyle = '#86efac';
+        ctx.font = 'bold 11px system-ui, sans-serif';
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.fillText(`${r[0]}:${r[1]}`, b.x * TILE + TILE / 2, b.y * TILE + 10);
+        if (b.status === 'ok' && ((b.bufL?.length ?? 0) || (b.bufR?.length ?? 0))) this.animGlow(cx, cy, 8, '#4ade80');
       }
     }
     if (def.kind === 'machine' || def.kind === 'miner') {
@@ -721,7 +745,7 @@ export class Renderer {
     // hologram labels
     for (const b of visible) {
       const def = BUILDINGS[b.type];
-      if (def.kind !== 'miner' && def.kind !== 'machine' && def.kind !== 'storage' && b.type !== 'generator') continue;
+      if (def.kind !== 'miner' && def.kind !== 'machine' && def.kind !== 'storage' && def.kind !== 'logic' && b.type !== 'generator') continue;
       const sz = def.size * TILE;
       const cx = b.x * TILE + sz / 2;
       const top = b.y * TILE - 6;
@@ -734,6 +758,13 @@ export class Renderer {
       if (b.type === 'miner') text += `  ${this.sim.oreLeft(b.x, b.y)}`;
       if (b.type === 'storage') text = String(Object.values(b.store ?? {}).reduce((a, c) => a + (c ?? 0), 0));
       if (b.type === 'generator') text = `${Math.ceil(b.fuelSeconds ?? 0)}s`;
+      if (def.kind === 'logic') {
+        item = (b.type === 'sorter' || b.type === 'valve') && b.recipe ? (b.recipe as ItemId) : null;
+        if (b.type === 'sorter') text = item ? '← ' : '?';
+        else if (b.type === 'valve') text = item ? `${this.sim.state.inventory[item] ?? 0}/${b.threshold ?? 50} ${b.open === false ? '■' : '▶'}` : '?';
+        else if (b.type === 'mixer') text = `${MIXER_RATIOS[b.ratio ?? 0].join(':')}`;
+        else text = '↑ → ←';
+      }
       const status = b.status ?? 'ok';
       const col = status === 'ok' ? '#22d3ee' : status === 'blocked' || status === 'no_recipe' || status === 'starved' || status === 'no_fuel' || status === 'depleted' ? '#ef4444' : '#f59e0b';
       ctx.font = 'bold 12px system-ui, sans-serif';

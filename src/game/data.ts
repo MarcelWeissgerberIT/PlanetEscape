@@ -50,7 +50,14 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   storage: { id: 'storage', kind: 'storage', size: 1, cost: { iron_plate: 8 }, power: 0, rotatable: true },
   splitter: { id: 'splitter', kind: 'splitter', size: 1, cost: { iron_plate: 4 }, power: 0, rotatable: true },
   tunnel: { id: 'tunnel', kind: 'tunnel', size: 1, cost: { iron_plate: 5 }, power: 0, rotatable: true },
+  sorter: { id: 'sorter', kind: 'logic', size: 1, cost: { iron_plate: 6, copper_plate: 2 }, power: 0, rotatable: true },
+  overflow: { id: 'overflow', kind: 'logic', size: 1, cost: { iron_plate: 6 }, power: 0, rotatable: true },
+  mixer: { id: 'mixer', kind: 'logic', size: 1, cost: { iron_plate: 8, copper_wire: 4 }, power: 0, rotatable: true },
+  valve: { id: 'valve', kind: 'logic', size: 1, cost: { iron_plate: 6, circuit: 2 }, power: 0, rotatable: true },
 };
+
+export const MIXER_RATIOS: [number, number][] = [[1, 1], [1, 2], [2, 1], [1, 3], [3, 1]];
+export const VALVE_THRESHOLDS = [10, 20, 50, 100, 200, 500];
 
 export const TUNNEL_RANGE = 4; // max tiles between entrance and exit
 
@@ -64,6 +71,10 @@ export const BUILD_ORDER: BuildingId[] = [
   'assembler',
   'splitter',
   'tunnel',
+  'sorter',
+  'overflow',
+  'mixer',
+  'valve',
   'refinery',
   'generator',
   'fabricator',
@@ -112,9 +123,9 @@ export const SHIP_TOTAL = Object.values(SHIP_PARTS).reduce((a, c) => a + (c ?? 0
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
   { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['printer', 'storage'], unlockRecipes: ['machine_part'] },
-  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['assembler', 'solar', 'splitter', 'tunnel'], unlockRecipes: ['copper_wire', 'steel_frame'] },
+  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['assembler', 'solar', 'splitter', 'tunnel', 'sorter', 'overflow'], unlockRecipes: ['copper_wire', 'steel_frame'] },
   { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: [], unlockRecipes: ['circuit', 'glass'] },
-  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
+  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
   { id: 'm7', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
 ];

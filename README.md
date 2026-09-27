@@ -38,6 +38,10 @@ You are KORA, the ship AI. The crash left exactly one working industrial 3D prin
 | **Fabricator** (2×2) | Hull plates, engines, nav computers, fuel cells, life support. |
 | **Solar panel / Fuel generator** | Power. When demand exceeds supply every machine slows down proportionally. |
 | **Splitter** | Takes items from behind and distributes them left / forward / right. |
+| **Sorter** (XOR) | The chosen item leaves to the left, everything else goes straight on. |
+| **Overflow** (OR) | Items go straight; only when the front is blocked they spill left, then right. |
+| **Mixer** (AND) | Takes from left and right and releases forward in a fixed ratio (1:1 … 3:1). |
+| **Valve** | Closes while the Core holds at least N of the watched item: demand-driven production. |
 | **Depot** | Buffers 120 items, passes them on at its front, optional output filter. |
 
 Seven orders unlock buildings and recipes step by step. The last one is the ship itself:

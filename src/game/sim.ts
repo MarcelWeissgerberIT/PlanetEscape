@@ -19,6 +19,7 @@ import {
   STORM_SECONDS,
   STORM_SOLAR_FACTOR,
   UPGRADE_BY_ID,
+  MIXER_RATIOS,
   recipesFor,
 } from './data';
 import type { Building, BuildingId, Contract, Dir, GameState, ItemId, RecipeDef, Status, UpgradeId } from './types';
@@ -180,6 +181,19 @@ export class Sim {
       b.pair = null;
       b.exit = false;
     }
+    if (def.kind === 'logic') {
+      b.output = {};
+      b.recipe = null; // sorter / valve: item filter
+      if (type === 'mixer') {
+        b.bufL = [];
+        b.bufR = [];
+        b.ratio = 0;
+      }
+      if (type === 'valve') {
+        b.threshold = 50;
+        b.open = true;
+      }
+    }
     this.state.buildings.push(b);
     this.index(b);
     if (type === 'tunnel') this.pairTunnel(b);
@@ -259,6 +273,8 @@ export class Sim {
     dump(b.output);
     dump(b.store);
     if (b.items) for (const it of b.items) this.addInv(it.item, 1);
+    for (const it of b.bufL ?? []) this.addInv(it, 1);
+    for (const it of b.bufR ?? []) this.addInv(it, 1);
     if (b.type === 'tunnel') this.unpair(b);
     const i = this.state.buildings.indexOf(b);
     if (i >= 0) this.state.buildings.splice(i, 1);
@@ -297,6 +313,9 @@ export class Sim {
         return b.type === 'generator';
       case 'splitter':
       case 'miner':
+        return from === b.dir;
+      case 'logic':
+        if (b.type === 'mixer') return from === ((b.dir + 1) & 3) || from === ((b.dir + 3) & 3);
         return from === b.dir;
     }
   }
@@ -366,6 +385,22 @@ export class Sim {
       case 'splitter': {
         if (from !== b.dir) return false;
         if (b.output && Object.keys(b.output).length) return false;
+        b.output = { [item]: 1 };
+        return true;
+      }
+      case 'logic': {
+        if (b.type === 'mixer') {
+          const fromLeft = from === ((b.dir + 1) & 3); // travelling clockwise-next = came from the left side
+          const fromRight = from === ((b.dir + 3) & 3);
+          if (!fromLeft && !fromRight) return false;
+          const buf = fromLeft ? b.bufL! : b.bufR!;
+          if (buf.length >= 4) return false;
+          buf.push(item);
+          return true;
+        }
+        if (from !== b.dir) return false;
+        if (b.output && Object.keys(b.output).length) return false;
+        if (b.type === 'valve' && !b.recipe) b.recipe = item; // valve watches the first item it sees
         b.output = { [item]: 1 };
         return true;
       }
@@ -441,7 +476,7 @@ export class Sim {
           b.status = b.fuelSeconds! > 0 ? 'ok' : 'no_fuel';
         } else if (b.type === 'solar') supply += -p * this.factor('power') * (st.storm > 0 ? STORM_SOLAR_FACTOR : 1);
         else supply += -p;
-      } else if (p > 0) demand += p;
+      } else if (p > 0 && !(b.type === 'miner' && b.status === 'depleted')) demand += p;
     }
     st.powerSupply = Math.round(supply);
     st.powerDemand = demand;
@@ -470,6 +505,12 @@ export class Sim {
           break;
         case 'splitter':
           this.tickSplitter(b);
+          break;
+        case 'sorter':
+        case 'overflow':
+        case 'valve':
+        case 'mixer':
+          this.tickLogic(b);
           break;
         case 'generator':
           if (b.fuelSeconds! > 0) b.fuelSeconds = Math.max(0, b.fuelSeconds! - dt);
@@ -724,6 +765,70 @@ export class Sim {
     b.status = 'blocked';
   }
 
+  private pushDir(b: Building, item: ItemId, d: Dir): boolean {
+    const t = this.at(b.x + DX[d], b.y + DY[d]);
+    return !!t && t !== b && this.accept(t, item, d);
+  }
+
+  private tickLogic(b: Building) {
+    const left = ((b.dir + 3) & 3) as Dir, right = ((b.dir + 1) & 3) as Dir;
+    if (b.type === 'mixer') {
+      const [na, nb] = MIXER_RATIOS[b.ratio ?? 0];
+      const pattern: ('L' | 'R')[] = [...Array(na).fill('L'), ...Array(nb).fill('R')];
+      const phase = (b.rr ?? 0) % pattern.length;
+      const side = pattern[phase];
+      const buf = side === 'L' ? b.bufL! : b.bufR!;
+      if (!buf.length) {
+        b.status = (b.bufL!.length || b.bufR!.length) ? 'waiting' : 'ok';
+        return;
+      }
+      if (this.pushDir(b, buf[0], b.dir)) {
+        buf.shift();
+        b.rr = (phase + 1) % pattern.length;
+        b.status = 'ok';
+      } else b.status = 'blocked';
+      return;
+    }
+    const key = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+    if (b.type === 'valve') {
+      const limit = b.threshold ?? 50;
+      const have = b.recipe ? (this.state.inventory[b.recipe as ItemId] ?? 0) : 0;
+      b.open = !b.recipe || have < limit;
+      if (!key) {
+        b.status = b.open ? 'ok' : 'closed';
+        return;
+      }
+      if (!b.open) {
+        b.status = 'closed';
+        return;
+      }
+      if (this.pushDir(b, key, b.dir)) b.output = {};
+      b.status = 'ok';
+      return;
+    }
+    if (!key) {
+      b.status = 'ok';
+      return;
+    }
+    if (b.type === 'sorter') {
+      const d = b.recipe && key === b.recipe ? left : b.dir;
+      if (this.pushDir(b, key, d)) {
+        b.output = {};
+        b.status = 'ok';
+      } else b.status = 'blocked';
+      return;
+    }
+    // overflow: forward first, then left, then right
+    for (const d of [b.dir, left, right] as Dir[]) {
+      if (this.pushDir(b, key, d)) {
+        b.output = {};
+        b.status = 'ok';
+        return;
+      }
+    }
+    b.status = 'blocked';
+  }
+
   // ---------- Diagnostics ----------
 
   /** Everything that currently keeps a chain from running. */
@@ -731,8 +836,9 @@ export class Sim {
     const out: Problem[] = [];
     for (const b of this.state.buildings) {
       const s = b.status;
-      if (!s || s === 'ok' || s === 'idle') continue;
+      if (!s || s === 'ok' || s === 'idle' || s === 'closed' || s === 'waiting') continue;
       if (s === 'low_power') continue; // reported globally
+      if (s === 'blocked' && BUILDINGS[b.type].kind === 'logic') continue; // a full belt behind a module is normal
       if (s === 'blocked' && (b.type === 'miner' || BUILDINGS[b.type].kind === 'machine')) {
         // only report blocked machines that have nowhere to output; a full buffer on a busy belt is normal
         if (this.hasOutputTarget(b)) continue;

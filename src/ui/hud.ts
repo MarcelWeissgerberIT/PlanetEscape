@@ -1,5 +1,5 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
-import { BUILDINGS, BUILD_ORDER, ITEM_ORDER, MISSIONS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, recipesFor } from '../game/data';
+import { BUILDINGS, BUILD_ORDER, ITEM_ORDER, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import type { Problem, Sim } from '../game/sim';
@@ -710,6 +710,18 @@ export class Hud {
       body = `<div class="lbl">${t('ship_progress')} ${p}%</div><div class="pbar big"><div class="pfill" style="width:${p}%"></div></div><div class="mrows">${parts}</div>`;
     } else if (b.type === 'tunnel') {
       body = `${statusLine()}${dirPicker}`;
+    } else if (def.kind === 'logic') {
+      const known = ITEM_ORDER.filter((id) => (st.inventory[id] ?? 0) > 0 || st.stats.produced[id] || RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id)) || TERRAIN_ITEM[st.terrain[0]] === id || ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'].includes(id));
+      const picker = (label: string) => `<div class="lbl">${label}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('any_item')}</button>${known.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
+      if (b.type === 'sorter') body = `${statusLine()}${dirPicker}${picker(t('sort_item'))}`;
+      else if (b.type === 'valve') {
+        const have = b.recipe ? (st.inventory[b.recipe as ItemId] ?? 0) : 0;
+        body = `${statusLine(b.recipe ? ` · ${have}/${b.threshold ?? 50}` : '')}${dirPicker}${picker(t('watch_item'))}
+          <div class="dirs"><span class="lbl">${t('threshold')}</span>${VALVE_THRESHOLDS.map((n) => `<button class="chip ${(b.threshold ?? 50) === n ? 'active' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>`;
+      } else if (b.type === 'mixer') {
+        body = `${statusLine()}<div class="bufs"><span class="lbl">◀</span>${(b.bufL ?? []).map((k) => itemImg(k, 'icon sm')).join('') || '–'}<span class="lbl">▶</span>${(b.bufR ?? []).map((k) => itemImg(k, 'icon sm')).join('') || '–'}</div>${dirPicker}
+          <div class="dirs"><span class="lbl">${t('ratio')}</span>${MIXER_RATIOS.map((r, i) => `<button class="chip ${(b.ratio ?? 0) === i ? 'active' : ''}" data-ratio="${i}">${r[0]}:${r[1]}</button>`).join('')}</div>`;
+      } else body = `${statusLine()}${dirPicker}`;
     } else body = dirPicker;
     return body;
   }
@@ -725,7 +737,7 @@ export class Hud {
       <div class="info-body">${this.infoBody(b)}</div>
       ${b.type !== 'core' ? `<div class="info-actions">
         ${def.rotatable ? `<button class="btn small" data-act="rotate">⟳ ${t('rotate')}</button>` : ''}
-        <button class="btn small danger" data-act="remove">✕ ${t('delete')}</button>
+        <button class="btn small danger" data-act="remove">${b.status === 'depleted' ? '♻ ' + t('recycle') : '✕ ' + t('delete')}</button>
       </div>` : ''}`;
     const wasHidden = this.info.classList.contains('hidden');
     this.info.classList.remove('hidden');
@@ -747,6 +759,19 @@ export class Hud {
       }
       if (target.dataset.filter !== undefined) {
         b.recipe = target.dataset.filter || null;
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.threshold !== undefined) {
+        b.threshold = Number(target.dataset.threshold);
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.ratio !== undefined) {
+        b.ratio = Number(target.dataset.ratio);
+        b.rr = 0;
         sfx.select();
         this.showInfo(b);
         return;

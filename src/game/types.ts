@@ -43,11 +43,15 @@ export type BuildingId =
   | 'splitter'
   | 'tunnel'
   | 'fabricator'
-  | 'printer';
+  | 'printer'
+  | 'sorter'
+  | 'overflow'
+  | 'mixer'
+  | 'valve';
 
-export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter' | 'tunnel';
+export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter' | 'tunnel' | 'logic';
 
-export type Status = 'ok' | 'idle' | 'no_recipe' | 'starved' | 'blocked' | 'low_power' | 'no_fuel' | 'jammed' | 'dead_end' | 'unpaired' | 'depleted';
+export type Status = 'ok' | 'idle' | 'no_recipe' | 'starved' | 'blocked' | 'low_power' | 'no_fuel' | 'jammed' | 'dead_end' | 'unpaired' | 'depleted' | 'closed' | 'waiting';
 
 export interface ItemDef {
   id: ItemId;
@@ -103,6 +107,12 @@ export interface Building {
   store?: Partial<Record<ItemId, number>>;
   // generator fuel buffer
   fuelSeconds?: number;
+  // logic modules: mixer side buffers, valve threshold, mixer ratio index, valve open state
+  bufL?: ItemId[];
+  bufR?: ItemId[];
+  threshold?: number;
+  ratio?: number;
+  open?: boolean;
   // tunnel: id of the paired tunnel (entrance <-> exit); `exit` marks the exit end
   pair?: number | null;
   exit?: boolean;
