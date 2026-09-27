@@ -7,6 +7,7 @@ await build({
   target: 'node18',
   outfile: 'mcp/dist/index.mjs',
   packages: 'external',
+  loader: { '.md': 'text' },
   banner: { js: '#!/usr/bin/env node' },
 });
 console.log('mcp built -> mcp/dist/index.mjs');

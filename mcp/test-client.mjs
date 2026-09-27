@@ -22,6 +22,14 @@ console.log('solve ch1:', sol.ok, sol.steps, sol.error ?? '');
 let t = await call('pe_tick', { seconds: 120 });
 console.log('after tick:', t.secondsRun, 's, events:', t.events, 'order now', t.state.order?.index, 'problems', t.problems.length);
 
+// playbook + next chapter (carries over from the completed chapter 1)
+const pb = await client.callTool({ name: 'pe_playbook', arguments: {} });
+console.log('playbook chars:', pb.content[0].text.length);
+const prompts = await client.listPrompts();
+console.log('prompts:', prompts.prompts.map((p) => p.name).join(', '));
+s = await call('pe_next_chapter');
+console.log('next chapter ->', s.chapter, 'order', s.state.order?.id, 'inventory', JSON.stringify(s.state.inventory));
+
 // Chapter 2: plates from iron + copper
 s = await call('pe_new_game', { mode: 'story', chapter: 2 });
 sol = await call('pe_solve_order', { rate_per_min: 12 });
@@ -31,6 +39,8 @@ console.log('ch2 after tick:', t.secondsRun, 's events', t.events, 'order', JSON
 
 // Chapter 3: printer + machine parts
 s = await call('pe_new_game', { mode: 'story', chapter: 3 });
+const early = await client.callTool({ name: 'pe_next_chapter', arguments: {} });
+console.log('next chapter while order open -> isError', early.isError, early.content[0].text.slice(0, 60));
 sol = await call('pe_solve_order', { rate_per_min: 6 });
 console.log('solve ch3:', sol.ok, sol.steps, sol.error ?? '');
 t = await call('pe_tick', { seconds: 600 });

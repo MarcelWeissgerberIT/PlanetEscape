@@ -1,5 +1,5 @@
 {
   "extends": "./tsconfig.json",
   "compilerOptions": { "types": ["node"], "noEmit": true, "lib": ["ES2022"] },
-  "include": ["mcp/src", "src/game/types.ts", "src/game/data.ts", "src/game/world.ts", "src/game/sim.ts", "src/game/solver.ts"]
+  "include": ["mcp/src", "mcp/src/md.d.ts", "src/game/types.ts", "src/game/data.ts", "src/game/world.ts", "src/game/sim.ts", "src/game/solver.ts"]
 }

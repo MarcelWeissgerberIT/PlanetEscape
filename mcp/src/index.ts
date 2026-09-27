@@ -7,9 +7,16 @@ import { BUILDINGS, BUILD_ORDER, LEVELS, MISSIONS, RECIPES, RECIPE_BY_ID, SHIP_P
 import { Sim } from '../../src/game/sim';
 import { beltCapacity, buildChain, machineRate, minerRate, routeBelt, layPath, solveOrder, type SolverLog } from '../../src/game/solver';
 import type { Building, BuildingId, Dir, GameOptions, GameState, ItemId, TerrainId } from '../../src/game/types';
-import { chapterState, newGame } from '../../src/game/world';
+import { chapterState, levelState, newGame } from '../../src/game/world';
+import PLAYBOOK from '../PLAYBOOK.md';
 
-const server = new McpServer({ name: 'planet-escape-mcp-server', version: '1.0.0' });
+const server = new McpServer(
+  { name: 'planet-escape-mcp-server', version: '1.1.0' },
+  {
+    instructions:
+      'Planet Escape is a factory-building game. Play one round with: pe_new_game (or pe_next_chapter) -> pe_solve_order -> pe_tick (stop_on_order) -> pe_analyze and fix -> repeat until "order N complete". Call pe_playbook once at the start for the full strategy guide, including what to do when the solver reports "out of material" (tick 180-300 s, solve again) or routing failures (build per item with pe_build_chain).',
+  },
+);
 
 let sim: Sim = new Sim(newGame(42, { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true }));
 sim.state.introSeen = true;
@@ -438,6 +445,62 @@ server.registerTool(
     sim = new Sim(st);
     return ok(summary());
   },
+);
+
+server.registerTool(
+  'pe_playbook',
+  {
+    title: 'How to play (agent guide)',
+    description: 'The strategy guide for agents: the loop for one chapter, how to react to solver errors, how to fix every problem status, manual placement rules and chapter-specific notes. Read it once at the start of a round.',
+    inputSchema: {},
+    annotations: { readOnlyHint: true, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async () => ({ content: [{ type: 'text' as const, text: PLAYBOOK }] }),
+);
+
+server.registerTool(
+  'pe_next_chapter',
+  {
+    title: 'Next chapter',
+    description: 'Story mode: after the current order completed, move to the next chapter map (unlocks, upgrades and statistics carry over, the factory restarts from the chapter stock). Fails when the current order is still open.',
+    inputSchema: {},
+    annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: false, openWorldHint: false },
+  },
+  async () => {
+    const st = sim.state;
+    if (st.options.mode !== 'story') return fail('only in story mode; in free play the next order simply continues on the same map');
+    if (st.launched) return fail('the ship has launched: the story is complete. Start a new game with pe_new_game.');
+    const chapter = st.missionIndex; // missionIndex already points at the next order once the previous one completed
+    if (chapter >= LEVELS.length) return fail('no further chapter');
+    // the previous order counts as complete when missionIndex moved past the chapter this map was generated for
+    const mapChapter = LEVELS.findIndex((l) => l.seed === st.seed);
+    if (mapChapter >= 0 && st.missionIndex <= mapChapter) return fail(`order ${st.missionIndex + 1} is still open on this map; complete it first (pe_solve_order / pe_tick)`);
+    sim = new Sim(levelState(st, chapter, st.options));
+    sim.state.introSeen = true;
+    sim.state.tutorialStep = -1;
+    eventLog = [];
+    return ok({ chapter: chapter + 1, state: summary() }, `Chapter ${chapter + 1} started.\n` + JSON.stringify(summary(), null, 1));
+  },
+);
+
+server.registerPrompt(
+  'play_chapter',
+  {
+    title: 'Play a chapter',
+    description: 'Instructs the agent to play one story chapter of Planet Escape end to end and report the result.',
+    argsSchema: { chapter: z.string().describe('Chapter number 1-7').default('1') },
+  },
+  ({ chapter }) => ({
+    messages: [
+      {
+        role: 'user' as const,
+        content: {
+          type: 'text' as const,
+          text: `Play chapter ${chapter} of Planet Escape with the pe_ tools. Follow this playbook:\n\n${PLAYBOOK}\n\nStart now with pe_new_game (mode story, chapter ${chapter}). When the order completes, export the save with pe_save and report chapter, game time, building count and remaining problems.`,
+        },
+      },
+    ],
+  }),
 );
 
 server.registerTool(
