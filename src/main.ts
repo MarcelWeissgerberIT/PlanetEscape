@@ -127,9 +127,11 @@ function swapState(state: GameState) {
 
 function start() {
   playing = true;
+  const f = sim.state.focus;
+  if (f) setTimeout(() => renderer.centerOn(f.x, f.y, f.zoom), 0);
   if (sim.state.options.mode === 'story' && !sim.state.launched) setLastChapter(sim.state.missionIndex + 1);
   hud.hideTitle();
-  renderer.centerOnCore();
+  if (!sim.state.focus) renderer.centerOnCore();
   if (sim.state.launched) launchShown = true;
 }
 

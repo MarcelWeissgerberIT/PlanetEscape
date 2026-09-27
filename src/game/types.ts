@@ -222,6 +222,7 @@ export interface GameState {
   boostUntil?: number; // overclocked power until this game time
   eventsSeen?: number;
   note?: { de?: string; en?: string; title?: string }; // shown once when a shared save is imported
+  focus?: { x: number; y: number; zoom: number }; // camera position to show when the save is loaded
 }
 
 export interface BlueprintItem {
