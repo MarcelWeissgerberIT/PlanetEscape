@@ -45,3 +45,13 @@ td code { white-space: nowrap; }
 .foot { color: var(--muted); font-size: 13px; margin-top: 40px; border-top: 1px solid var(--line); padding-top: 14px; }
 a { color: var(--accent); }
 .btn { width: auto; display: inline-block; }
+/* live spectator page */
+.live .stage.tall { aspect-ratio: auto; height: min(70vh, 720px); }
+.live .demo { grid-template-columns: minmax(0, 1fr) 340px; }
+@media (max-width: 800px) { .live .demo { grid-template-columns: 1fr; } .live .stage.tall { height: 55vh; } }
+.badge.on { border-color: var(--ok); color: var(--ok); }
+.badge.off { border-color: var(--danger); color: #fca5a5; }
+.log.tools { height: 260px; }
+.log.events { height: 120px; }
+.log .dim { color: #7c8a99; }
+.live #live-canvas { cursor: grab; touch-action: none; }

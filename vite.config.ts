@@ -5,7 +5,7 @@ export default defineConfig({
   build: {
     target: 'es2020',
     assetsInlineLimit: 0,
-    rollupOptions: { input: { main: 'index.html', ai: 'ai/index.html' } },
+    rollupOptions: { input: { main: 'index.html', ai: 'ai/index.html', spectate: 'spectate/index.html' } },
   },
   server: {
     port: 5173,

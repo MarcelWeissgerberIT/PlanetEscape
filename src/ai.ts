@@ -47,6 +47,10 @@ const T = {
     what: 'Was es tut',
     playbook: 'Playbook für Agenten',
     playbook_txt: 'Diese Anleitung bekommt der Agent vom Server selbst (Tool <code>pe_playbook</code>, Prompt <code>play_chapter</code>). Sie beschreibt eine Runde, die Reaktion auf Solver‑Fehler und die Reparatur jeder Störung.',
+    watch: 'Live zuschauen',
+    watch_txt: 'Sag dem Agenten „starte die Zuschauer‑Seite“ oder lass ihn <code>pe_spectate</code> aufrufen. Der MCP‑Server öffnet dann auf deinem Rechner eine temporäre Live‑Seite. Solange sie läuft, wird die Simulation in Echtzeit getaktet (Standard 10× Spielzeit), und du siehst jeden Bau, jedes Band und jeden Werkzeugaufruf des Agenten, während er spielt. Wird die Seite gestoppt oder der Server beendet, ist sie wieder weg.',
+    watch_open: 'Live‑Seite öffnen (läuft nur, wenn der Agent sie gestartet hat)',
+    watch_share: 'Die Seite lauscht nur auf deinem Rechner. Für Zuschauer im Netz reicht ein Tunnel, zum Beispiel <code>ssh -R 7411:localhost:7411 server</code> oder ein Cloudflare‑Tunnel auf Port 7411.',
     load_save: 'Spielstand ansehen',
     load_save_txt: 'Am Ende exportiert der Agent den Spielstand mit <code>pe_save</code>. Im Spiel unter Menü → Export/Import einfügen, dann siehst du die Fabrik der KI auf deinem Gerät.',
     foot: 'Planet Escape ist Open Source. Der Solver ist in <code>src/game/solver.ts</code>, der Server in <code>mcp/</code>.',
@@ -85,6 +89,10 @@ const T = {
     what: 'What it does',
     playbook: 'Agent playbook',
     playbook_txt: 'The agent receives this guide from the server itself (tool <code>pe_playbook</code>, prompt <code>play_chapter</code>). It describes one round, how to react to solver errors and how to repair every problem.',
+    watch: 'Watch live',
+    watch_txt: 'Tell the agent “start the spectator page” or let it call <code>pe_spectate</code>. The MCP server then opens a temporary live page on your machine. While it runs, the simulation is paced in real time (default 10× game speed) and you see every building, every belt and every tool call of the agent as it plays. Stop the page or the server and it is gone again.',
+    watch_open: 'Open the live page (only works while the agent has it running)',
+    watch_share: 'The page listens on your machine only. For remote viewers a tunnel is enough, e.g. <code>ssh -R 7411:localhost:7411 server</code> or a Cloudflare tunnel to port 7411.',
     load_save: 'Look at the result',
     load_save_txt: 'At the end the agent exports the save with <code>pe_save</code>. Paste it in the game under Menu → Export/Import and the AI’s factory appears on your device.',
     foot: 'Planet Escape is open source. The solver lives in <code>src/game/solver.ts</code>, the server in <code>mcp/</code>.',
@@ -109,6 +117,7 @@ const TOOLS: [string, string][] = [
   ['pe_route_belt', 'Auto‑routed belt line from one building to another.'],
   ['pe_build_chain', 'Whole production chain for an item at a target rate.'],
   ['pe_solve_order', 'Build everything the current order needs, including power.'],
+  ['pe_spectate', 'Start / stop the local live page so a human can watch.'],
   ['pe_tick', 'Advance game time; stops when the order completes.'],
   ['pe_analyze', 'Jams, starved machines, dead ends, power shortage.'],
   ['pe_plan', 'Machine and miner counts for a rate (throughput calculator).'],
@@ -422,6 +431,11 @@ npm run mcp:build</code></pre>
     <table><thead><tr><th>${tt('tool')}</th><th>${tt('what')}</th></tr></thead><tbody>
       ${TOOLS.map(([n, d]) => `<tr><td><code>${n}</code></td><td>${d}</td></tr>`).join('')}
     </tbody></table>
+
+    <h2>${tt('watch')}</h2>
+    <p>${tt('watch_txt')}</p>
+    <p><a class="btn primary" href="http://localhost:7411/spectate/" target="_blank" rel="noopener">▶ ${tt('watch_open')}</a></p>
+    <p class="lead" style="font-size:14px">${tt('watch_share')}</p>
 
     <h2>${tt('load_save')}</h2>
     <p>${tt('load_save_txt')}</p>

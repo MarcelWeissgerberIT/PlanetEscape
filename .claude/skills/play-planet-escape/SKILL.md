@@ -19,4 +19,6 @@ Then follow [PLAYBOOK.md](PLAYBOOK.md) in this folder step by step. In short:
 3. `pe_tick` 600 s with `stop_on_order` → `pe_analyze` → fix → tick again until `order N complete`.
 4. `pe_next_chapter` for the following chapter, or `pe_save` `export` to hand the game to the human.
 
+If the user wants to watch, call `pe_spectate` first and give them the URL; then tick in chunks of at most 300 s.
+
 Report chapter, outcome, game time, building count and open problems. Do not tick more than about 1200 s without a `pe_analyze` check.

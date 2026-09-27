@@ -1336,6 +1336,7 @@ export class Hud {
       <button class="btn" data-act="transfer">${icon('transfer', 'sm')} ${t('transfer')}</button>
       <button class="btn" data-act="blueprints">${icon('blueprint', 'sm')} ${t('blueprints')}</button>
       <button class="btn" data-act="howto">${t('how_to')}</button>
+      <a class="btn" href="./ai/" style="text-decoration:none;text-align:center">${t('ai_page')} →</a>
       <button class="btn danger" data-act="new">${t('new_game')}</button>
       <button class="btn primary" data-act="close">${t('close')}</button>
       <p class="save-hint">${t('save_hint')}</p>`,

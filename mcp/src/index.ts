@@ -9,6 +9,7 @@ import { beltCapacity, buildChain, machineRate, minerRate, routeBelt, layPath, s
 import type { Building, BuildingId, Dir, GameOptions, GameState, ItemId, TerrainId } from '../../src/game/types';
 import { chapterState, levelState, newGame } from '../../src/game/world';
 import PLAYBOOK from '../PLAYBOOK.md';
+import { Spectator, sleep } from './spectate';
 
 const server = new McpServer(
   { name: 'planet-escape-mcp-server', version: '1.1.0' },
@@ -22,6 +23,38 @@ let sim: Sim = new Sim(newGame(42, { mode: 'story', mapSize: 'medium', infiniteO
 sim.state.introSeen = true;
 sim.state.tutorialStep = -1;
 let eventLog: string[] = [];
+let ticking = 0; // > 0 while a paced pe_tick runs (speed), for the spectator page
+
+// ---------- Spectator (live view in a browser) ----------
+const spectator = new Spectator();
+spectator.snapshot = () => ({
+  ts: Date.now(),
+  speed: ticking,
+  state: sim.state,
+  tools: spectator.toolLog.slice(-30),
+  events: eventLog.slice(-12),
+});
+
+// every tool call is logged for the spectators and followed by a state broadcast
+{
+  type Reg = typeof server.registerTool;
+  const orig = server.registerTool.bind(server) as Reg;
+  (server as unknown as { registerTool: Reg }).registerTool = ((name: string, cfg: unknown, cb: (...a: unknown[]) => Promise<{ isError?: boolean; content?: { text?: string }[] }>) =>
+    (orig as unknown as (n: string, c: unknown, f: (...a: unknown[]) => unknown) => unknown)(name, cfg, async (...args: unknown[]) => {
+      const argStr = args.length && args[0] && typeof args[0] === 'object' && !('signal' in (args[0] as object)) ? JSON.stringify(args[0]).slice(0, 160) : '';
+      let res: { isError?: boolean; content?: { text?: string }[] };
+      try {
+        res = await cb(...args);
+      } catch (e) {
+        spectator.record({ t: Date.now(), name, args: argStr, ok: false, note: String(e).slice(0, 120) });
+        spectator.broadcast();
+        throw e;
+      }
+      spectator.record({ t: Date.now(), name, args: argStr, ok: !res.isError, note: res.isError ? res.content?.[0]?.text?.slice(0, 120) : undefined });
+      spectator.broadcast();
+      return res;
+    })) as unknown as Reg;
+}
 
 const BUILDING_IDS = Object.keys(BUILDINGS) as [BuildingId, ...BuildingId[]];
 const DirSchema = z.union([z.literal(0), z.literal(1), z.literal(2), z.literal(3)]).describe('0 = up/north, 1 = right/east, 2 = down/south, 3 = left/west');
@@ -375,11 +408,23 @@ server.registerTool(
     const events: string[] = [];
     const ticks = Math.round(seconds * 30);
     let ran = 0;
-    for (let i = 0; i < ticks; i++) {
-      sim.tick(1 / 30);
-      ran++;
-      if (sim.events.length) events.push(...drainEvents());
-      if (stop_on_order && sim.state.missionIndex !== startOrder) break;
+    // with spectators the simulation is paced to `speed` game seconds per real second and streamed 5x per second
+    const paced = spectator.running;
+    const perChunk = paced ? Math.max(1, Math.round((spectator.speed * 30) / 5)) : ticks;
+    ticking = paced ? spectator.speed : 0;
+    try {
+      for (let i = 0; i < ticks; i++) {
+        sim.tick(1 / 30);
+        ran++;
+        if (sim.events.length) events.push(...drainEvents());
+        if (stop_on_order && sim.state.missionIndex !== startOrder) break;
+        if (paced && ran % perChunk === 0) {
+          spectator.broadcast();
+          await sleep(200);
+        }
+      }
+    } finally {
+      ticking = 0;
     }
     return ok({ secondsRun: Math.round(ran / 30), events, problems: sim.analyze().slice(0, 20).map((p) => ({ status: p.status, building: describeBuilding(p.building), missing: p.missing })), state: summary() });
   },
@@ -501,6 +546,33 @@ server.registerPrompt(
       },
     ],
   }),
+);
+
+server.registerTool(
+  'pe_spectate',
+  {
+    title: 'Live view for humans',
+    description: `Start or stop a local spectator page so a human can watch you play in a browser. Returns the URL (default http://localhost:7411/spectate/). While the page is active, pe_tick runs paced at \`speed\` game seconds per real second (default 10) and streams every change, so keep pe_tick calls to <= 300 seconds each. Tell the human the URL. Requires the built site (npm run build).`,
+    inputSchema: {
+      action: z.enum(['start', 'stop', 'status']).default('start'),
+      port: z.number().int().min(1024).max(65535).default(7411),
+      speed: z.number().min(1).max(60).default(10).describe('game seconds per real second while ticking'),
+    },
+    annotations: { readOnlyHint: false, destructiveHint: false, idempotentHint: true, openWorldHint: false },
+  },
+  async ({ action, port, speed }) => {
+    if (action === 'stop') {
+      spectator.stop();
+      return ok({ running: false }, 'Spectator page stopped.');
+    }
+    if (action === 'status') return ok({ running: spectator.running, url: spectator.url, speed: spectator.speed, viewers: undefined });
+    try {
+      const url = await spectator.start(port, speed);
+      return ok({ running: true, url, speed }, `Live view: ${url}\nTell the human to open it. Ticking is now paced at ${speed}x; use pe_tick with at most 300 seconds per call so the viewer can follow.`);
+    } catch (e) {
+      return fail(String((e as Error).message ?? e));
+    }
+  },
 );
 
 server.registerTool(

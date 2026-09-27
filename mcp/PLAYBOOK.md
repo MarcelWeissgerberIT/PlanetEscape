@@ -24,6 +24,13 @@ orders in sequence.
 
 Never tick more than ~1200 s without checking `pe_analyze`; a broken chain never repairs itself.
 
+## When a human wants to watch
+
+Call `pe_spectate` (action `start`) first and tell the human the URL it returns (normally
+http://localhost:7411/spectate/). While the page runs, `pe_tick` is paced to real time (10 game seconds per
+real second by default), so use `pe_tick` with at most 300 seconds per call and keep narrating what you do.
+Stop it with `pe_spectate` action `stop` when the round is over.
+
 ## Fixing problems (`pe_analyze` / the `problems` list)
 
 | status | meaning | fix |
