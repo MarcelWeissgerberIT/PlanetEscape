@@ -8,7 +8,7 @@ import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOpt
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave, load as loadSave } from '../game/save';
-import { chaptersUnlocked, loadProgress, recordChapter, recordScore, starString } from '../game/progress';
+import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 
 export interface HudCallbacks {
@@ -173,10 +173,14 @@ export class Hud {
     const lang = getLang();
     const o = this.freeOptions;
     const seedInput = `<div class="seed-row"><input id="seed" type="text" inputmode="numeric" placeholder="${t('seed')}" maxlength="12"></div>`;
+    const resume = resumeChapter();
     const mainView = `
         <div class="title-buttons">
           ${hasSave() ? `<button class="btn primary" data-act="continue">${t('continue')}</button>` : ''}
-          <button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story"><b>${t('mode_story')}</b><small>${t('mode_story_desc')}</small></button>
+          ${resume > 1
+            ? `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story-resume"><b>${t('mode_story')} · ${t('story_resume', { n: resume })}</b><small>${MISSIONS[resume - 1] ? tMission(MISSIONS[resume - 1].id).title + ' · ' : ''}${t('story_resume_desc')}</small></button>
+               <button class="btn ghost small-line" data-act="story">${t('story_restart')}</button>`
+            : `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story"><b>${t('mode_story')}</b><small>${t('mode_story_desc')}</small></button>`}
           <button class="btn mode" data-act="freeview"><b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small></button>
           ${seedInput}
           <div class="row2">
@@ -244,6 +248,9 @@ export class Hud {
       else if (act === 'story') {
         const seed = seedOf();
         void this.confirmNewGame().then((yes) => yes && this.cb.onNewGame(seed, { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true }));
+      } else if (act === 'story-resume') {
+        const ch = resumeChapter();
+        void this.confirmNewGame().then((yes) => yes && this.cb.onPlayChapter(ch));
       } else if (act === 'freeview') {
         this.titleView = 'free';
         this.renderTitle();

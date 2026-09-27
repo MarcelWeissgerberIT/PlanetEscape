@@ -8,6 +8,7 @@ import { setActivity, sfx } from './game/sfx';
 import { Sim } from './game/sim';
 import type { Blueprint, GameState, TerrainId } from './game/types';
 import { chapterState, levelState, newGame } from './game/world';
+import { setLastChapter } from './game/progress';
 import { t } from './i18n';
 import { Hud } from './ui/hud';
 
@@ -118,6 +119,7 @@ function swapState(state: GameState) {
 
 function start() {
   playing = true;
+  if (sim.state.options.mode === 'story' && !sim.state.launched) setLastChapter(sim.state.missionIndex + 1);
   hud.hideTitle();
   renderer.centerOnCore();
   if (sim.state.launched) launchShown = true;

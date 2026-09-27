@@ -5,6 +5,7 @@ export interface Progress {
   stars: Record<number, number>; // chapter index (0-based) -> 1..3
   best: Record<number, number>; // chapter index -> best seconds
   bestScore: { normal: number; hard: number };
+  lastChapter?: number; // 1-based chapter the player was in most recently
 }
 
 const KEY = 'pe_progress_v1';
@@ -14,7 +15,7 @@ export function loadProgress(): Progress {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<Progress>;
-      return { stars: p.stars ?? {}, best: p.best ?? {}, bestScore: { normal: p.bestScore?.normal ?? 0, hard: p.bestScore?.hard ?? 0 } };
+      return { stars: p.stars ?? {}, best: p.best ?? {}, bestScore: { normal: p.bestScore?.normal ?? 0, hard: p.bestScore?.hard ?? 0 }, lastChapter: p.lastChapter };
     }
   } catch {
     /* ignore */
@@ -64,6 +65,19 @@ export function recordScore(score: number, hard: boolean): boolean {
     return true;
   }
   return false;
+}
+
+export function setLastChapter(chapter: number) {
+  const p = loadProgress();
+  if (p.lastChapter === chapter) return;
+  p.lastChapter = chapter;
+  store(p);
+}
+
+/** Where a returning player should resume the story: the furthest chapter reached or last played. */
+export function resumeChapter(): number {
+  const p = loadProgress();
+  return Math.max(1, Math.min(LEVELS.length, Math.max(chaptersUnlocked(), p.lastChapter ?? 1)));
 }
 
 export function starString(n: number): string {
