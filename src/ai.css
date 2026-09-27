@@ -1,5 +1,6 @@
 /* Sub page: AI / MCP. Reuses the variables from style.css but is a normal scrolling document. */
-html.page, body.page { position: static; height: auto; overflow: auto; -webkit-user-select: text; user-select: text; }
+html.page, body.page { position: static !important; inset: auto !important; height: auto !important; min-height: 100%; overflow: visible !important; overflow-y: auto !important; overscroll-behavior: auto; -webkit-user-select: text; user-select: text; }
+html.page { overflow-y: scroll !important; }
 body.page { background: radial-gradient(1200px 600px at 20% -10%, rgba(34, 211, 238, 0.12), transparent), var(--bg); font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, Inter, system-ui, sans-serif; color: var(--text); margin: 0; line-height: 1.5; }
 .aiwrap { max-width: 980px; margin: 0 auto; padding: 16px 16px 60px; }
 .topbar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 8px 0 18px; flex-wrap: wrap; }
