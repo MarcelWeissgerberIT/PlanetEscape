@@ -81,6 +81,8 @@ Seven orders unlock buildings and recipes step by step. The last one is the ship
 
 ## MCP server: let an AI play / KI spielt mit
 
+**Einfache Anleitung / simple guide (DE + EN): [mcp/SETUP.md](mcp/SETUP.md)**
+
 `mcp/` contains a [Model Context Protocol](https://modelcontextprotocol.io) server that runs the game headlessly (no browser) so an AI agent such as Claude can play it, inspect the map, place buildings and let the built-in **auto-solver** design production chains.
 
 ```bash
