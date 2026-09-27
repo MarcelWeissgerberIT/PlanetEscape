@@ -428,3 +428,5 @@ label.btn { text-align: center; }
 .zbtn { flex: 1; height: 30px; border-radius: 8px; background: rgba(255, 255, 255, 0.07); border: 1px solid var(--glass-line); font-size: 18px; font-weight: 800; color: var(--accent); display: inline-flex; align-items: center; justify-content: center; }
 .zbtn:active { background: rgba(34, 211, 238, 0.25); }
 .zbtn .ico.sm { width: 16px; height: 16px; }
+/* phones: the minimap sits below the stacked icon column instead of over it */
+@media (max-width: 900px) { .minimap-box { top: calc(var(--sat) + 312px); } }
