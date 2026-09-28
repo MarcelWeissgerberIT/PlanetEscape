@@ -442,6 +442,7 @@ export class Renderer {
   private feedsInto(from: Building, to: Building, dir: Dir): boolean {
     if (from.type === 'conveyor') return from.dir === dir;
     if (from.type === 'tunnel') return from.exit === true && from.dir === dir;
+    if (from.type === 'merger') return dir === from.dir;
     if (from.type === 'splitter' || from.type === 'overflow') return from.dir !== ((dir + 2) & 3);
     if (from.type === 'sorter') return dir === from.dir || dir === ((from.dir + 3) & 3);
     if (from.type === 'mixer' || from.type === 'valve') return dir === from.dir;
@@ -1441,11 +1442,18 @@ export class Renderer {
     }
     if (def.kind === 'miner' || def.kind === 'machine' || def.kind === 'storage' || def.kind === 'splitter' || def.kind === 'logic') {
       this.drawArrow(b, b.dir, (b.type === 'valve' || b.type === 'switch') && b.open === false ? '#ef4444' : '#22d3ee');
-      if (def.kind === 'splitter' || b.type === 'overflow') {
+      if ((def.kind === 'splitter' && b.type !== 'merger') || b.type === 'overflow') {
         this.drawArrow(b, ((b.dir + 1) & 3) as Dir, b.type === 'overflow' ? '#f59e0b' : '#22d3ee');
         this.drawArrow(b, ((b.dir + 3) & 3) as Dir, b.type === 'overflow' ? '#f59e0b' : '#22d3ee');
       }
       if (b.type === 'sorter') this.drawArrow(b, ((b.dir + 3) & 3) as Dir, '#c084fc');
+      if (b.type === 'merger' && b.merge && !this.lowDetail) {
+        const back = ((b.dir + 2) & 3) as Dir, left = ((b.dir + 3) & 3) as Dir, right = ((b.dir + 1) & 3) as Dir;
+        [back, left, right].forEach((d, i) => {
+          const it = b.merge![i];
+          if (it) this.drawItem(it, b.x * TILE + TILE / 2 + DX[d] * TILE * 0.3, b.y * TILE + TILE / 2 + DY[d] * TILE * 0.3, 14);
+        });
+      }
     }
     if (def.kind === 'logic') {
       // configuration badge: filter item (sorter / valve) or ratio (mixer)

@@ -44,6 +44,7 @@ export type BuildingId =
   | 'generator'
   | 'storage'
   | 'splitter'
+  | 'merger'
   | 'tunnel'
   | 'fabricator'
   | 'printer'
@@ -149,6 +150,7 @@ export interface Building {
   fuelSeconds?: number;
   budget?: number; // video receiver: pixel updates it may still draw (items delivered = phosphor)
   // logic modules: mixer side buffers, valve threshold, mixer ratio index, valve open state
+  merge?: (ItemId | null)[]; // merger: one waiting item per input side (behind, left, right)
   bufL?: ItemId[];
   bufR?: ItemId[];
   threshold?: number;

@@ -678,6 +678,7 @@ const dict = {
       generator: 'Fuel generator',
       storage: 'Depot',
       splitter: 'Splitter',
+      merger: 'Merger',
     },
     building_desc: {
       core: 'The one intact 3D printer. Prints every building from delivered material and assembles the ship from delivered parts.',
@@ -728,6 +729,7 @@ const dict = {
       generator: 'Burns rocket fuel for 20 power.',
       storage: 'Buffers up to 120 items and passes them on at the front. Set a filter to release only one item.',
       splitter: 'Takes items from behind and splits them left, forward and right.',
+      merger: 'Joins up to three belts into one: takes whatever arrives from behind, left and right and sends it forward in turn, so no belt starves. A sorter splits the mix again.',
     },
     missions_text: {
       m1: { title: 'First ore', text: 'Print a Miner on iron ore and connect it to the Core Printer with a conveyor.' },
@@ -1417,6 +1419,7 @@ const dict = {
       generator: 'Treibstoffgenerator',
       storage: 'Zwischenlager',
       splitter: 'Verteiler',
+      merger: 'Zusammenführer',
     },
     building_desc: {
       core: 'Der eine intakte 3D-Drucker. Druckt jedes Gebäude aus geliefertem Material und baut das Schiff aus gelieferten Teilen.',
@@ -1467,6 +1470,7 @@ const dict = {
       generator: 'Verbrennt Raketentreibstoff für 20 Energie.',
       storage: 'Puffert bis zu 120 Gegenstände und gibt sie vorne weiter. Mit Filter verlässt nur ein Gegenstand das Lager.',
       splitter: 'Nimmt Gegenstände von hinten und verteilt sie nach links, vorne und rechts.',
+      merger: 'Führt bis zu drei Bänder zu einem zusammen: nimmt alles, was von hinten, links und rechts kommt, und schickt es abwechselnd nach vorne, damit kein Band verhungert. Ein Sortierer trennt die Mischung wieder.',
     },
     missions_text: {
       m1: { title: 'Erstes Erz', text: 'Drucke einen Bohrer auf Eisenerz und verbinde ihn per Förderband mit dem Kern-Drucker.' },

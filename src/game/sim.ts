@@ -575,6 +575,8 @@ export class Sim {
       case 'power':
         return !!PLANT_FUEL[b.type];
       case 'splitter':
+        if (b.type === 'merger') return ((from + 2) & 3) !== b.dir; // from behind or either side
+        return from === b.dir;
       case 'miner':
         return from === b.dir;
       case 'logic':
@@ -688,6 +690,15 @@ export class Sim {
         return true;
       }
       case 'splitter': {
+        if (b.type === 'merger') {
+          // one waiting item per input side, whatever it is
+          const slot = from === b.dir ? 0 : from === ((b.dir + 1) & 3) ? 1 : from === ((b.dir + 3) & 3) ? 2 : -1;
+          if (slot < 0) return false;
+          const q = (b.merge ??= [null, null, null]);
+          if (q[slot]) return false;
+          q[slot] = item;
+          return true;
+        }
         if (from !== b.dir) return false;
         if (b.output && Object.keys(b.output).length) return false;
         b.output = { [item]: 1 };
@@ -946,6 +957,9 @@ export class Sim {
           break;
         case 'splitter':
           this.tickSplitter(b);
+          break;
+        case 'merger':
+          this.tickMerger(b);
           break;
         case 'sorter':
         case 'overflow':
@@ -3144,6 +3158,27 @@ export class Sim {
       }
     }
     if (!isHall(b.type) && Object.values(store).reduce((a, c) => a + (c ?? 0), 0) >= this.storageCap()) b.status = 'blocked';
+  }
+
+  /** Merger: the waiting items of its three inputs leave to the front in turn, so no input starves the others. */
+  private tickMerger(b: Building) {
+    const q = (b.merge ??= [null, null, null]);
+    if (!q.some((x) => x)) {
+      b.status = 'idle';
+      return;
+    }
+    const start = b.rr ?? 0;
+    for (let i = 0; i < 3; i++) {
+      const s = (start + i) % 3;
+      const item = q[s];
+      if (!item) continue;
+      if (this.pushDir(b, item, b.dir)) {
+        q[s] = null;
+        b.rr = (s + 1) % 3;
+        b.status = 'ok';
+      } else b.status = 'blocked';
+      return;
+    }
   }
 
   private tickSplitter(b: Building) {

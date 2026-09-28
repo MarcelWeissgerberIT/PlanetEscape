@@ -203,6 +203,19 @@ S.dock = `${housing()}
   ${strip(36, 70, 5, 116)}
   ${chevron(120, 124, 20)}`;
 
+S.merger = `${housing()}
+  <rect x="100" y="36" width="56" height="92" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  <rect x="100" y="128" width="56" height="94" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  <rect x="34" y="100" width="94" height="56" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  <rect x="128" y="100" width="94" height="56" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  ${[0.35, 0.72].map((f) => chevron(128, 128 + 94 * f, 12)).join('')}
+  <g transform="rotate(90 128 128)">${[0.35, 0.72].map((f) => chevron(128, 128 + 94 * f, 12)).join('')}</g>
+  <g transform="rotate(-90 128 128)">${[0.35, 0.72].map((f) => chevron(128, 128 + 94 * f, 12)).join('')}</g>
+  <circle cx="128" cy="128" r="30" fill="#0b0e12"/><circle cx="128" cy="128" r="26" fill="none" stroke="url(#chrome)" stroke-width="6"/>
+  <circle cx="128" cy="128" r="14" fill="${AMBER}" opacity="0.9" filter="url(#glow)"/><circle cx="128" cy="128" r="7" fill="#fde68a"/>
+  ${chevron(128, 62, 16, AMBER)}${chevron(128, 92, 12, AMBER)}
+  ${plate(160, 206, 56, 13, 'MRG-3')}${ledRow(44, 50, [GREEN, AMBER], 11)}`;
+
 S.kitport = `${housing()}
   <rect x="50" y="118" width="156" height="88" rx="6" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
   ${Array.from({ length: 4 }, (_, k) => `<rect x="58" y="${128 + k * 19}" width="140" height="11" rx="5.5" fill="url(#chromeV)" stroke="#12161b" stroke-width="1.2"/>`).join('')}
