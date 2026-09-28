@@ -1274,6 +1274,7 @@ export class Hud {
       const parts = `<div class="term-parts">
           <div class="tp"><span>${itemImg('circuit', 'icon xs')} ${t('term_ram')}</span><b class="${mem.have < mem.need ? 'bad' : ''}">${mem.have} B</b><small>${t('term_ram_detail', { c: mem.cells, k: mem.banks, b: mem.need })}</small></div>
           <div class="tp"><span>${itemImg('quartz', 'icon xs')} ${t('term_clock')}</span><b class="${crystals ? '' : 'bad'}">${this.sim.terminalHz(b)} Hz</b><small>${t('term_clock_detail', { q: cr.quartz, g: cr.glass })} · ${t('term_clock_hint')}</small></div>
+          ${mem.have < mem.need ? `<button class="btn small primary" data-act="term-wire">${icon('plus', 'sm')} ${t('term_wire', { n: mem.need - mem.have })}</button>` : ''}
           ${this.editor ? `<button class="btn small" data-act="term-install">${t('term_install')}</button>` : ''}
         </div>`;
       body = `<canvas class="term-screen" id="term-screen" width="${CHIP8_W * 4}" height="${CHIP8_H * 4}"></canvas>
@@ -1338,6 +1339,7 @@ export class Hud {
               <div class="tp"><span>${t('vid_memory')}</span><b class="${okMem ? '' : 'bad'}">${s.cells} × 4096 px = ${s.rows}/${s.h} ${t('vid_rows')}</b><small>${t('vid_memory_hint')}</small></div>
             </div>`;
           })()}
+          ${(() => { const m = this.sim.screenMissing(b); return m.cells + m.lanes + m.oscillators ? `<div class="term-btns"><button class="btn small primary" data-act="vid-wire">${icon('plus', 'sm')} ${t('vid_wire', { c: m.cells, l: m.lanes, o: m.oscillators })}</button></div>` : ''; })()}
           <div class="dirs wrap"><span class="lbl">${t('vid_sample')}</span>${(['scan', 'avg', 'centre', 'off'] as const).map((m) => `<button class="chip ${(b.mode ?? 'scan') === m ? 'active' : ''}" data-smode="${m}">${t(`vid_sample_${m}` as 'vid_sample_scan')}</button>`).join('')}</div>
           <p class="save-hint">${t('vid_sample_hint')}</p>
           <div class="lbl">${(() => { const n = this.sim.speakersOf(b).length; return live ? (this.cb.videoHasAudio(b) ? (n ? `🔊 ${t('vid_sound_on', { n })}` : `🔇 ${t('vid_sound_nospeaker')}`) : `🔇 ${t('vid_sound_none')}`) : `🔈 ${t('vid_sound_idle', { n })}`; })()}</div>
@@ -1556,6 +1558,13 @@ export class Hud {
         this.showInfo(b);
         return;
       }
+      if (target.dataset.act === 'term-wire' && b.type === 'terminal') {
+        const res = this.sim.autoWireTerminal(b);
+        sfx.place();
+        this.toast(`${res.incomplete ? '⚠ ' : '✓ '}${t('term_wired', { n: res.cells })}${res.incomplete ? ' · ' + t('wire_incomplete') : ''}`, 5000, res.incomplete ? 'error' : 'success');
+        this.showInfo(b);
+        return;
+      }
       if (target.dataset.act === 'term-install' && b.type === 'terminal') {
         this.sim.installAll(b);
         sfx.mission();
@@ -1615,6 +1624,13 @@ export class Hud {
         this.input.setTool({ kind: 'paste', bp });
         const r = this.sim.terminalDisplayRect(b);
         this.toast(t('term_display_paste', { x: r.x, y: r.y }), 5000);
+        return;
+      }
+      if (b.type === 'screen' && target.dataset.act === 'vid-wire') {
+        const res = this.sim.autoWireScreen(b);
+        sfx.place();
+        this.toast(`${res.incomplete ? '⚠ ' : '✓ '}${t('vid_wired', { c: res.cells, l: res.lanes, o: res.oscillators })}${res.incomplete ? ' · ' + t('wire_incomplete') : ''}`, 5000, res.incomplete ? 'error' : 'success');
+        this.showInfo(b);
         return;
       }
       if (b.type === 'screen' && target.dataset.act?.startsWith('vid-')) {

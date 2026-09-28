@@ -98,6 +98,18 @@ for (const ex of EXAMPLES) {
   for (let i = 0; i < 30 * 40; i++) sim.tick(1 / 30);
   console.log('phosphor after 40 s of supply:', rx.budget, 'tint item', rx.recipe, '(was', before, ')');
   if ((rx.budget ?? 0) < 2e6 || rx.recipe !== 'copper_ore') throw new Error('supply chain broken');
+  // auto-wiring: switch the wall to 32x32 (512x256 px) and let the game place what is missing
+  {
+    const st2 = buildVideoWall();
+    const sim2 = new Sim(st2);
+    const rx2 = st2.buildings.find((b) => b.type === 'screen')!;
+    for (const m of st2.buildings) if (m.type === 'matrix') { m.value = 32; m.px = undefined; }
+    const missBefore = sim2.screenMissing(rx2);
+    const res = sim2.autoWireScreen(rx2);
+    const after = sim2.screenStats(rx2);
+    console.log('auto-wire at 32x32: missing', JSON.stringify(missBefore), '-> placed', JSON.stringify(res), 'rows', after.rows, '/', after.h, 'cap', Math.round(after.capPx), 'need', Math.round(after.needPx));
+    if (res.incomplete || after.rows < after.h || after.capPx < after.needPx) throw new Error('auto-wire did not complete the wall');
+  }
   // an unwired matrix stays dark: cut the lanes and push a frame
   const lanes = st.buildings.filter((b) => b.type === 'bus');
   for (const l of lanes) sim.remove(l);

@@ -1276,6 +1276,89 @@ export class Sim {
     return board;
   }
 
+  /**
+   * Grow a board: place `count` buildings of `type` on free tiles next to the seed tiles (each placed tile becomes a
+   * seed, so everything stays connected). Stops when nothing can be afforded or no free tile is left.
+   */
+  private growBoard(seeds: Iterable<number>, avoid: (x: number, y: number) => boolean, type: BuildingId, count: number, dir: Dir = 1): Building[] {
+    const st = this.state;
+    const placed: Building[] = [];
+    const seen = new Set<number>(seeds);
+    const queue = [...seen];
+    while (queue.length && placed.length < count) {
+      const idx = queue.shift()!;
+      const x = idx % st.width, y = Math.floor(idx / st.width);
+      for (let d = 0; d < 4 && placed.length < count; d++) {
+        const nx = x + DX[d], ny = y + DY[d];
+        if (nx < 0 || ny < 0 || nx >= st.width || ny >= st.height) continue;
+        const ni = ny * st.width + nx;
+        if (seen.has(ni)) continue;
+        seen.add(ni);
+        if (this.at(nx, ny) || avoid(nx, ny)) continue;
+        const b = this.place(type, nx, ny, dir);
+        if (!b) return placed; // cannot afford or cannot build here: stop
+        placed.push(b);
+        queue.push(ni);
+      }
+    }
+    return placed;
+  }
+
+  /** What "complete the wiring" would add to a receiver's board. */
+  screenMissing(b: Building): { cells: number; lanes: number; oscillators: number } {
+    const s = this.screenStats(b);
+    const cells = Math.max(0, Math.ceil((s.w * s.h) / SCREEN_PX_PER_CELL) - s.cells);
+    const tiles = s.h / (s.w / (SCREEN_REGION.w * Math.max(1, Math.min(4, b.value ?? 1)))); // wall rows in tiles
+    const lanes = Math.max(0, Math.min(Math.round(tiles), Math.ceil(s.needPx / (s.hz * SCREEN_PX_PER_LANE_TICK))) - s.lanes);
+    const lanesAfter = s.lanes + lanes;
+    const hzNeed = lanesAfter ? s.needPx / (lanesAfter * SCREEN_PX_PER_LANE_TICK) : Infinity;
+    const oscillators = hzNeed > s.hz ? Math.ceil((hzNeed - s.hz) / (3 * CRYSTAL_HZ.glass)) : 0;
+    return { cells, lanes, oscillators };
+  }
+
+  /** Place the missing registers, bus lanes and oscillators for a receiver's wall. Crystals are filled only in creative mode. */
+  autoWireScreen(b: Building): { cells: number; lanes: number; oscillators: number; incomplete: boolean } {
+    const st = this.state;
+    const r = this.screenRect(b);
+    const first = this.at(r.x, r.y);
+    const dens = first?.type === 'matrix' ? matrixSize(first) : MATRIX_SIZE;
+    const tw = r.w / dens, th = r.h / dens;
+    const avoid = (x: number, y: number) => (x >= r.x && x < r.x + tw && y >= r.y && y < r.y + th) || (x === b.x - 1 && y === b.y) || (x === b.x && (y === b.y - 1 || y === b.y + 1));
+    const miss = this.screenMissing(b);
+    let lanes = 0;
+    for (let y = r.y; y < r.y + th && lanes < miss.lanes; y++) {
+      if (this.at(r.x - 1, y)) continue;
+      if (this.place('bus', r.x - 1, y, 0)) lanes++;
+    }
+    const seeds = () => [...this.screenBoard(b).tiles, b.y * st.width + b.x];
+    const oscs = this.growBoard(seeds(), avoid, 'oscillator', miss.oscillators, 0);
+    if (this.creative) for (const o of oscs) o.turbo = 3;
+    const cells = this.growBoard(seeds(), avoid, 'register', miss.cells, 1);
+    this.screenBoards.delete(b.id);
+    return { cells: cells.length, lanes, oscillators: oscs.length, incomplete: cells.length < miss.cells || lanes < miss.lanes || oscs.length < miss.oscillators };
+  }
+
+  /** Place registers so the terminal's program fits into RAM. */
+  autoWireTerminal(b: Building): { cells: number; incomplete: boolean } {
+    const st = this.state;
+    const mem = this.terminalMemory(b);
+    const need = Math.max(0, mem.need - mem.have);
+    const d = this.terminalDisplayRect(b), tr = this.terminalTraceRect(b);
+    const s = BUILDINGS[b.type].size;
+    const avoid = (x: number, y: number) =>
+      (x >= d.x && x < d.x + d.w && y >= d.y && y < d.y + d.h) || (x >= tr.x && x < tr.x + tr.w && y >= tr.y && y < tr.y + tr.h) || (x >= b.x - 1 && x <= b.x + s && y >= b.y - 1 && y <= b.y + s);
+    const seeds = [...this.board(b).tiles];
+    for (let y = b.y; y < b.y + s; y++) for (let x = b.x; x < b.x + s; x++) seeds.push(y * st.width + x);
+    // the ring around the terminal is reserved for keys: start from a bus trace at the top-left corner's outside
+    if (!seeds.some((i) => !this.at(i % st.width, Math.floor(i / st.width)) || this.at(i % st.width, Math.floor(i / st.width))?.type !== 'terminal')) {
+      const bx = b.x - 1, by = b.y - 1;
+      if (!this.at(bx, by) && this.place('bus', bx, by, 0)) seeds.push(by * st.width + bx);
+    }
+    const cells = this.growBoard(seeds, avoid, 'register', need, 1);
+    this.boards.delete(b.id);
+    return { cells: cells.length, incomplete: cells.length < need };
+  }
+
   /** Numbers for the panel: what the wall needs per second and what lanes, clock, memory and phosphor give. */
   screenStats(b: Building) {
     const board = this.screenBoard(b);
