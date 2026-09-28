@@ -1,6 +1,6 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { STAR_EFFICIENCY, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { STAR_EFFICIENCY, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -152,6 +152,18 @@ export class Hud {
     // tapping any item icon (outside buttons that use icons as labels) opens its production chain
     this.root.addEventListener('click', (e) => {
       if (this.panelJustOpened()) return;
+      const bpb = (e.target as HTMLElement).closest('[data-bp-building]') as HTMLElement | null;
+      if (bpb && !bpb.closest('.modal')) {
+        e.stopPropagation();
+        this.showBuildingBlueprint(bpb.dataset.bpBuilding as BuildingId);
+        return;
+      }
+      const bimg = (e.target as HTMLElement).closest('img[data-building]') as HTMLImageElement | null;
+      if (bimg && !bimg.closest('.build-btn, .modal')) {
+        e.stopPropagation();
+        this.showBuildingBlueprint(bimg.dataset.building as BuildingId);
+        return;
+      }
       const img = (e.target as HTMLElement).closest('img[data-item]') as HTMLImageElement | null;
       if (!img) return;
       if (img.closest('.build-btn, .inv-item, .cost, .upgrade')) return;
@@ -1643,6 +1655,11 @@ export class Hud {
         const n = this.sim.queuePrint(target.dataset.print as BuildingId, Number(target.dataset.n ?? 1));
         if (!n) this.toast(t('err_cost'), 1500, 'error');
       } else if (target.dataset.cancel !== undefined) this.sim.cancelPrint(Number(target.dataset.cancel));
+      else if (target.dataset.bpBuilding) {
+        this.printerOpen = false;
+        this.showBuildingBlueprint(target.dataset.bpBuilding as BuildingId);
+        return;
+      }
       else return;
       sfx.select();
       this.renderPrinter();
@@ -1679,7 +1696,7 @@ export class Hud {
     const list = ids.map((id) => {
       const have = st.kits?.[id] ?? 0;
       const can = this.sim.canAfford(id);
-      return `<div class="kit-row"><img class="icon" src="${buildingUrl(id)}" alt=""><span class="kit-name">${tBuilding(id)}<small>${printSeconds(id)} s · ${costHtml(BUILDINGS[id].cost, inv)}</small></span><b class="kit-have ${have ? '' : 'none'}">×${have}</b><button class="chip" data-print="${id}" data-n="1" ${can ? '' : 'disabled'}>+1</button><button class="chip" data-print="${id}" data-n="5" ${can ? '' : 'disabled'}>+5</button></div>`;
+      return `<div class="kit-row"><img class="icon" src="${buildingUrl(id)}" alt="" data-building="${id}"><span class="kit-name">${tBuilding(id)}<small>${printSeconds(id)} s · ${costHtml(BUILDINGS[id].cost, inv)}</small></span><b class="kit-have ${have ? '' : 'none'}">×${have}</b><button class="iconbtn" data-bp-building="${id}" title="${t('bp_title')}">${icon('research', 'sm')}</button><button class="chip" data-print="${id}" data-n="1" ${can ? '' : 'disabled'}>+1</button><button class="chip" data-print="${id}" data-n="5" ${can ? '' : 'disabled'}>+5</button></div>`;
     }).join('');
     return `<h2>${icon('print')} ${t('printer_title')}</h2>
       <p class="save-hint">${t('printer_hint')} ${t('printer_reach')}</p>
@@ -1693,7 +1710,7 @@ export class Hud {
     const def = BUILDINGS[b.type];
     this.info.innerHTML = `
       <div class="info-head">
-        <img src="${buildingUrl(b.type)}" alt="" draggable="false">
+        <img src="${buildingUrl(b.type)}" alt="" draggable="false" data-building="${b.type}" title="${t('bp_title')}">
         <div class="info-title"><b>${tBuilding(b.type)}</b><small>${tBuildingDesc(b.type)}</small></div>
         <button class="iconbtn" data-act="close">${icon('close')}</button>
       </div>
@@ -2063,10 +2080,11 @@ export class Hud {
     const cost = Object.keys(def.cost).length ? costHtml(def.cost, st.inventory) : '–';
     const power = def.power ? `<span class="${def.power < 0 ? 'ok' : ''}">⚡ ${def.power < 0 ? '+' : '−'}${Math.abs(def.power)}</span>` : '';
     const rate = def.kind === 'miner' ? `${Math.round((60 / MINE_SECONDS) * this.sim.factor('miner'))}/min` : def.kind === 'conveyor' ? `${Math.round(this.sim.beltCapacity())}/min` : '';
-    return `<div class="tip-head"><img src="${buildingUrl(id)}" alt=""><div><b>${tBuilding(id)}</b><small>${def.size}×${def.size} ${power} ${rate ? '· ' + rate : ''}</small></div></div>
+    return `<div class="tip-head"><img src="${buildingUrl(id)}" alt="" data-building="${id}"><div><b>${tBuilding(id)}</b><small>${def.size}×${def.size} ${power} ${rate ? '· ' + rate : ''}</small></div></div>
       <p>${tBuildingDesc(id)}</p>
       <div class="tip-line"><span>${t('cost')}</span>${cost}</div>
       ${recipes.length ? `<div class="tip-line"><span>${t('recipes')}</span></div>${recipes.map((r) => this.recipeRow(r)).join('')}` : ''}
+      <button class="btn small" data-bp-building="${id}">${icon('research', 'sm')} ${t('bp_title')}</button>
       <small class="dim">${t('tip_hint')}</small>`;
   }
 
@@ -2216,6 +2234,8 @@ export class Hud {
       `<h2>${t('diagnostics')}</h2>${power}<div class="prob-list">${rows}</div>
       <h3>${t('chains')}</h3>
       <div class="chain-grid">${ITEM_ORDER.filter((id) => RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id))).map((id) => `<button class="chip" data-chain="${id}">${itemImg(id, 'icon xs')} ${tItem(id)}</button>`).join('')}</div>
+      <h3>${t('bp_buildings')}</h3>
+      <div class="chain-grid">${BUILD_ORDER.filter((id) => st.unlockedBuildings.includes(id)).map((id) => `<button class="chip" data-bp-building="${id}"><img class="icon xs" src="${buildingUrl(id)}" alt=""> ${tBuilding(id)}</button>`).join('')}</div>
       <button class="btn primary" data-act="close">${t('close')}</button>`,
       (target) => {
         if (target.dataset.show !== undefined) {
@@ -2228,60 +2248,136 @@ export class Hud {
           }
           this.closeModal();
         } else if (target.dataset.chain) this.showChain(target.dataset.chain as ItemId);
+        else if (target.dataset.bpBuilding) this.showBuildingBlueprint(target.dataset.bpBuilding as BuildingId);
       },
     );
   }
 
-  /** Recursive production tree for an item, with machine counts for a target rate. */
+  /** Blueprint of an item (production tree at a target rate). Kept as the entry point used all over the HUD. */
   showChain(item: ItemId) {
+    this.bpHistory = [];
+    this.showBlueprint({ kind: 'item', id: item });
+  }
+
+  showBuildingBlueprint(id: BuildingId) {
+    this.bpHistory = [];
+    this.showBlueprint({ kind: 'building', id });
+  }
+
+  private bpHistory: ({ kind: 'item'; id: ItemId } | { kind: 'building'; id: BuildingId })[] = [];
+
+  /** Where something gets unlocked: "from the start" or the mission that unlocks it. */
+  private unlockNote(kind: 'recipe' | 'building', id: string): string {
+    const st = this.sim.state;
+    const have = kind === 'recipe' ? st.unlockedRecipes.includes(id) : st.unlockedBuildings.includes(id as BuildingId);
+    if (have) return '';
+    const idx = MISSIONS.findIndex((m) => (kind === 'recipe' ? m.unlockRecipes.includes(id) : m.unlocks.includes(id as BuildingId)));
+    return idx >= 0 ? `<span class="bp-lock">🔒 ${t('bp_unlock_after', { n: idx + 1 })}</span>` : `<span class="bp-lock">🔒</span>`;
+  }
+
+  /**
+   * Blueprint overlay: a tree from the target down to the raw deposits. Items show the machine that makes them
+   * (with the machines needed for the chosen rate and how many are built); buildings show their kit materials.
+   */
+  showBlueprint(what: { kind: 'item'; id: ItemId } | { kind: 'building'; id: BuildingId }, push = true) {
     const st = this.sim.state;
     const sim = this.sim;
+    if (push) {
+      const last = this.bpHistory[this.bpHistory.length - 1];
+      if (!last || last.kind !== what.kind || last.id !== what.id) this.bpHistory.push(what);
+    }
     const rate = this.chainRate;
-    const minerPerMin = (60 / MINE_SECONDS) * sim.factor('miner');
-    const beltPerMin = ((BELT_SPEED * sim.factor('belt')) / BELT_SPACING) * 60;
-    const tree = (id: ItemId, perMin: number, depth: number, seen: Set<ItemId>): string => {
+    const minerPerMin = (60 / MINE_SECONDS) * sim.factor('miner') * sim.factor('yield');
+    const beltPerMin = sim.beltCapacity();
+    const deposits = (id: ItemId) => (Object.keys(TERRAIN_ITEM) as TerrainId[]).find((k) => TERRAIN_ITEM[k] === id);
+    // qty mode (buildings): amounts instead of rates
+    const node = (id: ItemId, amount: number, qty: boolean, depth: number, seen: Set<ItemId>, per: number | null): string => {
       const r = RECIPES.find((rc) => rc.output === id);
-      const producers = st.buildings.filter((b) => (b.type === 'miner' && b.mineItem === id) || (b.recipe && RECIPE_BY_ID[b.recipe]?.output === id)).length;
+      const terrain = deposits(id);
       const have = st.inventory[id] ?? 0;
-      let machines = 0;
-      let machineName = '';
+      const amountTxt = qty ? `${Math.ceil(amount)}×` : `${amount.toFixed(amount < 10 ? 1 : 0)}/min`;
+      let body = `<div class="bp-node ${r ? 'made' : terrain ? 'raw' : 'plain'}" data-bp-item="${id}">
+        ${per ? `<span class="bp-per">${per}×</span>` : ''}
+        <div class="bp-top">${itemImg(id, 'icon')}<div><b>${tItem(id)}</b><small>${amountTxt} · ${t('bp_stock')} ${have}</small></div></div>`;
       if (r) {
-        const perMachine = (r.outputCount * 60) / r.seconds * sim.factor('machine');
-        machines = perMin / perMachine;
-        machineName = tBuilding(r.machine);
-      } else if (Object.values(TERRAIN_ITEM).includes(id)) {
-        machines = perMin / minerPerMin;
-        machineName = tBuilding('miner');
+        const crafts = qty ? Math.ceil(amount / r.outputCount) : 0;
+        const perMachine = ((r.outputCount * 60) / r.seconds) * sim.factor('machine');
+        const machines = qty ? 0 : amount / perMachine;
+        const built = st.buildings.filter((b) => !b.site && b.recipe && RECIPE_BY_ID[b.recipe]?.output === id).length;
+        body += `<div class="bp-mach ${!qty && built >= Math.ceil(machines) ? 'ok' : ''}"><img class="icon xs" src="${buildingUrl(r.machine)}" alt="" data-building="${r.machine}">
+          <span>${tBuilding(r.machine)} · ${r.seconds}s${r.outputCount > 1 ? ` → ${r.outputCount}×` : ''}</span>
+          <em>${qty ? t('bp_runs', { n: crafts, s: Math.round((crafts * r.seconds) / sim.factor('machine')) }) : `${Math.ceil(machines)}× (${machines.toFixed(2)}) · ${built} ${t('built')}`}</em>
+          ${this.unlockNote('recipe', r.id)}</div>`;
+      } else if (terrain) {
+        const miners = qty ? 0 : amount / minerPerMin;
+        const built = st.buildings.filter((b) => !b.site && b.type === 'miner' && b.mineItem === id).length;
+        body += `<div class="bp-mach raw ${!qty && built >= Math.ceil(miners) ? 'ok' : ''}"><img class="icon xs" src="${buildingUrl('miner')}" alt="" data-building="miner">
+          <span>${t('bp_mine', { m: tBuilding('miner') })}</span>
+          <em>${qty ? t('bp_mine_qty', { s: Math.round((amount * MINE_SECONDS) / sim.factor('miner')) }) : `${Math.ceil(miners)}× (${miners.toFixed(2)}) · ${built} ${t('built')}`}</em></div>`;
       }
-      let line = `<div class="tree-row" style="margin-left:${depth * 18}px">${itemImg(id, 'icon sm')}<b>${tItem(id)}</b><span class="rate">${perMin.toFixed(1)}/min</span>`;
-      if (r) line += ` <small>${t('made_in')} <img class="icon xs" src="${buildingUrl(r.machine)}" alt=""> ${r.seconds}s ${r.outputCount > 1 ? '×' + r.outputCount : ''}</small>`;
-      else if (machineName) line += ` <small>${t('mined_from')}</small>`;
-      if (machineName) line += `<span class="need ${producers >= Math.ceil(machines) ? 'ok' : ''}">${Math.ceil(machines)}× ${machineName} <small>(${machines.toFixed(2)}) · ${producers} ${t('built')}</small></span>`;
-      line += `<span class="tree-meta">${have}</span></div>`;
-      if (perMin > beltPerMin) line += `<div class="tree-row warn" style="margin-left:${depth * 18 + 18}px">⚠ ${t('belt_limit', { n: beltPerMin.toFixed(0) })}</div>`;
-      if (r && !seen.has(id) && depth < 6) {
-        seen.add(id);
-        for (const k in r.inputs) {
-          const need = (perMin * r.inputs[k as ItemId]!) / r.outputCount;
-          line += tree(k as ItemId, need, depth + 1, seen).replace('<div class="tree-row"', `<div class="tree-row" data-n="${r.inputs[k as ItemId]}"`);
-        }
+      if (!qty && amount > beltPerMin) body += `<div class="bp-warn">⚠ ${t('belt_limit', { n: beltPerMin.toFixed(0) })}</div>`;
+      body += `</div>`;
+      let kids = '';
+      if (r && !seen.has(id) && depth < 7) {
+        const next = new Set(seen).add(id);
+        const crafts = qty ? Math.ceil(amount / r.outputCount) : amount / r.outputCount;
+        kids = Object.entries(r.inputs).map(([k, n]) => `<li>${node(k as ItemId, crafts * n!, qty, depth + 1, next, n!)}</li>`).join('');
       }
-      return line;
+      return kids ? `${body}<ul>${kids}</ul>` : body;
     };
-    const rates = [5, 10, 20, 30, 60];
+    let head = '';
+    let tree = '';
+    if (what.kind === 'item') {
+      const id = what.id;
+      const usedIn = RECIPES.filter((r) => r.inputs[id] !== undefined);
+      const buildsWith = BUILD_ORDER.filter((b) => BUILDINGS[b].cost[id] !== undefined);
+      head = `<h2>${icon('research')} ${t('bp_title')} · ${tItem(id)}</h2>
+        <div class="dirs"><span class="lbl">${t('target_rate')}</span>${[5, 10, 20, 30, 60].map((r) => `<button class="chip ${r === rate ? 'active' : ''}" data-rate="${r}">${r}/min</button>`).join('')}</div>`;
+      tree = `<ul class="bp-tree"><li>${node(id, rate, false, 0, new Set(), null)}</li></ul>`;
+      const uses = [...usedIn.map((r) => `<button class="chip" data-bp-item="${r.output}">${itemImg(r.output, 'icon xs')} ${tItem(r.output)}</button>`), ...buildsWith.map((b) => `<button class="chip" data-bp-building="${b}"><img class="icon xs" src="${buildingUrl(b)}" alt=""> ${tBuilding(b)}</button>`)];
+      tree += uses.length ? `<h3>${t('bp_used_in')}</h3><div class="chain-grid">${uses.join('')}</div>` : '';
+    } else {
+      const id = what.id;
+      const def = BUILDINGS[id];
+      const kits = st.kits?.[id] ?? 0;
+      head = `<h2>${icon('research')} ${t('bp_title')} · ${tBuilding(id)}</h2>
+        <div class="bp-building"><img src="${buildingUrl(id)}" alt=""><div><b>${tBuilding(id)}</b><small>${def.size}×${def.size}${def.power ? ` · ⚡ ${def.power < 0 ? '+' : '−'}${Math.abs(def.power)}` : ''} · ${t('bp_print', { s: printSeconds(id) })} · ${t('printer_kits')}: ${kits}</small><small>${tBuildingDesc(id)}</small>${this.unlockNote('building', id)}</div></div>`;
+      const mats = Object.entries(def.cost);
+      tree = mats.length
+        ? `<ul class="bp-tree"><li><div class="bp-node kit"><div class="bp-top"><img class="icon" src="${buildingUrl(id)}" alt=""><div><b>${t('kit_of', { b: tBuilding(id) })}</b><small>${t('bp_print', { s: printSeconds(id) })}</small></div></div></div><ul>${mats.map(([k, n]) => `<li>${node(k as ItemId, n!, true, 1, new Set(), n!)}</li>`).join('')}</ul></li></ul>`
+        : '';
+      const recipes = RECIPES.filter((r) => r.machine === id);
+      if (recipes.length) tree += `<h3>${t('recipes')}</h3><div class="chain-grid">${recipes.map((r) => `<button class="chip" data-bp-item="${r.output}">${itemImg(r.output, 'icon xs')} ${tItem(r.output)}</button>`).join('')}</div>`;
+    }
+    const back = this.bpHistory.length > 1 ? `<button class="btn small" data-bp-back="1">← ${t('bp_back')}</button>` : '';
     this.openModal(
-      `<h2>${t('chain_for')}: ${tItem(item)}</h2>
-      <div class="dirs"><span class="lbl">${t('target_rate')}</span>${rates.map((r) => `<button class="chip ${r === rate ? 'active' : ''}" data-rate="${r}">${r}/min</button>`).join('')}</div>
-      <div class="tree">${tree(item, rate, 0, new Set())}</div>
-      <p class="save-hint">${t('calc_hint')}</p>
-      <button class="btn primary" data-act="close">${t('close')}</button>`,
+      `<div class="bp">${head}<div class="bp-scroll">${tree}</div>
+      <p class="save-hint">${what.kind === 'item' ? t('calc_hint') : t('bp_building_hint')}</p>
+      <div class="term-btns">${back}<button class="btn primary" data-act="close">${t('close')}</button></div></div>`,
       (target) => {
         if (target.dataset.rate) {
           this.chainRate = Number(target.dataset.rate);
-          this.showChain(item);
-        }
+          this.showBlueprint(what, false);
+        } else if (target.dataset.bpBack) {
+          this.bpHistory.pop();
+          const prev = this.bpHistory[this.bpHistory.length - 1];
+          if (prev) this.showBlueprint(prev, false);
+        } else if (target.dataset.bpItem) this.showBlueprint({ kind: 'item', id: target.dataset.bpItem as ItemId });
+        else if (target.dataset.bpBuilding) this.showBlueprint({ kind: 'building', id: target.dataset.bpBuilding as BuildingId });
       },
     );
+    // nodes are divs: open their blueprint on tap as well
+    const card = this.modal.querySelector('.modal-card') as HTMLElement | null;
+    card?.classList.add('wide');
+    card?.querySelectorAll<HTMLElement>('.bp-node[data-bp-item]').forEach((n) => {
+      n.addEventListener('click', (e) => {
+        const img = (e.target as HTMLElement).closest('img[data-building]') as HTMLElement | null;
+        if (img) this.showBlueprint({ kind: 'building', id: img.dataset.building as BuildingId });
+        else if (n.dataset.bpItem !== (what.kind === 'item' ? what.id : '')) this.showBlueprint({ kind: 'item', id: n.dataset.bpItem as ItemId });
+        e.stopPropagation();
+      });
+    });
+    this.modal.addEventListener('transitionend', () => undefined, { once: true });
   }
 
   showContracts() {
