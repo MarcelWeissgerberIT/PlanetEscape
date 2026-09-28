@@ -66,6 +66,7 @@ export class Renderer {
   private cacheT = 0;
   private dirtyTiles: { x: number; y: number }[] = [];
   lowDetail = false;
+  private worldT: DOMMatrix | null = null;
   static readonly CACHE_PX = 12;
   static readonly CACHE_ZOOM = 0.45;
   static readonly LOW_ZOOM = 0.3;
@@ -276,6 +277,7 @@ export class Renderer {
     ctx.translate(cam.width / 2, cam.height / 2);
     ctx.scale(cam.zoom, cam.zoom);
     ctx.translate(-cam.x, -cam.y);
+    this.worldT = ctx.getTransform(); // camera transform: sprites reset to it instead of save/restore
 
     const [tx0, ty0] = cam.screenToTile(0, 0);
     const [tx1, ty1] = cam.screenToTile(cam.width, cam.height);
@@ -354,7 +356,9 @@ export class Renderer {
     for (const b of visible) if (b.type === 'road' && !b.site) this.drawRoad(b);
     for (const b of visible) if ((b.type === 'conveyor' || b.type === 'tunnel') && !b.site) this.drawBelt(b);
     if (!this.lowDetail) for (const b of visible) if ((b.type === 'conveyor' || (b.type === 'tunnel' && b.exit)) && !b.site) this.drawBeltItems(b);
+    this.arrowBatch = [];
     for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel' && b.type !== 'road' && !b.site) this.drawBuilding(b);
+    this.flushArrows();
     for (const b of visible) if (b.site) this.drawSite(b);
     this.drawRobots(x0, y0, x1, y1);
     this.drawDrones();
@@ -1059,18 +1063,30 @@ export class Renderer {
       const k = Math.min(1, (this.time - t0) / 0.28);
       scale = 0.7 + 0.3 * (1 - Math.pow(1 - k, 3));
     }
-    ctx.save();
-    ctx.globalAlpha = alpha;
-    ctx.translate(cx, cy);
-    ctx.scale(scale, scale);
-    ctx.rotate((b.dir * Math.PI) / 2);
-    if (ready(img)) ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
-    else {
-      ctx.fillStyle = '#3a4048';
-      roundRect(ctx, -sz / 2 + 4, -sz / 2 + 4, sz - 8, sz - 8, 8);
-      ctx.fill();
+    if (alpha === 1 && scale === 1 && b.dir === 0 && ready(img)) {
+      // the common case: an unrotated sprite at full size, no transform needed
+      ctx.drawImage(img, b.x * TILE, b.y * TILE, sz, sz);
+    } else if (alpha === 1 && this.worldT && ready(img)) {
+      // rotated or spawning: transform by hand and reset to the camera (much cheaper than save/restore)
+      ctx.translate(cx, cy);
+      if (scale !== 1) ctx.scale(scale, scale);
+      if (b.dir) ctx.rotate((b.dir * Math.PI) / 2);
+      ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
+      ctx.setTransform(this.worldT);
+    } else {
+      ctx.save();
+      ctx.globalAlpha = alpha;
+      ctx.translate(cx, cy);
+      ctx.scale(scale, scale);
+      ctx.rotate((b.dir * Math.PI) / 2);
+      if (ready(img)) ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
+      else {
+        ctx.fillStyle = '#3a4048';
+        roundRect(ctx, -sz / 2 + 4, -sz / 2 + 4, sz - 8, sz - 8, 8);
+        ctx.fill();
+      }
+      ctx.restore();
     }
-    ctx.restore();
 
     if (alpha < 1) return;
 
@@ -1631,23 +1647,47 @@ export class Renderer {
     }
   }
 
+  /** Direction arrows are small pre-drawn images per colour and direction: one drawImage instead of a path with a transform. */
+  private arrowCache = new Map<string, HTMLCanvasElement>();
+  private arrowBatch: [HTMLCanvasElement, number, number][] | null = null;
+
+  private arrowImage(color: string, dir: Dir): HTMLCanvasElement {
+    const key = `${color}|${dir}`;
+    let c = this.arrowCache.get(key);
+    if (!c) {
+      c = document.createElement('canvas');
+      c.width = c.height = 32; // 2x for sharp edges when zoomed in
+      const g = c.getContext('2d')!;
+      g.translate(16, 16);
+      g.rotate((dir * Math.PI) / 2);
+      g.globalAlpha = 0.9;
+      g.fillStyle = color;
+      g.beginPath();
+      g.moveTo(0, -12);
+      g.lineTo(14, 8);
+      g.lineTo(-14, 8);
+      g.closePath();
+      g.fill();
+      this.arrowCache.set(key, c);
+    }
+    return c;
+  }
+
   private drawArrow(b: Building, dir: Dir, color: string) {
-    const { ctx } = this;
     const sz = BUILDINGS[b.type].size * TILE;
     const cx = b.x * TILE + sz / 2, cy = b.y * TILE + sz / 2;
-    ctx.save();
-    ctx.translate(cx, cy);
-    ctx.rotate((dir * Math.PI) / 2);
-    ctx.translate(0, -sz / 2 + 4);
-    ctx.fillStyle = color;
-    ctx.beginPath();
-    ctx.moveTo(0, -6);
-    ctx.lineTo(7, 4);
-    ctx.lineTo(-7, 4);
-    ctx.closePath();
-    ctx.globalAlpha = 0.9;
-    ctx.fill();
-    ctx.restore();
+    // centre of the triangle: 3 px inside the edge in the arrow's direction
+    const r = sz / 2 - 3;
+    const ax = cx + DX[dir] * r, ay = cy + DY[dir] * r;
+    const img = this.arrowImage(color, dir);
+    if (this.arrowBatch) this.arrowBatch.push([img, ax, ay]);
+    else this.ctx.drawImage(img, ax - 8, ay - 8, 16, 16);
+  }
+
+  private flushArrows() {
+    const batch = this.arrowBatch;
+    this.arrowBatch = null;
+    if (batch) for (const [img, x, y] of batch) this.ctx.drawImage(img, x - 8, y - 8, 16, 16);
   }
 
   private drawBadge(x: number, y: number, text: string, color: string) {
