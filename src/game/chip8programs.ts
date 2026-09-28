@@ -306,12 +306,6 @@ ${mapTable()}
 
 export const CHIP8_PROGRAMS: Chip8Program[] = [
   {
-    id: 'ray',
-    name: 'KORA RAY',
-    keys: 'W/S walk · A/D turn · E fire (keys 5 8 7 9 6)',
-    source: RAY_SOURCE,
-  },
-  {
     id: 'pong',
     name: 'PONG',
     keys: '1 / 4 = left paddle, C / D = right paddle. KORA steers every paddle nobody touches: leave both and watch the match.',
@@ -682,5 +676,11 @@ a:
 spark:
   DB 0x80
 `,
+  },
+  {
+    id: 'ray',
+    name: 'KORA RAY',
+    keys: 'W/S walk · A/D turn · E fire (keys 5 8 7 9 6)',
+    source: RAY_SOURCE,
   },
 ];
