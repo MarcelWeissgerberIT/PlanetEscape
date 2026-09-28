@@ -773,6 +773,23 @@ export class Renderer {
         ctx.setLineDash([]);
         const stt = this.sim.screenStats(b);
         this.drawTag(r.x * TILE + (tw * TILE) / 2, r.y * TILE - 6, `${tw}×${th} LED matrix · ${r.w}×${r.h} px · ${stt.lanes} lanes · ${stt.hz >= 1000 ? (stt.hz / 1000).toFixed(1) + ' kHz' : stt.hz + ' Hz'} · ${stt.cells} cells`, stt.capPx >= stt.needPx && stt.rows >= stt.h ? '#f43f5e' : '#f59e0b');
+        if (stt.rows < stt.h) {
+          // the frame buffer ends here: everything below stays dark until more registers are wired to the receiver
+          const yb = r.y * TILE + (stt.rows / dens) * TILE;
+          ctx.strokeStyle = '#f59e0b';
+          ctx.setLineDash([6, 4]);
+          ctx.beginPath();
+          ctx.moveTo(r.x * TILE, yb);
+          ctx.lineTo((r.x + tw) * TILE, yb);
+          ctx.stroke();
+          ctx.setLineDash([]);
+          const missing = Math.ceil((stt.w * stt.h) / 4096) - stt.cells;
+          this.drawTag(r.x * TILE + (tw * TILE) / 2, yb + 14, `RAM ${stt.rows}/${stt.h} rows · +${missing} cells needed`, '#f59e0b');
+        }
+        if (stt.capPx < stt.needPx) {
+          const need = Math.ceil(stt.needPx / (stt.hz * 64)) - stt.lanes;
+          this.drawTag(r.x * TILE + (tw * TILE) / 2, r.y * TILE + th * TILE + 14, `lanes×clock ${(stt.capPx / 1e6).toFixed(1)}/${(stt.needPx / 1e6).toFixed(1)} M px/s · +${Math.max(1, need)} lanes or a faster clock`, '#f59e0b');
+        }
       }
       return;
     }
