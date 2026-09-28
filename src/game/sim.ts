@@ -38,7 +38,7 @@ import {
 } from './data';
 import type { Drone, PrintJob, Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, itemSpacing, RADIO_RANGE, CORE_REACH, CORE_DRONES, DRONE_SPEED, DRONE_DELAY, KITPORT_RATE, KIT_TRANSIT_TIMEOUT, isKit, kitOf, kitId, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, itemSpacing, RADIO_RANGE, CORE_REACH, CORE_DRONES, DRONE_SPEED, DRONE_DELAY, KITPORT_RATE, KIT_TRANSIT_TIMEOUT, isKit, kitOf, kitId, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, STORM_ROBOT_FACTOR, WEAR_SECONDS, WORN_SPEED, WEAR_MIN_MISSION, REPAIR_COST, QUAKE_WEAR, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -49,6 +49,7 @@ export type SimEvent =
   | { type: 'craft'; b: Building; item: ItemId }
   | { type: 'depleted'; x: number; y: number }
   | { type: 'contract_offer'; contract: Contract }
+  | { type: 'repaired'; b: Building }
   | { type: 'contract_done'; contract: Contract }
   | { type: 'contract_failed'; contract: Contract }
   | { type: 'storm'; on: boolean }
@@ -1051,6 +1052,7 @@ export class Sim {
         this.events.push({ type: 'storm', on: true });
       }
     }
+    if (Math.floor(st.time) !== Math.floor(st.time - _dt)) this.autoRepair();
     // contracts
     for (let i = st.contracts.length - 1; i >= 0; i--) {
       const c = st.contracts[i];
@@ -1632,7 +1634,7 @@ export class Sim {
         continue;
       }
       if (r.state === 'go') {
-        let budget = ROBOT_SPEED * dt * (charge > 0 ? 1 : ROBOT_LIMP);
+        let budget = ROBOT_SPEED * dt * (charge > 0 ? 1 : ROBOT_LIMP) * (this.state.storm > 0 ? STORM_ROBOT_FACTOR : 1);
         const before = budget;
         while (budget > 0 && r.path.length) {
           const wp = r.path[0], tx = wp.x + 0.5, ty = wp.y + 0.5;
@@ -2715,8 +2717,9 @@ export class Sim {
 
   private makeEvent(): GameEvent | null {
     const st = this.state;
-    const kinds: EventKind[] = ['wreck', 'meteorite'];
+    const kinds: EventKind[] = ['wreck', 'meteorite', 'trader'];
     if (this.countBuildings('solar') > 0) kinds.push('power_surge');
+    if (this.wearOn() && st.buildings.filter((b) => b.working).length >= 4) kinds.push('quake');
     const kind = kinds[Math.floor(Math.random() * kinds.length)];
     const ev: GameEvent = { id: st.nextId++, kind, until: st.time + EVENT_DECIDE_SECONDS };
     if (kind === 'meteorite') {
@@ -2750,6 +2753,8 @@ export class Sim {
   /** Can option a be taken right now? (Overclocking costs copper plates.) */
   eventOptionAvailable(ev: GameEvent, choice: 'a' | 'b'): boolean {
     if (ev.kind === 'power_surge' && choice === 'a') return (this.state.inventory.copper_plate ?? 0) >= 12;
+    if (ev.kind === 'trader' && choice === 'a') return (this.state.inventory.copper_plate ?? 0) >= 20;
+    if (ev.kind === 'quake' && choice === 'a') return (this.state.inventory.machine_part ?? 0) >= 6;
     return true;
   }
 
@@ -2783,6 +2788,26 @@ export class Sim {
           this.addInv('copper_plate', 12);
         } else this.addInv('machine_part', 6);
         break;
+      case 'trader':
+        // a passing trade drone: copper for circuits (or motors, before circuits exist)
+        if (choice === 'a') {
+          this.addInv('copper_plate', -20);
+          if (st.unlockedRecipes.includes('circuit')) this.addInv('circuit', 5);
+          else this.addInv('machine_part', 6);
+        }
+        break;
+      case 'quake': {
+        if (choice === 'a') this.addInv('machine_part', -6);
+        else {
+          // three working machines shake loose
+          const hit = st.buildings.filter((b) => b.working && (BUILDINGS[b.type].kind === 'machine' || BUILDINGS[b.type].kind === 'miner'));
+          for (let i = 0; i < 3 && hit.length; i++) {
+            const b = hit.splice(Math.floor(Math.random() * hit.length), 1)[0];
+            b.wear = Math.min(1, (b.wear ?? 0) + QUAKE_WEAR);
+          }
+        }
+        break;
+      }
       case 'power_surge':
         if (choice === 'a') {
           this.addInv('copper_plate', -12);
@@ -2982,8 +3007,9 @@ export class Sim {
         b.status = 'depleted';
       } else {
         b.working = true;
-        b.status = ratio < 1 ? 'low_power' : 'ok';
-        b.progress = (b.progress ?? 0) + (dt * ratio * this.factor('miner')) / MINE_SECONDS;
+        const wf = this.wearTick(b, dt);
+        b.status = ratio < 1 ? 'low_power' : wf < 1 ? 'worn' : 'ok';
+        b.progress = (b.progress ?? 0) + (dt * ratio * wf * this.factor('miner')) / MINE_SECONDS;
         if (b.progress >= 1) {
           b.progress -= 1;
           b.output![item] = (b.output![item] ?? 0) + 1;
@@ -2999,6 +3025,46 @@ export class Sim {
       }
     }
     this.countRate(b, dt, produced);
+  }
+
+  /** Does wear apply in this game? (Not in the playground, in the story once machine parts exist.) */
+  wearOn(): boolean {
+    const st = this.state;
+    if (this.creative || st.options.mode === 'playground') return false;
+    return st.options.mode !== 'story' || st.missionIndex >= WEAR_MIN_MISSION;
+  }
+
+  /** A working machine wears a little; returns its speed factor. */
+  private wearTick(b: Building, dt: number): number {
+    if (!this.wearOn()) return 1;
+    b.wear = Math.min(1, (b.wear ?? 0) + dt / WEAR_SECONDS);
+    return b.wear >= 1 ? WORN_SPEED : 1;
+  }
+
+  canRepair(b: Building): boolean {
+    if ((b.wear ?? 0) <= 0.05) return false;
+    for (const k in REPAIR_COST) if ((this.state.inventory[k as ItemId] ?? 0) < REPAIR_COST[k as ItemId]!) return false;
+    return true;
+  }
+
+  /** Spare parts from the stock make a machine as good as new. */
+  repair(b: Building): boolean {
+    if (!this.canRepair(b)) return false;
+    for (const k in REPAIR_COST) this.addInv(k as ItemId, -REPAIR_COST[k as ItemId]!);
+    b.wear = 0;
+    if (b.status === 'worn') b.status = 'ok';
+    this.events.push({ type: 'repaired', b });
+    return true;
+  }
+
+  /** The core's drones service worn machines within reach (far ones need a click). */
+  private autoRepair() {
+    if (this.state.autoRepair === false || !this.wearOn()) return;
+    for (const b of this.state.buildings) {
+      if ((b.wear ?? 0) < 1 || b.site) continue;
+      if (!this.inReach(b.x, b.y, BUILDINGS[b.type].size)) continue;
+      if (!this.repair(b)) return; // out of spare parts
+    }
   }
 
   private tickMachine(b: Building, dt: number, ratio: number) {
@@ -3035,9 +3101,10 @@ export class Sim {
     }
     b.working = true;
     b.missing = undefined;
-    b.status = ratio < 1 ? 'low_power' : 'ok';
+    const wf = this.wearTick(b, dt);
+    b.status = ratio < 1 ? 'low_power' : wf < 1 ? 'worn' : 'ok';
     const fast = b.type === 'printer' || b.type === 'fabricator' ? this.factor('printer') : 1;
-    b.progress += (dt * ratio * this.factor('machine') * fast) / r.seconds;
+    b.progress += (dt * ratio * wf * this.factor('machine') * fast) / r.seconds;
     if (b.progress >= 1) {
       b.progress = 0;
       b.output![r.output] = outN + r.outputCount;
@@ -3274,6 +3341,7 @@ export class Sim {
     for (const b of this.state.buildings) {
       const s = b.status;
       if (!s || s === 'ok' || s === 'idle' || s === 'closed' || s === 'waiting') continue;
+      if (s === 'worn' && this.state.autoRepair !== false && this.inReach(b.x, b.y, BUILDINGS[b.type].size) && this.canRepair(b)) continue; // the drones handle it
       if (s === 'low_power') continue; // reported globally
       if (s === 'blocked' && BUILDINGS[b.type].kind === 'logic') continue; // a full belt behind a module is normal
       if (s === 'blocked' && (b.type === 'miner' || BUILDINGS[b.type].kind === 'machine')) {

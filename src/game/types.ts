@@ -85,7 +85,7 @@ export type BuildingId =
 
 export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter' | 'tunnel' | 'logic' | 'road';
 
-export type Status = 'ok' | 'idle' | 'no_recipe' | 'starved' | 'blocked' | 'low_power' | 'no_fuel' | 'jammed' | 'dead_end' | 'unpaired' | 'depleted' | 'closed' | 'waiting';
+export type Status = 'ok' | 'worn' | 'idle' | 'no_recipe' | 'starved' | 'blocked' | 'low_power' | 'no_fuel' | 'jammed' | 'dead_end' | 'unpaired' | 'depleted' | 'closed' | 'waiting';
 
 export interface ItemDef {
   id: ItemId;
@@ -172,6 +172,7 @@ export interface Building {
   exit?: boolean;
   // diagnostics (transient, recomputed every tick)
   status?: Status;
+  wear?: number; // machines and miners: 0 fresh … 1 worn out (runs at half speed until repaired)
   missing?: ItemId[];
   stuck?: number; // seconds the front item has been blocked
   rate?: number; // produced items per minute (rolling)
@@ -226,7 +227,7 @@ export interface GameOptions {
   difficulty?: 'normal' | 'hard'; // free play only; hard = less material, thinner deposits, more storms
 }
 
-export type EventKind = 'meteorite' | 'wreck' | 'power_surge';
+export type EventKind = 'meteorite' | 'wreck' | 'power_surge' | 'trader' | 'quake';
 
 /** A one-off situation KORA reports; the player picks option a or b (b happens by default when ignored). */
 export interface GameEvent {
@@ -253,6 +254,7 @@ export interface GameState {
   ship: Partial<Record<ItemId, number>>; // ship parts installed so far
   ore: number[]; // remaining units per deposit tile (0 for ground)
   upgrades: Record<UpgradeId, number>; // level per upgrade
+  autoRepair?: boolean; // the core's drones service worn machines within reach (default on)
   projects?: string[]; // finished research projects (small packs of extra parts)
   contracts: Contract[];
   contractsDone: number;

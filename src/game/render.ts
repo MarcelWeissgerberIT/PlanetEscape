@@ -1511,6 +1511,29 @@ export class Renderer {
         ctx.stroke();
       } else if (b.status === 'blocked' && !this.sim.hasOutputTarget(b)) this.drawBadge(b.x * TILE + 14, b.y * TILE + 14, '!', '#ef4444');
       else if (b.status === 'depleted') this.drawBadge(b.x * TILE + 14, b.y * TILE + 14, '∅', '#94a3b8');
+      const wear = b.wear ?? 0;
+      if (wear >= 0.75) {
+        // wear gauge in the lower left corner; worn out = amber spanner badge and sparks
+        const gx = b.x * TILE + 6, gy = b.y * TILE + sz - 20;
+        ctx.fillStyle = 'rgba(0,0,0,0.55)';
+        ctx.fillRect(gx - 1, gy - 1, 6, 12);
+        ctx.fillStyle = wear >= 1 ? '#f59e0b' : '#eab308';
+        ctx.fillRect(gx, gy + 10 * (1 - wear), 4, 10 * wear);
+        if (wear >= 1) {
+          this.drawBadge(b.x * TILE + 14, b.y * TILE + sz - 30, '⚙', '#f59e0b');
+          if (b.working && !this.lowDetail && Math.sin(this.time * 9 + b.id) > 0.93) {
+            ctx.strokeStyle = '#fde68a';
+            ctx.lineWidth = 1.5;
+            for (let i = 0; i < 3; i++) {
+              const a = this.time * 7 + i * 2.1 + b.id;
+              ctx.beginPath();
+              ctx.moveTo(cx, cy);
+              ctx.lineTo(cx + Math.cos(a) * sz * 0.3, cy + Math.sin(a) * sz * 0.3);
+              ctx.stroke();
+            }
+          }
+        }
+      }
     }
     if (PLANT_FUEL[b.type]) {
       if (b.type === 'reactor' && b.working && !this.lowDetail) this.animGlow(cx, cy, sz * 0.16, '#a855f7');

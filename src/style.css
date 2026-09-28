@@ -719,3 +719,7 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 
 .upgrade.project.done { opacity: 0.55; }
 .upgrade.project .uname small img { vertical-align: middle; cursor: pointer; }
+
+.wear { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
+.wear .pbar { flex: 1; }
+.wear .pfill.warn { background: #f59e0b; }

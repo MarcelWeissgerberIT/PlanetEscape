@@ -1,6 +1,6 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { REPAIR_COST, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -1238,6 +1238,18 @@ export class Hud {
     this.floating.style.transform = `translate(${Math.round(sx) - 4}px, ${Math.round(sy) - 40}px)`;
   }
 
+  /** Wear gauge with the repair button for machines and miners. */
+  private wearHtml(b: Building): string {
+    const def = BUILDINGS[b.type];
+    if ((def.kind !== 'machine' && def.kind !== 'miner') || !this.sim.wearOn()) return '';
+    const w = b.wear ?? 0;
+    const st = this.sim.state;
+    const reach = this.sim.inReach(b.x, b.y, def.size);
+    return `<div class="wear"><span class="lbl">${t('wear')}</span><div class="pbar"><div class="pfill ${w >= 1 ? 'warn' : ''}" style="width:${Math.round(w * 100)}%"></div></div><small>${Math.round(w * 100)} %</small>
+      <button class="btn small ${w >= 1 ? 'primary' : ''}" data-act="repair" ${this.sim.canRepair(b) ? '' : 'disabled'}>${t('repair')} · ${costHtml(REPAIR_COST, st.inventory)}</button></div>
+      <p class="save-hint">${w >= 1 ? t('wear_worn') : ''} ${reach ? (st.autoRepair === false ? t('wear_auto_off') : t('wear_auto')) : t('wear_far')} <button class="chip" data-act="auto-repair">${st.autoRepair === false ? t('wear_auto_on_btn') : t('wear_auto_off_btn')}</button></p>`;
+  }
+
   private infoBody(b: Building): string {
     const def = BUILDINGS[b.type];
     const st = this.sim.state;
@@ -1246,7 +1258,7 @@ export class Hud {
       const s = b.status ?? 'ok';
       let txt = s === 'ok' ? (b.working ? t('working') : t('idle')) : s === 'starved' ? `${tStatus(s)} ${(b.missing ?? []).map((m) => tItem(m)).join(', ')}` : tStatus(s);
       if (this.sim.powerRatio < 1 && (def.kind === 'machine' || def.kind === 'miner')) txt += ` · ${t('no_power')}`;
-      return `<div class="status ${s === 'ok' ? '' : 'bad'}">${txt}${extra}</div>`;
+      return `<div class="status ${s === 'ok' ? '' : 'bad'}">${txt}${extra}</div>${this.wearHtml(b)}`;
     };
     const dirPicker = def.rotatable
       ? `<div class="dirs"><span class="lbl">${t('direction')}</span>${[0, 1, 2, 3].map((d) => `<button class="dirbtn ${b.dir === d ? 'active' : ''}" data-dir="${d}">${DIR_ARROWS[d]}</button>`).join('')}</div>`
@@ -1769,6 +1781,17 @@ export class Hud {
       }
       if (target.dataset.kitfilter !== undefined) {
         b.recipe = target.dataset.kitfilter || null;
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'repair') {
+        if (this.sim.repair(b)) sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'auto-repair') {
+        this.sim.state.autoRepair = this.sim.state.autoRepair === false;
         sfx.select();
         this.showInfo(b);
         return;

@@ -357,6 +357,13 @@ export function kitId(type: BuildingId): ItemId {
 export const PICKER_RATE = 1; // items per second a grabber arm moves
 export const PICKER_REACH = [1, 2]; // tiles between the arm and its source / target
 export const ROBOT_SPEED = 3; // tiles per second on a road
+export const STORM_ROBOT_FACTOR = 0.6; // robots crawl through dust storms
+/** Wear: machines and miners wear out after this many seconds of work and then run at WORN_SPEED until repaired. */
+export const WEAR_SECONDS = 900;
+export const WORN_SPEED = 0.5;
+export const WEAR_MIN_MISSION = 2; // story: wear starts once machine parts can be made
+export const REPAIR_COST: Partial<Record<ItemId, number>> = { machine_part: 2, iron_plate: 4 };
+export const QUAKE_WEAR = 0.6;
 export const ROBOT_CAP = 8; // items one robot carries
 export const ROBOT_RATE = 4; // items per second loaded / unloaded at a dock
 export const DOCK_CAP = 8; // items a dock buffers
