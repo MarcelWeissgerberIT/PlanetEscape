@@ -408,6 +408,9 @@ export const CONTRACT_ITEMS: { item: ItemId; minMission: number; amount: [number
   { item: 'precision_part', minMission: 6, amount: [6, 12], seconds: 720, reward: (n) => ({ hull_plate: Math.round(n / 3) }) },
 ];
 export const CONTRACT_INTERVAL = 240; // seconds between offers
+/** Automation contracts: from this mission on, this share of the offers asks for controlled deliveries. */
+export const AUTOMATION_MIN_MISSION = 3;
+export const AUTOMATION_SHARE = 0.4;
 export const STORM_INTERVAL: [number, number] = [420, 900];
 export const STORM_SECONDS = 60;
 export const STORM_SOLAR_FACTOR = 0.35;

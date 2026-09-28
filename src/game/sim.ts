@@ -14,6 +14,8 @@ import {
   TERRAIN_ITEM,
   TUNNEL_RANGE,
   CONTRACT_INTERVAL,
+  AUTOMATION_MIN_MISSION,
+  AUTOMATION_SHARE,
   BOOST_FACTOR,
   BOOST_SECONDS,
   EVENT_DECIDE_SECONDS,
@@ -577,7 +579,13 @@ export class Sim {
         this.state.delivered[item] = (this.state.delivered[item] ?? 0) + 1;
         if (this.currentMission()?.rate?.[item]) ((this.state.rateLog ??= {})[item] ??= []).push(this.state.time);
         this.bump(this.state.stats.delivered, item, 1);
-        for (const c of this.state.contracts) if (c.accepted && c.item === item && c.delivered < c.amount) c.delivered++;
+        for (const c of this.state.contracts) {
+          if (!c.accepted || c.item !== item) continue;
+          if (!c.kind || c.kind === 'amount') {
+            if (c.delivered < c.amount) c.delivered++;
+          } else if (c.kind === 'steady') (c.log ??= []).push(this.state.time);
+          else if (c.kind === 'batch') c.winCount = (c.winCount ?? 0) + 1;
+        }
         this.events.push({ type: 'delivered', item, count: 1 });
         return true;
       }
@@ -1012,6 +1020,7 @@ export class Sim {
     // contracts
     for (let i = st.contracts.length - 1; i >= 0; i--) {
       const c = st.contracts[i];
+      if (c.accepted && c.kind && c.kind !== 'amount') this.tickAutomation(c, _dt);
       if (c.accepted && c.delivered >= c.amount) {
         for (const k in c.reward) this.addInv(k as ItemId, c.reward[k as ItemId]!);
         st.contractsDone++;
@@ -1037,7 +1046,11 @@ export class Sim {
     if (st.time >= st.nextContractAt && st.missionIndex >= 1 && st.contracts.length < 2) {
       st.nextContractAt = st.time + CONTRACT_INTERVAL;
       const pool = CONTRACT_ITEMS.filter((c) => st.missionIndex >= c.minMission);
-      if (pool.length) {
+      const auto = st.missionIndex >= AUTOMATION_MIN_MISSION && Math.random() < AUTOMATION_SHARE ? this.makeAutomationContract() : null;
+      if (auto) {
+        st.contracts.push(auto);
+        this.events.push({ type: 'contract_offer', contract: auto });
+      } else if (pool.length) {
         const def = pool[Math.floor(Math.random() * pool.length)];
         const amount = def.amount[0] + Math.floor(Math.random() * (def.amount[1] - def.amount[0] + 1));
         const c: Contract = { id: st.nextId++, item: def.item, amount, delivered: 0, deadline: st.time + def.seconds + 120, reward: def.reward(amount), accepted: false };
@@ -2762,9 +2775,72 @@ export class Sim {
     return { total, time, parts, thrift, contracts, hard };
   }
 
+  /** A contract that needs control logic: a steady rate band, exact batches per window, or a stock level. */
+  makeAutomationContract(kind?: Contract['kind']): Contract | null {
+    const st = this.state;
+    const items = (['iron_plate', 'copper_plate', 'copper_wire', 'machine_part', 'steel_frame', 'circuit'] as ItemId[]).filter((id) => {
+      const r = RECIPES.find((x) => x.output === id);
+      return r && st.unlockedRecipes.includes(r.id);
+    });
+    if (!items.length) return null;
+    const item = items[Math.floor(Math.random() * items.length)];
+    const pick = <T,>(a: T[]) => a[Math.floor(Math.random() * a.length)];
+    const k = kind ?? pick(['steady', 'batch', 'level'] as const);
+    const base = { id: st.nextId++, item, amount: 1, delivered: 0, accepted: false, kind: k } as Contract;
+    if (k === 'steady') {
+      const r = pick([6, 8, 10, 12]);
+      Object.assign(base, { lo: r - 2, hi: r + 2, hold: 90, held: 0, deadline: st.time + 720, reward: { machine_part: 8, circuit: 6, precision_part: 3 } });
+    } else if (k === 'batch') {
+      Object.assign(base, { n: pick([4, 6, 8]), window: 30, rounds: 4, done: 0, deadline: st.time + 600, reward: { machine_part: 10, circuit: 8, motor: 2 } });
+    } else {
+      const lo = pick([30, 40]);
+      Object.assign(base, { lo, hi: lo + 20, hold: 90, held: 0, deadline: st.time + 720, reward: { steel_frame: 10, circuit: 8, cell: 2 } });
+    }
+    return base;
+  }
+
+  /** Stock of an item in depots and warehouses (the core does not count). */
+  storedAmount(item: ItemId): number {
+    let n = 0;
+    for (const b of this.state.buildings) if (b.store && !b.site) n += b.store[item] ?? 0;
+    return n;
+  }
+
+  /** Rate or stock an automation contract looks at right now. */
+  automationValue(c: Contract): number {
+    if (c.kind === 'steady') {
+      const log = (c.log ??= []);
+      while (log.length && log[0] < this.state.time - 60) log.shift();
+      return log.length;
+    }
+    if (c.kind === 'level') return this.storedAmount(c.item);
+    return c.winCount ?? 0;
+  }
+
+  private tickAutomation(c: Contract, dt: number) {
+    if (c.kind === 'batch') {
+      c.winStart ??= this.state.time;
+      if (this.state.time >= c.winStart + c.window!) {
+        c.done = (c.winCount ?? 0) === c.n ? (c.done ?? 0) + 1 : 0; // a wrong window starts the series again
+        c.winCount = 0;
+        c.winStart += c.window!;
+      }
+      if ((c.done ?? 0) >= c.rounds!) c.delivered = c.amount;
+      return;
+    }
+    const v = this.automationValue(c);
+    c.held = v >= c.lo! && v <= c.hi! ? (c.held ?? 0) + dt : 0;
+    if (c.held >= c.hold!) c.delivered = c.amount;
+  }
+
   acceptContract(c: Contract) {
     c.accepted = true;
     c.delivered = 0;
+    c.held = 0;
+    c.done = 0;
+    c.winCount = 0;
+    c.winStart = this.state.time;
+    c.log = [];
     c.deadline = this.state.time + (c.deadline - this.state.time); // timer starts on accept (deadline already includes offer window)
   }
 

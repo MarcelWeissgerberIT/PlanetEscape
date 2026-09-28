@@ -189,6 +189,19 @@ export interface Contract {
   deadline: number; // game time
   reward: Partial<Record<ItemId, number>>;
   accepted: boolean;
+  // automation contracts (need circuits: timers, sensors, valves, registers)
+  kind?: 'amount' | 'steady' | 'batch' | 'level';
+  lo?: number; // steady: items per minute / level: stock, lower bound
+  hi?: number; // upper bound
+  hold?: number; // steady / level: seconds to stay in the band
+  held?: number;
+  log?: number[]; // steady: delivery times of the last minute
+  n?: number; // batch: exactly n items per window
+  window?: number; // batch: window length in seconds
+  rounds?: number; // batch: windows in a row
+  done?: number; // batch: windows done in a row
+  winStart?: number;
+  winCount?: number;
 }
 
 export interface MissionDef {

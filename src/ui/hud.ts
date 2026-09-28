@@ -2387,15 +2387,40 @@ export class Hud {
     this.modal.addEventListener('transitionend', () => undefined, { once: true });
   }
 
+  /** One-line text of a contract (all kinds). */
+  contractText(c: Contract): string {
+    const time = fmtTime(c.deadline - this.sim.state.time);
+    const item = tItem(c.item);
+    if (c.kind === 'steady') return t('contract_steady', { lo: c.lo!, hi: c.hi!, item, s: c.hold!, time });
+    if (c.kind === 'batch') return t('contract_batch', { n: c.n!, item, w: c.window!, k: c.rounds!, time });
+    if (c.kind === 'level') return t('contract_level', { lo: c.lo!, hi: c.hi!, item, s: c.hold!, time });
+    return t('contract_text', { n: c.amount, item, time });
+  }
+
+  /** Progress bar and line of an accepted contract. */
+  private contractProgress(c: Contract): string {
+    const st = this.sim.state;
+    const left = `${t('time_left')} ${fmtTime(c.deadline - st.time)}`;
+    if (!c.kind || c.kind === 'amount') return `<div class="pbar big"><div class="pfill" style="width:${(c.delivered / c.amount) * 100}%"></div></div><div class="cmeta">${c.delivered}/${c.amount} · ${left}</div>`;
+    if (c.kind === 'batch') {
+      const inWin = Math.max(0, Math.ceil((c.winStart ?? st.time) + c.window! - st.time));
+      return `<div class="pbar big"><div class="pfill" style="width:${((c.done ?? 0) / c.rounds!) * 100}%"></div></div><div class="cmeta">${t('contract_batch_now', { d: c.done ?? 0, k: c.rounds!, c: c.winCount ?? 0, n: c.n!, s: inWin })} · ${left}</div>`;
+    }
+    const v = this.sim.automationValue(c);
+    const ok = v >= c.lo! && v <= c.hi!;
+    return `<div class="pbar big"><div class="pfill" style="width:${((c.held ?? 0) / c.hold!) * 100}%"></div></div><div class="cmeta"><span class="${ok ? 'okline' : 'badline'}">${t(c.kind === 'steady' ? 'contract_rate_now' : 'contract_level_now', { v })}</span> · ${Math.floor(c.held ?? 0)}/${c.hold} s · ${left}</div>`;
+  }
+
   showContracts() {
     const st = this.sim.state;
     const list = st.contracts.length
       ? st.contracts
           .map(
             (c) => `<div class="contract ${c.accepted ? 'accepted' : ''}">
-          <div class="ctitle">${itemImg(c.item, 'icon')} <b>${t('contract_text', { n: c.amount, item: tItem(c.item), time: fmtTime(c.deadline - st.time) })}</b></div>
+          <div class="ctitle">${itemImg(c.item, 'icon')} <b>${c.kind && c.kind !== 'amount' ? `<span class="auto-tag">${t('contract_auto')}</span> ` : ''}${this.contractText(c)}</b></div>
+          ${c.kind && c.kind !== 'amount' ? `<p class="save-hint">${t(`contract_${c.kind}_hint` as 'contract_steady_hint')}</p>` : ''}
           <div class="creward">${t('contract_reward')}: ${Object.entries(c.reward).map(([k, n]) => `${itemImg(k as ItemId, 'icon xs')}${n}`).join(' ')}</div>
-          ${c.accepted ? `<div class="pbar big"><div class="pfill" style="width:${(c.delivered / c.amount) * 100}%"></div></div><div class="cmeta">${c.delivered}/${c.amount} · ${t('time_left')} ${fmtTime(c.deadline - st.time)}</div>` : `<div class="cbtns"><button class="btn small primary" data-accept="${c.id}">${t('contract_accept')}</button><button class="btn small" data-decline="${c.id}">${t('contract_decline')}</button></div>`}
+          ${c.accepted ? this.contractProgress(c) : `<div class="cbtns"><button class="btn small primary" data-accept="${c.id}">${t('contract_accept')}</button><button class="btn small" data-decline="${c.id}">${t('contract_decline')}</button></div>`}
         </div>`,
           )
           .join('')
@@ -2753,7 +2778,7 @@ export class Hud {
   }
 
   contractOffer(c: Contract) {
-    this.toast(`${icon('contracts', 'sm')} ${t('contract_new')}: ${t('contract_text', { n: c.amount, item: tItem(c.item), time: fmtTime(c.deadline - this.sim.state.time) })}`, 6000);
+    this.toast(`${icon('contracts', 'sm')} ${t('contract_new')}: ${this.contractText(c)}`, 6000);
     sfx.select();
   }
 
