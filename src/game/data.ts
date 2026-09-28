@@ -209,7 +209,11 @@ export const TERMINAL_RAM_BANKS = 16; // circuits -> 256 B each = 4 KB
 export const TERMINAL_BANK_BYTES = 256;
 export const TERMINAL_CRYSTALS = 6; // quartz / glass -> 100 Hz each
 export const REGISTER_MAX = 255;
-export const MATRIX_SIZE = 8; // pixels per side of an LED matrix
+export const MATRIX_SIZE = 8; // default pixels per side of an LED matrix
+/** Pixels per side of a matrix: 8x8 by default, 16x16 when set to high resolution. */
+export function matrixSize(b: { value?: number }): number {
+  return b.value === 16 ? 16 : MATRIX_SIZE;
+}
 export const SCREEN_REGION = { dx: 2, w: 8, h: 4 }; // receiver display: 8x4 matrices (64x32 px) per scale step, right of the receiver
 /** Item colour as a packed 0xRRGGBB number (LED matrix pixels). */
 export function itemRgb(id: ItemId): number {

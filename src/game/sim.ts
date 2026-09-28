@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_REGION, itemRgb, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_REGION, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -141,6 +141,7 @@ export class Sim {
   clearLamp(b: Building) {
     if (b.type === 'matrix') {
       b.px = undefined;
+      b.acc = (b.acc ?? 0) + 1;
       return;
     }
     const k = this.lampItem(b);
@@ -534,10 +535,12 @@ export class Sim {
         }
         if (b.type === 'matrix') {
           // a pixel bucket: every item fills the next dark pixel in its colour
-          const px = b.px ?? (b.px = new Array<number>(MATRIX_SIZE * MATRIX_SIZE).fill(0));
+          const s = matrixSize(b);
+          const px = b.px ?? (b.px = new Array<number>(s * s).fill(0));
           const i = px.indexOf(0);
           if (i < 0) return false;
           px[i] = itemRgb(item);
+          b.acc = (b.acc ?? 0) + 1; // picture version (renderer cache)
           return true;
         }
         if (b.type === 'oscillator') {
@@ -1133,7 +1136,10 @@ export class Sim {
       for (let x = 0; x < r.w; x++) {
         const l = this.at(r.x + x, r.y + y);
         if (l?.type === 'lamp') l.output = {};
-        else if (l?.type === 'matrix' && x < r.w / MATRIX_SIZE && y < r.h / MATRIX_SIZE) l.px = undefined;
+        else if (l?.type === 'matrix' && x * matrixSize(l) < r.w && y * matrixSize(l) < r.h) {
+          l.px = undefined;
+          l.acc = (l.acc ?? 0) + 1;
+        }
       }
   }
 
@@ -1142,7 +1148,9 @@ export class Sim {
   /** Pixel region a receiver drives: 64x32 px (8x4 matrices) per scale step, right of the building. */
   screenRect(b: Building): { x: number; y: number; w: number; h: number } {
     const k = Math.max(1, Math.min(4, b.value ?? 1));
-    return { x: b.x + SCREEN_REGION.dx, y: b.y, w: SCREEN_REGION.w * MATRIX_SIZE * k, h: SCREEN_REGION.h * MATRIX_SIZE * k };
+    const first = this.at(b.x + SCREEN_REGION.dx, b.y);
+    const s = first?.type === 'matrix' ? matrixSize(first) : MATRIX_SIZE; // pixel density follows the first matrix
+    return { x: b.x + SCREEN_REGION.dx, y: b.y, w: SCREEN_REGION.w * s * k, h: SCREEN_REGION.h * s * k };
   }
 
   /** Write an RGBA frame (w x h, the receiver's resolution) onto matrices (8x8 blocks) and lamps (one pixel per tile). */
@@ -1150,19 +1158,22 @@ export class Sim {
     const r = this.screenRect(b);
     if (w !== r.w || h !== r.h) return;
     b.progress = this.state.time;
-    const tilesW = w / MATRIX_SIZE, tilesH = h / MATRIX_SIZE;
+    const tilesW = w / MATRIX_SIZE, tilesH = h / MATRIX_SIZE; // upper bound (8 px tiles); a 16 px matrix covers 2x2 of these
     for (let my = 0; my < tilesH; my++)
       for (let mx = 0; mx < tilesW; mx++) {
         const m = this.at(r.x + mx, r.y + my);
         if (m?.type !== 'matrix') continue;
-        const px = m.px ?? new Array<number>(MATRIX_SIZE * MATRIX_SIZE).fill(0);
-        for (let yy = 0; yy < MATRIX_SIZE; yy++)
-          for (let xx = 0; xx < MATRIX_SIZE; xx++) {
-            const i = ((my * MATRIX_SIZE + yy) * w + mx * MATRIX_SIZE + xx) * 4;
+        const s = matrixSize(m);
+        if (mx * s >= w || my * s >= h) continue;
+        const px = m.px && m.px.length === s * s ? m.px : new Array<number>(s * s).fill(0);
+        for (let yy = 0; yy < s; yy++)
+          for (let xx = 0; xx < s; xx++) {
+            const i = ((my * s + yy) * w + mx * s + xx) * 4;
             const rr = rgba[i], gg = rgba[i + 1], bb = rgba[i + 2];
-            px[yy * MATRIX_SIZE + xx] = rr + gg + bb < 60 ? 0 : (rr << 16) | (gg << 8) | bb;
+            px[yy * s + xx] = rr + gg + bb < 45 ? 0 : (rr << 16) | (gg << 8) | bb;
           }
         m.px = px;
+        m.acc = (m.acc ?? 0) + 1;
       }
     // lamps: one pixel per tile, nearest item colour
     for (let y = 0; y < h; y++)
@@ -1215,18 +1226,23 @@ export class Sim {
       for (let mx = 0; mx < r.w / MATRIX_SIZE; mx++) {
         const m = this.at(r.x + mx, r.y + my);
         if (m?.type !== 'matrix') continue;
-        const px = m.px ?? new Array<number>(MATRIX_SIZE * MATRIX_SIZE).fill(0);
-        let changed = !m.px;
-        for (let yy = 0; yy < MATRIX_SIZE; yy++)
-          for (let xx = 0; xx < MATRIX_SIZE; xx++) {
-            const rgb = this.displayRgb(b, cpu.display[(my * MATRIX_SIZE + yy) * CHIP8_W + mx * MATRIX_SIZE + xx]);
-            const k = yy * MATRIX_SIZE + xx;
+        const s = matrixSize(m);
+        if (mx * s >= r.w || my * s >= r.h) continue;
+        const px = m.px && m.px.length === s * s ? m.px : new Array<number>(s * s).fill(0);
+        let changed = px !== m.px;
+        for (let yy = 0; yy < s; yy++)
+          for (let xx = 0; xx < s; xx++) {
+            const rgb = this.displayRgb(b, cpu.display[(my * s + yy) * CHIP8_W + mx * s + xx]);
+            const k = yy * s + xx;
             if (px[k] !== rgb) {
               px[k] = rgb;
               changed = true;
             }
           }
-        if (changed) m.px = px;
+        if (changed) {
+          m.px = px;
+          m.acc = (m.acc ?? 0) + 1;
+        }
       }
   }
 
@@ -1765,7 +1781,7 @@ export class Sim {
       if (i.ratio !== undefined) b.ratio = i.ratio;
       if (i.mode !== undefined) b.mode = i.mode;
       if (i.open !== undefined) b.open = i.open;
-      if (i.value !== undefined && (b.type === 'multiplier' || b.type === 'divider')) b.value = i.value;
+      if (i.value !== undefined && (b.type === 'multiplier' || b.type === 'divider' || b.type === 'matrix' || b.type === 'screen')) b.value = i.value;
       placed.push(b);
     }
     return { placed, skipped, reason };

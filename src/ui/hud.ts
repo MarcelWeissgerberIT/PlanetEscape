@@ -8,12 +8,13 @@ import { ambientEnabled, setAmbient, setSound, sfx, soundEnabled, startAmbient }
 import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, TerrainId, UpgradeId } from '../game/types';
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
-import { hasSave, load as loadSave, lastDropped } from '../game/save';
+import { hasSave, load as loadSave, lastDropped, serialize } from '../game/save';
 import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 import { CHIP8_H, CHIP8_W, disasm } from '../game/chip8';
-import { CHIP8_PALETTE, CRYSTAL_HZ, OSCILLATOR_CRYSTALS } from '../game/data';
+import { CHIP8_PALETTE, CRYSTAL_HZ, OSCILLATOR_CRYSTALS, matrixSize } from '../game/data';
+import { VIDEO_CROPS } from '../game/video';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
 export interface HudCallbacks {
@@ -952,7 +953,7 @@ export class Hud {
     const matrix: Blueprint = { name: t('preset_matrix'), w: 8, h: 4, items: [] };
     for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) matrix.items.push({ type: 'matrix', dx: x, dy: y, dir: 0, recipe: null });
     const wall: Blueprint = { name: t('preset_wall'), w: 18, h: 8, items: [{ type: 'screen', dx: 0, dy: 0, dir: 0, recipe: null }] };
-    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) wall.items.push({ type: 'matrix', dx: 2 + x, dy: y, dir: 0, recipe: null });
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) wall.items.push({ type: 'matrix', dx: 2 + x, dy: y, dir: 0, recipe: null, value: 16 });
     return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8), matrix, wall, this.displayBlueprint()];
   }
 
@@ -1084,7 +1085,11 @@ export class Hud {
     const [sx1, sy1] = cam.worldToScreen((x + w) * TILE, (y + h) * TILE);
     const topH = (this.top.getBoundingClientRect().height || 120) + 16;
     const panel = this.info.getBoundingClientRect();
-    const bottomLimit = this.info.classList.contains('hidden') ? cam.height - (this.bottom.getBoundingClientRect().height || 160) : Math.min(panel.top, cam.height - (this.bottom.getBoundingClientRect().height || 160)) - 12;
+    const barLimit = cam.height - (this.bottom.getBoundingClientRect().height || 160);
+    // the info panel only hides what lies under it: on wide screens it sits bottom right, so a building on the
+    // left may stay where it is (panning on every click was annoying)
+    const underPanel = !this.info.classList.contains('hidden') && sx1 > panel.left - 8 && sx0 < panel.right + 8;
+    const bottomLimit = (underPanel ? Math.min(panel.top, barLimit) : barLimit) - 12;
     const bandCenter = (topH + bottomLimit) / 2;
     const mid = (sy0 + sy1) / 2;
     const clearY = sy0 > topH && sy1 < bottomLimit;
@@ -1237,7 +1242,9 @@ export class Hud {
         })
         .join('');
       const p = Math.round(this.sim.shipProgress() * 100);
-      body = `<div class="lbl">${t('ship_progress')} ${p}%</div><div class="pbar big"><div class="pfill" style="width:${p}%"></div></div><div class="mrows">${parts}</div>`;
+      body = st.options.mode === 'playground'
+        ? `<p class="save-hint">${t('core_playground')}</p>`
+        : `<div class="lbl">${t('ship_progress')} ${p}%</div><div class="pbar big"><div class="pfill" style="width:${p}%"></div></div><div class="mrows">${parts}</div>`;
     } else if (b.type === 'terminal') {
       const cpu = this.sim.cpu(b);
       const errs = this.sim.cpuErrorsOf(b);
@@ -1303,11 +1310,14 @@ export class Hud {
             <input id="vidfile" class="file-hidden" type="file" accept="video/*">
           </div>
           <div class="dirs"><span class="lbl">${t('vid_size')}</span>${[1, 2, 3, 4].map((n) => `<button class="chip ${k === n ? 'active' : ''}" data-value="${n}">${8 * n}×${4 * n}</button>`).join('')}<small class="dim"> · ${r.w}×${r.h} px</small></div>
+          <div class="dirs"><span class="lbl">${t('vid_crop')}</span>${VIDEO_CROPS.map((c, i) => `<button class="chip ${(b.ratio ?? 0) === i ? 'active' : ''}" data-crop="${i}">${c === 1 ? t('vid_fit') : c + '×'}</button>`).join('')}</div>
           <p class="save-hint">${t('vid_hint')}</p>`;
       } else if (b.type === 'matrix') {
+        const s = matrixSize(b);
         const px = b.px ?? [];
-        const cells = Array.from({ length: 64 }, (_, i) => `<button class="mx-cell" data-px="${i}" style="background:${px[i] ? '#' + px[i].toString(16).padStart(6, '0') : 'rgba(255,255,255,0.08)'}"></button>`).join('');
-        body = `<div class="mx-grid">${cells}</div>
+        const cells = Array.from({ length: s * s }, (_, i) => `<button class="mx-cell" data-px="${i}" style="background:${px[i] ? '#' + px[i].toString(16).padStart(6, '0') : 'rgba(255,255,255,0.08)'}"></button>`).join('');
+        body = `<div class="mx-grid" style="grid-template-columns:repeat(${s},1fr);gap:${s > 8 ? 2 : 3}px">${cells}</div>
+          <div class="dirs"><span class="lbl">${t('mx_size')}</span><button class="chip ${s === 8 ? 'active' : ''}" data-mxsize="8">8×8</button><button class="chip ${s === 16 ? 'active' : ''}" data-mxsize="16">16×16</button></div>
           <div class="dirs"><span class="lbl">${t('mx_color')}</span><input type="color" id="mxcolor" value="${this.paintColor}"><button class="chip" data-act="mx-fill">${t('mx_fill')}</button><button class="chip" data-act="clear">${t('lamp_clear')}</button></div>
           <p class="save-hint">${t('matrix_hint')}</p>`;
       } else if (b.type === 'oscillator') {
@@ -1587,6 +1597,12 @@ export class Hud {
         sfx.select();
         return;
       }
+      if (b.type === 'screen' && target.dataset.crop !== undefined) {
+        b.ratio = Number(target.dataset.crop);
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
       if (b.type === 'screen' && target.dataset.value !== undefined) {
         b.value = Number(target.dataset.value);
         sfx.select();
@@ -1599,11 +1615,21 @@ export class Hud {
         this.showInfo(b);
         return;
       }
+      if (b.type === 'matrix' && target.dataset.mxsize !== undefined) {
+        b.value = Number(target.dataset.mxsize) === 16 ? 16 : undefined;
+        b.px = undefined;
+        b.acc = (b.acc ?? 0) + 1;
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
       if (b.type === 'matrix' && (target.dataset.px !== undefined || target.dataset.act === 'mx-fill')) {
         const input = this.info.querySelector('#mxcolor') as HTMLInputElement | null;
         if (input) this.paintColor = input.value;
         const rgb = parseInt(this.paintColor.replace('#', ''), 16) || 0;
-        const px = b.px ?? (b.px = new Array<number>(64).fill(0));
+        const s = matrixSize(b);
+        const px = b.px && b.px.length === s * s ? b.px : (b.px = new Array<number>(s * s).fill(0));
+        b.acc = (b.acc ?? 0) + 1;
         if (target.dataset.act === 'mx-fill') px.fill(rgb);
         else {
           const i = Number(target.dataset.px);
@@ -2080,7 +2106,7 @@ export class Hud {
   /** Export / import the save as text or file so it can move between devices. */
   showTransfer() {
     this.cb.onSave();
-    const raw = JSON.stringify(this.sim.state);
+    const raw = serialize(this.sim.state);
     const encoded = 'PE1.' + btoa(unescape(encodeURIComponent(raw)));
     this.openModal(
       `<h2>${icon('transfer', 'sm')} ${t('transfer_short')}</h2>

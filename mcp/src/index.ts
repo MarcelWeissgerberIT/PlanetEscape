@@ -8,6 +8,7 @@ import { Sim } from '../../src/game/sim';
 import { beltCapacity, buildChain, machineRate, minerRate, routeBelt, layPath, solveOrder, type SolverLog } from '../../src/game/solver';
 import type { Building, BuildingId, Dir, GameOptions, GameState, ItemId, TerrainId } from '../../src/game/types';
 import { chapterState, levelState, newGame } from '../../src/game/world';
+import { serialize } from '../../src/game/save';
 import PLAYBOOK from '../PLAYBOOK.md';
 import { Spectator, sleep } from './spectate';
 
@@ -518,10 +519,10 @@ server.registerTool(
     annotations: { readOnlyHint: false, destructiveHint: true, idempotentHint: true, openWorldHint: false },
   },
   async ({ action, json, path }) => {
-    if (action === 'export') return ok({ json: JSON.stringify(sim.state) }, JSON.stringify(sim.state));
+    if (action === 'export') return ok({ json: serialize(sim.state) }, serialize(sim.state));
     if (action === 'write') {
       if (!path) return fail('path required');
-      writeFileSync(path, JSON.stringify(sim.state));
+      writeFileSync(path, serialize(sim.state));
       return ok({ written: path });
     }
     const raw = action === 'read' ? readFileSync(path!, 'utf8') : json;

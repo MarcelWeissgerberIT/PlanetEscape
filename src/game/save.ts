@@ -6,9 +6,27 @@ const KEY = 'pe_save_v1';
 /** buildings the last load had to drop because this build does not know them (save from a newer version) */
 export let lastDropped = 0;
 
+/** JSON for storage: LED matrix pixels travel as base64 (3 bytes per pixel) instead of number arrays. */
+export function serialize(state: GameState): string {
+  return JSON.stringify(state, (key, value) => (key === 'px' && Array.isArray(value) ? packPixels(value as number[]) : value));
+}
+
+function packPixels(px: number[]): string {
+  let bin = '';
+  for (const v of px) bin += String.fromCharCode((v >> 16) & 255, (v >> 8) & 255, v & 255);
+  return 'b64:' + btoa(bin);
+}
+
+function unpackPixels(s: string): number[] {
+  const bin = atob(s.slice(4));
+  const out: number[] = [];
+  for (let i = 0; i + 2 < bin.length; i += 3) out.push((bin.charCodeAt(i) << 16) | (bin.charCodeAt(i + 1) << 8) | bin.charCodeAt(i + 2));
+  return out;
+}
+
 export function save(state: GameState) {
   try {
-    localStorage.setItem(KEY, JSON.stringify(state));
+    localStorage.setItem(KEY, serialize(state));
   } catch {
     /* quota or private mode – ignore */
   }
@@ -48,6 +66,10 @@ export function load(): GameState | null {
     st.buildings = st.buildings.filter((b) => b && b.type in BUILDINGS);
     lastDropped = before - st.buildings.length;
     if (!st.buildings.length || st.buildings[0].type !== 'core') return null;
+    for (const b of st.buildings) {
+      const px = (b as { px?: unknown }).px;
+      if (typeof px === 'string') b.px = px.startsWith('b64:') ? unpackPixels(px) : undefined;
+    }
     // additive fields (no version bump needed)
     st.upgrades = { ...UPGRADE_DEFAULTS(), ...st.upgrades };
     st.event ??= null;

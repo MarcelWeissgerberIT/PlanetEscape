@@ -3,7 +3,7 @@ import { Camera, TILE } from './camera';
 import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W } from './chip8';
 import { ARITH } from './sim';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -748,7 +748,9 @@ export class Renderer {
       if (b.working && !this.lowDetail) this.animGlow(cx + sz * 0.3, cy - sz * 0.3, 4, '#f43f5e');
       if (this.overlay || this.selected === b) {
         const r = this.sim.screenRect(b);
-        const tw = r.w / MATRIX_SIZE, th = r.h / MATRIX_SIZE;
+        const first = this.sim.at(r.x, r.y);
+        const dens = first?.type === 'matrix' ? matrixSize(first) : MATRIX_SIZE;
+        const tw = r.w / dens, th = r.h / dens;
         ctx.strokeStyle = 'rgba(244,63,94,0.7)';
         ctx.lineWidth = 2 / Math.max(0.5, this.cam.zoom);
         ctx.setLineDash([10, 6]);
@@ -1104,40 +1106,59 @@ export class Renderer {
     }
   }
 
-  /** 8x8 RGB LEDs on one tile. */
+  private mxCache = new Map<number, { canvas: HTMLCanvasElement; ver: number; s: number }>();
+  private mxMask = new Map<number, HTMLCanvasElement>();
+
+  /** The grid of dark gaps between the LEDs, rendered once per resolution. */
+  private matrixMask(s: number): HTMLCanvasElement {
+    let m = this.mxMask.get(s);
+    if (m) return m;
+    m = document.createElement('canvas');
+    m.width = TILE;
+    m.height = TILE;
+    const c = m.getContext('2d')!;
+    c.fillStyle = '#070a0e';
+    c.fillRect(0, 0, TILE, TILE);
+    const cell = (TILE - 4) / s, gap = s > 8 ? 0.8 : 1.6;
+    c.globalCompositeOperation = 'destination-out';
+    for (let y = 0; y < s; y++) for (let x = 0; x < s; x++) c.fillRect(2 + x * cell + gap / 2, 2 + y * cell + gap / 2, cell - gap, cell - gap);
+    this.mxMask.set(s, m);
+    return m;
+  }
+
+  /** RGB LEDs on one tile (8x8 or 16x16): the pixels are cached as a tiny image and scaled up without smoothing. */
   private drawMatrix(b: Building) {
     const { ctx } = this;
     const x0 = b.x * TILE, y0 = b.y * TILE;
-    ctx.fillStyle = '#0b1016';
-    roundRect(ctx, x0 + 1, y0 + 1, TILE - 2, TILE - 2, 6);
-    ctx.fill();
-    const cell = TILE / MATRIX_SIZE;
-    const px = b.px;
-    if (this.lowDetail) {
-      // far away: one average colour per tile
-      if (!px) return;
-      let r = 0, g = 0, bl = 0, n = 0;
-      for (const v of px) if (v) { r += v >> 16; g += (v >> 8) & 255; bl += v & 255; n++; }
-      if (!n) return;
-      ctx.fillStyle = `rgba(${Math.round(r / n)},${Math.round(g / n)},${Math.round(bl / n)},${Math.min(1, 0.25 + n / 64)})`;
-      roundRect(ctx, x0 + 3, y0 + 3, TILE - 6, TILE - 6, 5);
-      ctx.fill();
-      return;
-    }
-    for (let i = 0; i < MATRIX_SIZE * MATRIX_SIZE; i++) {
-      const v = px ? px[i] : 0;
-      const cx = x0 + (i % MATRIX_SIZE) * cell, cy = y0 + Math.floor(i / MATRIX_SIZE) * cell;
-      if (!v) {
-        ctx.fillStyle = 'rgba(255,255,255,0.06)';
-        ctx.fillRect(cx + 2, cy + 2, cell - 3, cell - 3);
-        continue;
+    const s = matrixSize(b);
+    const ver = b.acc ?? 0;
+    let cache = this.mxCache.get(b.id);
+    if (!cache || cache.ver !== ver || cache.s !== s) {
+      const canvas = cache?.s === s ? cache.canvas : document.createElement('canvas');
+      canvas.width = s;
+      canvas.height = s;
+      const c = canvas.getContext('2d')!;
+      const img = c.createImageData(s, s);
+      const px = b.px;
+      for (let i = 0; i < s * s; i++) {
+        const v = px && px.length === s * s ? px[i] : 0;
+        img.data[i * 4] = v ? v >> 16 : 16;
+        img.data[i * 4 + 1] = v ? (v >> 8) & 255 : 22;
+        img.data[i * 4 + 2] = v ? v & 255 : 30;
+        img.data[i * 4 + 3] = 255;
       }
-      const col = `#${v.toString(16).padStart(6, '0')}`;
-      ctx.globalAlpha = 0.35;
-      ctx.fillStyle = col;
-      ctx.fillRect(cx, cy, cell, cell); // bloom
-      ctx.globalAlpha = 1;
-      ctx.fillRect(cx + 1.5, cy + 1.5, cell - 2.5, cell - 2.5);
+      c.putImageData(img, 0, 0);
+      cache = { canvas, ver, s };
+      this.mxCache.set(b.id, cache);
+    }
+    ctx.imageSmoothingEnabled = false;
+    ctx.drawImage(cache.canvas, x0 + 2, y0 + 2, TILE - 4, TILE - 4);
+    ctx.imageSmoothingEnabled = true;
+    if (!this.lowDetail) ctx.drawImage(this.matrixMask(s), x0, y0);
+    else {
+      ctx.strokeStyle = '#070a0e';
+      ctx.lineWidth = 2;
+      ctx.strokeRect(x0 + 1, y0 + 1, TILE - 2, TILE - 2);
     }
   }
 

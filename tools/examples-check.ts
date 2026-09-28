@@ -71,15 +71,15 @@ for (const ex of EXAMPLES) {
   const sim = new Sim(st);
   const rx = st.buildings.find((b) => b.type === 'screen')!;
   const r = sim.screenRect(rx);
-  if (r.w !== 128 || r.h !== 64) throw new Error(`wall size ${r.w}x${r.h}`);
+  if (r.w !== 256 || r.h !== 128) throw new Error(`wall size ${r.w}x${r.h}`);
   const frame = new Uint8ClampedArray(r.w * r.h * 4);
-  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) { const i = (y * r.w + x) * 4; frame[i] = x * 2; frame[i + 1] = y * 4; frame[i + 2] = 200; frame[i + 3] = 255; }
+  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) { const i = (y * r.w + x) * 4; frame[i] = Math.min(255, x); frame[i + 1] = Math.min(255, y * 2 + 1); frame[i + 2] = 200; frame[i + 3] = 255; }
   sim.tick(1 / 30);
   sim.pushFrame(rx, frame, r.w, r.h);
   sim.tick(1 / 30);
   const m = st.buildings.find((b) => b.type === 'matrix' && b.x === r.x + 15 && b.y === r.y + 7)!;
-  const v = m.px![63];
+  const v = m.px![255];
   console.log('video wall: last matrix pixel', '#' + v.toString(16).padStart(6, '0'), 'receiver', rx.status);
-  if (v !== ((254 << 16) | (252 << 8) | 200) || rx.status !== 'ok') throw new Error('frame not applied');
+  if (v !== ((255 << 16) | (255 << 8) | 200) || rx.status !== 'ok') throw new Error('frame not applied: ' + v.toString(16));
 }
 console.log('examples-check OK');

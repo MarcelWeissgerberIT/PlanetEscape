@@ -234,8 +234,8 @@ export function buildVideoWall(): GameState {
   const { core, place } = c;
   const x0 = core.x - 9, y0 = core.y - 12;
   const rx = place('screen', x0, y0);
-  rx.value = 2; // 16x8 matrices = 128x64 px
-  for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) place('matrix', x0 + 2 + x, y0 + y);
+  rx.value = 2; // 16x8 matrices of 16x16 = 256x128 px
+  for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) place('matrix', x0 + 2 + x, y0 + y).value = 16;
   place('solar', x0, y0 + 3);
   // a welcome picture until a stream arrives: "PE" in two colours
   const glyph = ['11101110', '10101010', '11101110', '10001010', '10001010'];
@@ -243,8 +243,8 @@ export function buildVideoWall(): GameState {
   for (const m of mid) {
     const mx = m.x - (x0 + 2), my = m.y - y0;
     if ((mx === 7 || mx === 8) && my === 3) {
-      const px = new Array<number>(64).fill(0x0b1a2a);
-      glyph.forEach((row, ry) => [...row].forEach((ch, cx) => { if (ch === '1') px[(ry + 1) * 8 + cx] = mx === 7 ? 0x22d3ee : 0xf0a050; }));
+      const px = new Array<number>(256).fill(0x0b1a2a);
+      glyph.forEach((row, ry) => [...row].forEach((ch, cx) => { if (ch === '1') for (let dy = 0; dy < 2; dy++) for (let dx = 0; dx < 2; dx++) px[(ry * 2 + 3 + dy) * 16 + cx * 2 + dx] = mx === 7 ? 0x22d3ee : 0xf0a050; }));
       m.px = px;
     }
   }
@@ -252,8 +252,8 @@ export function buildVideoWall(): GameState {
     c,
     {
       title: 'Videowand · Video wall',
-      de: 'Ein Video-Empfänger und 128 LED-Matrizen: 128×64 Pixel in 16 Millionen Farben. Tippe den Empfänger links an und wähle die Quelle:\n• „Tab / Bildschirm teilen“: Öffne YouTube in einem zweiten Tab, starte das Video, teile diesen Tab, und es läuft auf der Wand (Desktop-Browser).\n• „Kamera“: Du selbst, in LED.\n• „Videodatei“: eine Datei von diesem Gerät.\nDie Wand lässt sich bis 32×16 Matrizen (256×128 px) vergrößern: im Panel die Größe wählen und Matrizen ergänzen (Blaupausen → Videowand). Jede Matrix kannst du auch einzeln antippen und bemalen. Der Stream bleibt auf deinem Gerät.',
-      en: 'One video receiver and 128 LED matrices: 128×64 pixels in 16 million colours. Tap the receiver on the left and pick the source:\n• “Share tab / screen”: open YouTube in a second tab, start the video, share that tab, and it plays on the wall (desktop browsers).\n• “Camera”: you, in LEDs.\n• “Video file”: a file from this device.\nThe wall grows to 32×16 matrices (256×128 px): pick the size in the panel and add matrices (blueprints → video wall). Every matrix can also be tapped and painted by hand. The stream stays on your device.',
+      de: 'Ein Video-Empfänger und 128 LED-Matrizen mit je 16×16 LEDs: 256×128 Pixel in 16 Millionen Farben. Tippe den Empfänger links an und wähle die Quelle:\n• „Tab / Bildschirm teilen“: Öffne YouTube in einem zweiten Tab, starte das Video, teile diesen Tab, und es läuft auf der Wand (Desktop-Browser).\n• „Kamera“: Du selbst, in LED.\n• „Videodatei“: eine Datei von diesem Gerät.\nTipp für ein scharfes Bild: YouTube vor dem Teilen in den Vollbildmodus (Taste F) schalten und im Panel den Zuschnitt nutzen. Die Wand lässt sich bis 32×16 Matrizen (512×256 px) vergrößern: im Panel die Größe wählen und Matrizen ergänzen (Blaupausen → Videowand). Jede Matrix kannst du auch einzeln antippen und bemalen. Der Stream bleibt auf deinem Gerät.',
+      en: 'One video receiver and 128 LED matrices of 16×16 LEDs each: 256×128 pixels in 16 million colours. Tap the receiver on the left and pick the source:\n• “Share tab / screen”: open YouTube in a second tab, start the video, share that tab, and it plays on the wall (desktop browsers).\n• “Camera”: you, in LEDs.\n• “Video file”: a file from this device.\nFor a sharp picture put YouTube into full screen (key F) before sharing and use the crop setting in the panel. The wall grows to 32×16 matrices (512×256 px): pick the size in the panel and add matrices (blueprints → video wall). Every matrix can also be tapped and painted by hand. The stream stays on your device.',
     },
     { x: x0 + 9, y: y0 + 4, zoom: 0.9 },
   );
