@@ -17,7 +17,8 @@ for (const c of CHALLENGES) {
   st.kits = {};
   let spot = { x: 0, y: 0 };
   for (let r = 4; r < 12 && !spot.x; r++) for (let dx = -r; dx <= r && !spot.x; dx++) if (sim.terrain(core.x + dx, core.y - r) === 'ground') spot = { x: core.x + dx, y: core.y - r };
-  const err = sim.placementError('conveyor', spot.x, spot.y);
+  const probe = c.buildings.includes('conveyor') ? 'conveyor' : 'road';
+  const err = sim.placementError(probe, spot.x, spot.y);
   if (err !== 'err_no_kit') throw new Error(`${c.id}: placement without a kit gave ${err}`);
   st.kits = { ...c.kits };
   // the goal: deliver everything, then the challenge reports its time once
