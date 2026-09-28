@@ -3,7 +3,7 @@ import {
   BELT_SPEED,
   BUFFER_CAP,
   BUILDINGS,
-  GENERATOR_FUEL_SECONDS,
+
   MINE_SECONDS,
   MISSIONS,
   OUTPUT_CAP,
@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -291,11 +291,12 @@ export class Sim {
       b.progress = 0;
       b.output = {};
     }
-    if (type === 'storage') {
+    if (type === 'storage' || isHall(type)) {
       b.store = {};
       b.recipe = null;
+      if (isHall(type)) b.mode = 'hold';
     }
-    if (type === 'generator') {
+    if (PLANT_FUEL[type]) {
       b.input = {};
       b.fuelSeconds = 0;
     }
@@ -468,9 +469,9 @@ export class Sim {
         return !b.exit && from === b.dir && b.pair != null;
       case 'machine':
       case 'storage':
-        return !this.isOutputSide(b, from);
+        return (isHall(b.type) && b.mode !== 'pass') || !this.isOutputSide(b, from);
       case 'power':
-        return b.type === 'generator';
+        return !!PLANT_FUEL[b.type];
       case 'splitter':
       case 'miner':
         return from === b.dir;
@@ -538,13 +539,23 @@ export class Sim {
         return true;
       }
       case 'power': {
-        if (b.type !== 'generator' || item !== 'fuel') return false;
-        const cur = b.input!.fuel ?? 0;
+        const fuel = PLANT_FUEL[b.type];
+        if (!fuel || item !== fuel.item) return false;
+        const cur = b.input![item] ?? 0;
         if (cur >= BUFFER_CAP) return false;
-        b.input!.fuel = cur + 1;
+        b.input![item] = cur + 1;
         return true;
       }
       case 'storage': {
+        if (isHall(b.type)) {
+          // a warehouse fills shelf after shelf; each slot holds one kind of item
+          if (b.mode === 'pass' && this.isOutputSide(b, from)) return false;
+          const n = b.store![item] ?? 0;
+          const used = this.hallUsed(b) - Math.ceil(n / HALL_SLOT_CAP) + Math.ceil((n + 1) / HALL_SLOT_CAP);
+          if (used > this.hallSlots(b)) return false;
+          b.store![item] = n + 1;
+          return true;
+        }
         if (this.isOutputSide(b, from)) return false;
         const total = Object.values(b.store!).reduce((a, c) => a + (c ?? 0), 0);
         if (total >= this.storageCap()) return false;
@@ -728,13 +739,18 @@ export class Sim {
     for (const b of st.buildings) {
       const p = BUILDINGS[b.type].power;
       if (p < 0) {
-        if (b.type === 'generator') {
-          if (b.fuelSeconds! <= 0 && (b.input!.fuel ?? 0) > 0) {
-            b.input!.fuel!--;
-            b.fuelSeconds! += GENERATOR_FUEL_SECONDS;
+        const fuel = PLANT_FUEL[b.type];
+        if (fuel) {
+          if (b.fuelSeconds! <= 0 && (b.input![fuel.item] ?? 0) > 0) {
+            b.input![fuel.item]!--;
+            b.fuelSeconds! += fuel.seconds;
           }
           if (b.fuelSeconds! > 0) supply += -p * this.factor('power');
           b.status = b.fuelSeconds! > 0 ? 'ok' : 'no_fuel';
+          b.working = b.fuelSeconds! > 0;
+        } else if (b.type === 'wind') {
+          supply += -p * this.factor('power') * this.windFactor();
+          b.working = true;
         } else if (b.type === 'solar') supply += -p * this.factor('power') * (st.storm > 0 ? STORM_SOLAR_FACTOR : 1);
         else supply += -p;
       } else if (p > 0 && !(b.type === 'miner' && b.status === 'depleted')) demand += p;
@@ -787,6 +803,10 @@ export class Sim {
           this.tickMachine(b, dt, ratio);
           break;
         case 'storage':
+        case 'hall4':
+        case 'hall8':
+        case 'hall12':
+        case 'hall16':
           this.tickStorage(b);
           break;
         case 'splitter':
@@ -826,6 +846,7 @@ export class Sim {
         case 'battery':
           break; // handled with the power balance
         case 'generator':
+        case 'reactor':
           if (b.fuelSeconds! > 0) b.fuelSeconds = Math.max(0, b.fuelSeconds! - dt);
           break;
         case 'terminal':
@@ -1073,6 +1094,45 @@ export class Sim {
   traceBytes(cpu: Chip8): number[] {
     const op = (cpu.mem[cpu.pc] << 8) | cpu.mem[cpu.pc + 1];
     return [cpu.pc >> 8, cpu.pc & 0xff, op >> 8, op & 0xff, cpu.i >> 8, cpu.i & 0xff, ...Array.from(cpu.v)];
+  }
+
+  // ---------- Warehouses and power ----------
+
+  hallSlots(b: Building): number {
+    const n = HALL_SIZE[b.type] ?? 1;
+    return n * n;
+  }
+
+  hallUsed(b: Building): number {
+    let used = 0;
+    for (const k in b.store) used += Math.ceil((b.store[k as ItemId] ?? 0) / HALL_SLOT_CAP);
+    return used;
+  }
+
+  /** Shelf contents in display order: one entry per slot (item, count). */
+  hallLayout(b: Building): { item: ItemId; n: number }[] {
+    const keys = Object.keys(b.store ?? {}) as ItemId[];
+    const rank = (k: ItemId) => {
+      const i = ITEM_ORDER.indexOf(k);
+      return i >= 0 ? i : ITEM_ORDER.length + ITEM_ORDER.indexOf(k.slice(6) as ItemId);
+    };
+    keys.sort((a, c) => rank(a) - rank(c));
+    const out: { item: ItemId; n: number }[] = [];
+    for (const k of keys) {
+      let left = b.store![k] ?? 0;
+      while (left > 0) {
+        out.push({ item: k, n: Math.min(HALL_SLOT_CAP, left) });
+        left -= HALL_SLOT_CAP;
+      }
+    }
+    return out;
+  }
+
+  /** Wind strength 0.15..1 (x1.6 in a storm): two slow waves over the game time. */
+  windFactor(): number {
+    const t = this.state.time;
+    const base = 0.55 + 0.3 * Math.sin(t / 37) + 0.15 * Math.sin(t / 11 + 2);
+    return Math.max(0.15, Math.min(1, base)) * (this.state.storm > 0 ? WIND_STORM_FACTOR : 1);
   }
 
   // ---------- Roads, docks, robots ----------
@@ -2465,6 +2525,10 @@ export class Sim {
   private tickStorage(b: Building) {
     const store = b.store!;
     b.status = 'ok';
+    if (isHall(b.type)) {
+      b.working = b.mode === 'pass';
+      if (b.mode !== 'pass') return; // store only
+    }
     // With a filter only that item leaves. Otherwise try every stored item type in turn, so one
     // item the target refuses never blocks the others.
     const keys = (b.recipe ? [b.recipe] : Object.keys(store)) as ItemId[];
@@ -2481,7 +2545,7 @@ export class Sim {
         return;
       }
     }
-    if (Object.values(store).reduce((a, c) => a + (c ?? 0), 0) >= this.storageCap()) b.status = 'blocked';
+    if (!isHall(b.type) && Object.values(store).reduce((a, c) => a + (c ?? 0), 0) >= this.storageCap()) b.status = 'blocked';
   }
 
   private tickSplitter(b: Building) {

@@ -552,18 +552,18 @@ export function buildLogistics(): GameState {
   const un = place('stacker', x0 + 25, y0 - 5, 0);
   un.mode = 'unpack';
   belt(x0 + 25, y0 - 6, 0);
-  const sink = place('storage', x0 + 25, y0 - 7, 0);
-  sink.store = {};
-  // grabber arm: lifts copper wire out of a depot into the same sink without any belt
-  const wire = place('storage', x0 + 27, y0 - 7, 3);
+  place('hall4', x0 + 24, y0 - 10, 0); // warehouse: shelves fill up with plates and wire
+  // grabber arm: lifts copper wire out of a depot into the warehouse without any belt
+  const wire = place('storage', x0 + 29, y0 - 8, 3);
   wire.store = { copper_wire: 60 };
-  place('picker', x0 + 26, y0 - 7, 3);
+  place('picker', x0 + 28, y0 - 8, 3);
+  place('wind', x0 + 18, y0 + 2);
   c.tick(2);
   return finish(c, {
     title: 'Roboter, Kisten, Greifarm · Robots, crates, grabber',
-    de: 'Links füllt ein Lager die Abholstation. Drei Roboter aus dem Depot fahren die Teile über die Straße zur Anlieferstation rechts. Dort packt ein Stapler je acht Platten in eine Kiste, der nächste entpackt sie wieder. Der Greifarm oben rechts hebt Kupferdraht ohne Band aus einem Lager ins Ziel.',
-    en: 'On the left a depot fills the pick-up dock. Three robots from the depot drive the items along the road to the drop-off dock on the right. A stacker packs eight plates into a crate, the next one unpacks them again. The grabber arm at the top right lifts copper wire from a depot into the target without any belt.',
-  }, { x: x0 + 13, y: y0 - 2, zoom: 0.55 });
+    de: 'Links füllt ein Lager die Abholstation. Drei Roboter aus dem Depot fahren die Teile über die Straße zur Anlieferstation rechts. Dort packt ein Stapler je acht Platten in eine Kiste, der nächste entpackt sie wieder. Ein Greifarm hebt Kupferdraht ohne Band aus einem Lager in die Lagerhalle oben rechts, deren Regalfächer zeigen, was sie hält. Ein Windrad unterstützt die Solarpanels.',
+    en: 'On the left a depot fills the pick-up dock. Three robots from the depot drive the items along the road to the drop-off dock on the right. A stacker packs eight plates into a crate, the next one unpacks them again. A grabber arm lifts copper wire from a depot into the warehouse at the top right, whose shelves show what it holds. A wind turbine helps the solar panels.',
+  }, { x: x0 + 15, y: y0 - 3, zoom: 0.52 });
 }
 
 export function buildAdder(): GameState {

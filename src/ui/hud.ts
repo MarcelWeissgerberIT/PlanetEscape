@@ -1,6 +1,6 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -1254,19 +1254,29 @@ export class Hud {
       body = `${statusLine(` · ${t('rate')} ${(b.rate ?? 0).toFixed(1)}/min · ${t('ore_left')} ${this.sim.oreLeft(b.x, b.y)}`)}
         <div class="bufs"><span class="lbl">${t('output')}</span>${Object.entries(b.output ?? {}).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('') || '–'}</div>${dirPicker}`;
     } else if (def.kind === 'storage') {
+      const hall = isHall(b.type);
+      const hallHead = hall
+        ? `<div class="lbl">${t('hall_slots', { used: this.sim.hallUsed(b), n: this.sim.hallSlots(b) })} · ${t('hall_items', { n: Object.values(b.store ?? {}).reduce((a, c) => a + (c ?? 0), 0), cap: this.sim.hallSlots(b) * HALL_SLOT_CAP })}</div>
+          <div class="dirs"><span class="lbl">${t('hall_mode')}</span><button class="chip ${b.mode !== 'pass' ? 'active' : ''}" data-mode="hold">${t('hall_hold')}</button><button class="chip ${b.mode === 'pass' ? 'active' : ''}" data-mode="pass">${t('hall_pass')}</button></div>
+          <p class="save-hint">${t('hall_hint')}</p>`
+        : '';
       const items = Object.entries(b.store ?? {})
         .map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`)
         .join('');
       const filterable = Array.from(new Set([...Object.keys(b.store ?? {}), ...(b.recipe ? [b.recipe] : [])])) as ItemId[];
-      body = `<div class="bufs"><span class="lbl">${t('stored')}</span>${items || '–'}</div>${dirPicker}
+      body = `${hallHead}<div class="bufs"><span class="lbl">${t('stored')}</span>${items || '–'}</div>${dirPicker}
         <div class="lbl">${t('filter')}</div>
         <div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('no_filter')}</button>
         ${filterable.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
     } else if (b.type === 'battery') {
       const frac = Math.min(1, (b.value ?? 0) / BATTERY_CAP);
       body = `<div class="lbl">${t('battery_charge')} ${Math.round(b.value ?? 0)} / ${BATTERY_CAP}</div><div class="pbar big"><div class="pfill" style="width:${frac * 100}%"></div></div><p class="save-hint">${t('battery_hint')}</p>`;
-    } else if (b.type === 'generator') {
-      body = `${statusLine()}<div class="bufs"><span class="lbl">${t('fuel_left')}</span><span class="buf">${itemImg('fuel', 'icon sm')}${b.input?.fuel ?? 0}</span> <span class="buf">${Math.ceil(b.fuelSeconds ?? 0)}s</span></div>${dirPicker}`;
+    } else if (b.type === 'wind') {
+      const w = this.sim.windFactor();
+      body = `${statusLine()}<div class="lbl">${t('wind_now', { p: Math.round(w * 100), w: Math.round(-BUILDINGS.wind.power * this.sim.factor('power') * w) })}</div><div class="pbar big"><div class="pfill" style="width:${Math.min(100, w * 100)}%"></div></div><p class="save-hint">${t('wind_hint')}</p>`;
+    } else if (PLANT_FUEL[b.type]) {
+      const fuel = PLANT_FUEL[b.type]!.item;
+      body = `${statusLine()}<div class="bufs"><span class="lbl">${t('fuel_left')}</span><span class="buf">${itemImg(fuel, 'icon sm')}${b.input?.[fuel] ?? 0}</span> <span class="buf">${Math.ceil(b.fuelSeconds ?? 0)}s</span></div>${dirPicker}`;
     } else if (b.type === 'core') {
       const parts = Object.entries(SHIP_PARTS)
         .map(([k, n]) => {

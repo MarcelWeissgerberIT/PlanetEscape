@@ -101,7 +101,7 @@ function world() {
   const st = buildLogistics();
   const sim = new Sim(st);
   for (let i = 0; i < 30 * 90; i++) sim.tick(1 / 30);
-  const sinks = st.buildings.filter((b) => b.type === 'storage' && b.store && (b.store.iron_plate || b.store.copper_wire) && b.x > st.buildings[0].x);
+  const sinks = st.buildings.filter((b) => b.type === 'hall4' && b.store && (b.store.iron_plate || b.store.copper_wire));
   const sink = sinks.find((b) => b.store!.iron_plate && b.store!.copper_wire);
   console.log('example: sink', sink?.store, 'robots', sim.robots().map((r) => `${r.state}/${r.items.length}`));
   if (!sink || (sink.store!.iron_plate ?? 0) < 16 || (sink.store!.copper_wire ?? 0) < 10) throw new Error('example chain does not deliver');

@@ -1,6 +1,6 @@
 // Automatic planner: routes belts and builds whole production chains.
 // DOM-free so it can run in the game, in tests and in the MCP server.
-import { BUILDINGS, MINE_SECONDS, RECIPES, TERRAIN_ITEM } from './data';
+import { BUILDINGS, MINE_SECONDS, PLANT_FUEL, RECIPES, TERRAIN_ITEM } from './data';
 import type { Sim } from './sim';
 import type { Building, BuildingId, Dir, ItemId, TerrainId } from './types';
 import { DX, DY } from './types';
@@ -437,8 +437,8 @@ export function powerBalance(sim: Sim): { supply: number; demand: number } {
   for (const b of sim.state.buildings) {
     const p = BUILDINGS[b.type].power;
     if (p < 0) {
-      if (b.type === 'generator') continue; // needs fuel, do not count on it
-      supply += -p * (b.type === 'solar' ? sim.factor('power') : 1);
+      if (PLANT_FUEL[b.type]) continue; // needs fuel, do not count on it
+      supply += -p * (b.type === 'solar' ? sim.factor('power') : b.type === 'wind' ? sim.factor('power') * 0.5 : 1);
     } else if (p > 0 && !(b.type === 'miner' && b.status === 'depleted')) demand += p;
   }
   return { supply, demand };
