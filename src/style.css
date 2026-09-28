@@ -525,3 +525,109 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 .build-tabs { display: flex; gap: 6px; margin: 0 8px 4px; padding: 6px 8px; overflow-x: auto; scrollbar-width: none; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
 .build-tabs::-webkit-scrollbar { display: none; }
 .build-tabs .chip { flex: none; }
+
+/* =====================================================================================
+   Sci-fi frame theme: one frame language for every button, chip, tab and window.
+   Chamfered corners (top left, bottom right) cut with clip-path; the edge is painted
+   as a border-box layer plus two diagonal lines, so the frame runs around the cut.
+   Variants only change the variables --c (cut), --edge and --fill.
+   ===================================================================================== */
+.btn, .chip, .iconbtn, .build-btn, .recipe, .tile, .stat, .chapter-row,
+.inv-strip, .build-tabs, .build-bar, .mission-card, .power, .minimap-box, .toast, .ed-tabs,
+.info-panel, .modal-card, .title-content {
+  --c: 8px;
+  --base: #0c1016; /* keeps the edge colour from showing through see-through fills */
+  --edge: rgba(125, 211, 252, 0.3);
+  --fill: linear-gradient(180deg, rgba(34, 43, 57, 0.94), rgba(14, 18, 26, 0.94));
+  border-radius: 0 !important;
+  border: 1px solid transparent !important;
+  background:
+    linear-gradient(to bottom right, transparent calc(50% - 0.8px), var(--edge) 0 calc(50% + 0.8px), transparent 0) top left / var(--c) var(--c) no-repeat border-box,
+    linear-gradient(to bottom right, transparent calc(50% - 0.8px), var(--edge) 0 calc(50% + 0.8px), transparent 0) bottom right / var(--c) var(--c) no-repeat border-box,
+    var(--fill) padding-box,
+    linear-gradient(var(--base), var(--base)) padding-box,
+    linear-gradient(var(--edge), var(--edge)) border-box !important;
+  clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c));
+  box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.07), inset 0 -1px 0 rgba(0, 0, 0, 0.45) !important;
+  transition: transform 0.08s, filter 0.15s;
+}
+/* sizes of the cut */
+.chip, .iconbtn, .recipe, .stat { --c: 6px; }
+.inv-strip, .build-tabs, .build-bar, .mission-card, .power, .minimap-box, .ed-tabs, .chapter-row, .tile { --c: 10px; }
+.info-panel, .modal-card { --c: 16px; }
+.title-content { --c: 22px; }
+
+/* windows: a short accent bar in the head and a row of ticks at the foot */
+.info-panel, .modal-card, .title-content {
+  --base: rgba(8, 11, 16, 0.55);
+  --edge: rgba(125, 211, 252, 0.42);
+  --fill: linear-gradient(180deg, rgba(24, 31, 42, 0.9), rgba(10, 13, 19, 0.92));
+  background:
+    linear-gradient(var(--accent), var(--accent)) calc(var(--c) + 10px) 0 / 64px 3px no-repeat border-box,
+    linear-gradient(var(--accent-2), var(--accent-2)) calc(var(--c) + 80px) 0 / 10px 3px no-repeat border-box,
+    repeating-linear-gradient(90deg, rgba(125, 211, 252, 0.5) 0 2px, transparent 2px 7px) 12px calc(100% - 5px) / 42px 3px no-repeat padding-box,
+    linear-gradient(to bottom right, transparent calc(50% - 0.8px), var(--edge) 0 calc(50% + 0.8px), transparent 0) top left / var(--c) var(--c) no-repeat border-box,
+    linear-gradient(to bottom right, transparent calc(50% - 0.8px), var(--edge) 0 calc(50% + 0.8px), transparent 0) bottom right / var(--c) var(--c) no-repeat border-box,
+    var(--fill) padding-box,
+    linear-gradient(var(--base), var(--base)) padding-box,
+    linear-gradient(var(--edge), var(--edge)) border-box !important;
+}
+.modal-card::before, .modal-card::after, .info-panel::before, .info-panel::after { border-radius: 0 !important; border-color: rgba(34, 211, 238, 0.55) !important; }
+
+/* light plates inside a window */
+.build-btn, .tile, .stat, .chapter-row { --edge: rgba(148, 163, 184, 0.2); --fill: linear-gradient(180deg, rgba(46, 56, 72, 0.6), rgba(20, 25, 34, 0.6)); }
+.recipe { --edge: rgba(148, 163, 184, 0.22); --fill: linear-gradient(180deg, rgba(46, 56, 72, 0.55), rgba(20, 25, 34, 0.55)); }
+
+/* states */
+.btn:hover, .chip:hover, .iconbtn:hover, .build-btn:hover, .recipe:hover, .tile:hover { --edge: rgba(125, 211, 252, 0.7); filter: brightness(1.12); }
+.btn:active, .chip:active, .iconbtn:active, .build-btn:active, .recipe:active, .tile:active { transform: translateY(1px); box-shadow: inset 0 3px 8px rgba(0, 0, 0, 0.55) !important; }
+.btn.primary, .tile.primary, .seg .chip.active, .ed-tabs .chip.play {
+  --edge: #a5f3fc;
+  --fill: linear-gradient(180deg, #45e3f7 0%, #16b8d8 55%, #0b8fb0 100%);
+  color: #03141a !important;
+  text-shadow: 0 1px 0 rgba(255, 255, 255, 0.35);
+}
+.ed-tabs .chip.play { --edge: #bbf7d0; --fill: linear-gradient(180deg, #4ade80, #16a34a); }
+.chip.active, .recipe.active { --edge: #a5f3fc; --fill: linear-gradient(180deg, rgba(34, 211, 238, 0.95), rgba(8, 145, 178, 0.95)); color: #03141a !important; }
+.recipe.active { --fill: linear-gradient(180deg, rgba(34, 211, 238, 0.32), rgba(8, 145, 178, 0.16)); color: inherit !important; }
+.iconbtn.active, .build-btn.active { --edge: var(--accent); --fill: linear-gradient(180deg, rgba(34, 211, 238, 0.3), rgba(8, 145, 178, 0.12)); }
+.iconbtn.danger-active { --edge: #fecaca; --fill: linear-gradient(180deg, #ef4444, #991b1b); }
+.btn.danger { --edge: rgba(248, 113, 113, 0.7); --fill: linear-gradient(180deg, rgba(127, 29, 29, 0.55), rgba(40, 10, 12, 0.7)); }
+.btn.ghost { --fill: linear-gradient(180deg, rgba(20, 25, 34, 0.4), rgba(10, 13, 19, 0.4)); }
+.toast.success { --edge: var(--ok); }
+.toast.error, .power.low { --edge: var(--danger); }
+.ed-tabs { --edge: rgba(245, 158, 11, 0.55); --fill: linear-gradient(180deg, rgba(66, 44, 10, 0.6), rgba(30, 20, 6, 0.6)); }
+.seg { border-radius: 0 !important; background: rgba(8, 11, 16, 0.6) !important; clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px); }
+.seg .chip { --edge: transparent; --fill: transparent; }
+
+/* lettering: condensed caps for controls, like a cockpit */
+.chip, .btn:not(.mode), .tile, .build-tabs .chip, .modal-card h2 { text-transform: uppercase; letter-spacing: 0.06em; }
+.btn:not(.mode) { font-size: 14px; }
+.modal-card h2, .info-title b { letter-spacing: 0.05em; }
+.info-title b { text-transform: uppercase; font-size: 14px; }
+
+/* badges must stay inside the cut frame */
+.iconbtn.badge::after { top: 2px; right: 2px; border-radius: 0 !important; clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0 100%, 0 3px); }
+.build-btn .bpower { border-radius: 0; clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0 100%, 0 3px); }
+.buf { border-radius: 0; clip-path: polygon(4px 0, 100% 0, 100% calc(100% - 4px), calc(100% - 4px) 100%, 0 100%, 0 4px); }
+.pbar { border-radius: 0; }
+.minimap-box canvas { border-radius: 0; }
+.build-btn img, .info-head img { border-radius: 0; }
+
+/* input fields in the same frame language */
+.seed-row input, textarea#importbox, textarea.text-input, .modal-card input[type=text], .modal-card input[type=number], .modal-card input:not([type]), #kbinput {
+  border-radius: 0 !important; background: #0b0f15 !important; border: 1px solid rgba(125, 211, 252, 0.3) !important;
+  clip-path: polygon(6px 0, 100% 0, 100% calc(100% - 6px), calc(100% - 6px) 100%, 0 100%, 0 6px);
+  box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5);
+}
+.seed-row input:focus, textarea:focus, .modal-card input:focus { outline: none; border-color: var(--accent) !important; }
+/* status pill in the top bar */
+.pill { --c: 8px; --base: #0c1016; --edge: rgba(125, 211, 252, 0.3); --fill: linear-gradient(180deg, rgba(34, 43, 57, 0.94), rgba(14, 18, 26, 0.94));
+  border-radius: 0 !important; border: 1px solid transparent !important;
+  background:
+    linear-gradient(to bottom right, transparent calc(50% - 0.8px), var(--edge) 0 calc(50% + 0.8px), transparent 0) top left / var(--c) var(--c) no-repeat border-box,
+    linear-gradient(to bottom right, transparent calc(50% - 0.8px), var(--edge) 0 calc(50% + 0.8px), transparent 0) bottom right / var(--c) var(--c) no-repeat border-box,
+    var(--fill) padding-box, linear-gradient(var(--base), var(--base)) padding-box, linear-gradient(var(--edge), var(--edge)) border-box !important;
+  clip-path: polygon(var(--c) 0, 100% 0, 100% calc(100% - var(--c)), calc(100% - var(--c)) 100%, 0 100%, 0 var(--c)); }
+.pill.warn { --edge: rgba(245, 158, 11, 0.75); --fill: linear-gradient(180deg, rgba(90, 60, 12, 0.7), rgba(40, 26, 6, 0.8)); }
+.pill.ok { --edge: rgba(52, 211, 153, 0.6); }
