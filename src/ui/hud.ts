@@ -764,6 +764,48 @@ export class Hud {
     this.koraAction = action;
   }
 
+  private lastIntroAt = -1e9;
+
+  /**
+   * First-time explanations: the first time a newer mechanic shows up in a game, KORA explains it once and
+   * offers to show it. Returns true when she said something.
+   */
+  private introHint(): boolean {
+    const st = this.sim.state;
+    const now = st.time;
+    if (now - this.lastIntroAt < 25 || this.koraMsgT > 0) return false;
+    const seen = (st.hintsSeen ??= []);
+    const story = st.options.mode !== 'playground' && st.options.mode !== 'challenge';
+    const focus = (b: Building) => () => {
+      const sz = BUILDINGS[b.type].size;
+      this.renderer.centerOn(b.x + sz / 2 - 0.5, b.y + sz / 2 - 0.5, Math.max(this.renderer.cam.zoom, 1));
+      this.selectBuilding(b);
+      this.koraMsgT = 0;
+    };
+    const machine = (b: Building) => BUILDINGS[b.type].kind === 'machine' || BUILDINGS[b.type].kind === 'miner';
+    const far = st.buildings.find((b) => b.site && b.deliver);
+    const worn = st.buildings.find((b) => machine(b) && (b.wear ?? 0) >= 0.75);
+    const auto = st.contracts.find((c) => c.kind && c.kind !== 'amount');
+    const list: { id: string; when: () => boolean; label: string; run: () => void }[] = [
+      { id: 'kits', when: () => st.options.mode !== 'playground' && st.buildings.length >= 3 && now > 15, label: t('intro_show_printer'), run: () => { this.koraMsgT = 0; this.openPrinter(); } },
+      { id: 'far', when: () => !!far, label: t('show'), run: () => far && focus(far)() },
+      { id: 'research', when: () => story && PROJECTS.some((p) => this.sim.projectState(p.id) === 'open'), label: t('research'), run: () => { this.koraMsgT = 0; this.showUpgrades(); } },
+      { id: 'wear', when: () => !!worn, label: t('show'), run: () => worn && focus(worn)() },
+      { id: 'automation', when: () => !!auto, label: t('contracts'), run: () => { this.koraMsgT = 0; this.showContracts(); } },
+      { id: 'merger', when: () => story && st.unlockedBuildings.includes('merger') && !st.options.allUnlocked, label: t('bp_title'), run: () => { this.koraMsgT = 0; this.showBuildingBlueprint('merger'); } },
+    ];
+    for (const h of list) {
+      if (seen.includes(h.id) || !h.when()) continue;
+      seen.push(h.id);
+      this.lastIntroAt = now;
+      this.lastHintAt = Math.max(this.lastHintAt, now - 45); // problem hints wait a little after an explanation
+      this.koraSay(`💡 ${t(`intro_${h.id}` as 'intro_kits')}`, 22, { label: h.label, run: h.run });
+      this.lastTopHtml = '';
+      return true;
+    }
+    return false;
+  }
+
   /**
    * KORA speaks up on her own when a problem persists: a machine starved or blocked for a while, a jammed
    * belt, or a lasting power shortage. Each hint comes with a "Show" button that jumps to the spot.
@@ -782,6 +824,7 @@ export class Hud {
     if (st.powerDemand > st.powerSupply) {
       if (this.powerLowSince < 0) this.powerLowSince = now;
     } else this.powerLowSince = -1;
+    if (this.introHint()) return;
     if (now - this.lastHintAt < COOLDOWN || (this.koraMsgT > 0 && !this.koraAction)) return;
     // power first: it slows everything
     if (this.powerLowSince >= 0 && now - this.powerLowSince > PERSIST && now - (this.hintedIds.get(-1) ?? -1e9) > REPEAT) {
@@ -2142,6 +2185,46 @@ export class Hud {
     this.root.addEventListener('pointerout', (e) => {
       if (e.pointerType === 'mouse' && iconOf(e)) this.hideTip();
     });
+    // touch: a long press on any icon shows its tip (a short tap still opens the blueprint)
+    let press: { x: number; y: number } | null = null;
+    this.root.addEventListener('pointerdown', (e) => {
+      if (e.pointerType === 'mouse') return;
+      const img = iconOf(e);
+      if (!img) return;
+      press = { x: e.clientX, y: e.clientY };
+      if (this.tipTimer) clearTimeout(this.tipTimer);
+      this.tipTimer = window.setTimeout(() => {
+        this.tipTimer = null;
+        this.tipSuppressClick = true;
+        this.showTip(img);
+        if (navigator.vibrate) navigator.vibrate(12);
+      }, 600);
+    });
+    this.root.addEventListener('pointermove', (e) => {
+      if (!press || e.pointerType === 'mouse') return;
+      if (Math.hypot(e.clientX - press.x, e.clientY - press.y) > 10 && this.tipTimer) {
+        clearTimeout(this.tipTimer);
+        this.tipTimer = null;
+      }
+    });
+    for (const ev of ['pointerup', 'pointercancel']) this.root.addEventListener(ev, (e) => {
+      if ((e as PointerEvent).pointerType === 'mouse' || !press) return;
+      press = null;
+      if (this.tipTimer && !this.tipSuppressClick) {
+        clearTimeout(this.tipTimer);
+        this.tipTimer = null;
+      }
+    });
+    // the tap that ends a long press must not open anything
+    this.root.addEventListener('click', (e) => {
+      if (!this.tipSuppressClick || (e.target as HTMLElement).closest('.tip')) return;
+      e.stopPropagation();
+      e.preventDefault();
+      this.tipSuppressClick = false;
+    }, true);
+    this.root.addEventListener('contextmenu', (e) => {
+      if (iconOf(e)) e.preventDefault();
+    });
     // the pointer may travel from the icon into the tip (to press its buttons or follow a link)
     this.tip.addEventListener('pointerenter', () => this.keepTip());
     this.tip.addEventListener('pointerleave', (e) => {
@@ -2162,6 +2245,7 @@ export class Hud {
       this.hideTip(true);
     }, true);
     this.root.addEventListener('pointerdown', (e) => {
+      this.tipSuppressClick = false; // a new gesture: a long press that ended without a click must not eat this tap
       if (!(e.target as HTMLElement).closest('.tip')) this.hideTip(true);
     }, true);
     this.tip.onclick = (e) => {

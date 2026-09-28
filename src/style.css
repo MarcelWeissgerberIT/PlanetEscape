@@ -740,3 +740,5 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 .mini-tree .mt-node em { color: var(--accent); font-style: normal; font-size: 11px; }
 .mini-tree .mt-node small { color: var(--muted); }
 .mini-tree .mt-node img:hover { outline: 1px solid var(--accent); }
+
+img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }

@@ -256,6 +256,7 @@ export interface GameState {
   ship: Partial<Record<ItemId, number>>; // ship parts installed so far
   ore: number[]; // remaining units per deposit tile (0 for ground)
   upgrades: Record<UpgradeId, number>; // level per upgrade
+  hintsSeen?: string[]; // KORA's first-time explanations already given in this game
   autoRepair?: boolean; // the core's drones service worn machines within reach (default on)
   projects?: string[]; // finished research projects (small packs of extra parts)
   contracts: Contract[];
