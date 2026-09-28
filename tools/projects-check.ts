@@ -17,12 +17,13 @@ import { chapterState, newGame } from '../src/game/world';
   const st = chapterState(4, { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: false });
   const sim = new Sim(st);
   console.log('ch4 unlocked', st.unlockedBuildings.length, 'sensor', st.unlockedBuildings.includes('sensor'), 'p_sensor', sim.projectState('p_sensor'), 'p_robots', sim.projectState('p_robots'), 'p_display', sim.projectState('p_display'));
+  // a chapter's projects are paid with what that chapter makes
   if (st.unlockedBuildings.includes('sensor')) throw new Error('sensor unlocked without its project');
   if (sim.projectState('p_sensor') !== 'open' || sim.projectState('p_robots') !== 'mission') throw new Error('project states wrong');
   st.inventory = {};
   if (sim.research('p_sensor')) throw new Error('research without parts');
-  st.inventory = { copper_wire: 12, machine_part: 5 };
-  if (!sim.research('p_sensor') || !st.unlockedBuildings.includes('sensor') || st.inventory.machine_part !== 1) throw new Error('research did not pay / unlock');
+  st.inventory = { copper_wire: 16, steel_frame: 3 };
+  if (!sim.research('p_sensor') || !st.unlockedBuildings.includes('sensor') || st.inventory.steel_frame !== 1) throw new Error('research did not pay / unlock');
   if (sim.projectState('p_sensor') !== 'done') throw new Error('project not done');
   // the next chapter keeps finished projects
   const st5 = chapterState(5, { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: false });

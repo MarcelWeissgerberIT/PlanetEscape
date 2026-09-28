@@ -379,18 +379,18 @@ export interface ProjectDef {
   requires?: string[]; // other projects first
 }
 export const PROJECTS: ProjectDef[] = [
-  { id: 'p_sensor', after: 3, unlocks: ['sensor', 'speaker'], cost: { copper_wire: 12, machine_part: 4 } },
-  { id: 'p_wind', after: 3, unlocks: ['wind'], cost: { steel_frame: 4, motor: 2 } },
-  { id: 'p_picker', after: 3, unlocks: ['picker'], cost: { machine_part: 6, motor: 2 } },
-  { id: 'p_robots', after: 4, unlocks: ['road', 'dock', 'depot'], cost: { circuit: 6, motor: 4, steel_frame: 4 } },
-  { id: 'p_power', after: 4, unlocks: ['battery', 'hall8'], cost: { steel_frame: 8, cell: 2 } },
-  { id: 'p_display', after: 4, unlocks: ['matrix', 'screen', 'keyboard'], cost: { circuit: 8, glass: 6 }, requires: ['p_sensor'] },
-  { id: 'p_math', after: 5, unlocks: ['adder', 'subtractor', 'bus'], cost: { circuit: 10, copper_wire: 20 } },
-  { id: 'p_math2', after: 5, unlocks: ['multiplier', 'divider', 'oscillator'], cost: { circuit: 12, precision_part: 2 }, requires: ['p_math'] },
-  { id: 'p_terminal', after: 5, unlocks: ['terminal'], cost: { circuit: 16, glass: 8 }, requires: ['p_display', 'p_math'] },
-  { id: 'p_radio', after: 5, unlocks: ['radio', 'mast'], cost: { circuit: 8, cell: 3 } },
-  { id: 'p_stacker', after: 5, unlocks: ['stacker', 'hall12'], cost: { motor: 4, steel_frame: 10 }, requires: ['p_robots'] },
-  { id: 'p_hall16', after: 5, unlocks: ['hall16'], cost: { steel_frame: 20, circuit: 6 }, requires: ['p_stacker'] },
+  { id: 'p_sensor', after: 3, unlocks: ['sensor', 'speaker'], cost: { copper_wire: 16, steel_frame: 2 } },
+  { id: 'p_wind', after: 3, unlocks: ['wind'], cost: { steel_frame: 6, copper_wire: 10 } },
+  { id: 'p_picker', after: 3, unlocks: ['picker'], cost: { steel_frame: 4, copper_wire: 8 } },
+  { id: 'p_robots', after: 4, unlocks: ['road', 'dock', 'depot'], cost: { circuit: 10, glass: 6 } },
+  { id: 'p_power', after: 4, unlocks: ['battery', 'hall8'], cost: { circuit: 4, glass: 10 } },
+  { id: 'p_display', after: 4, unlocks: ['matrix', 'screen', 'keyboard'], cost: { circuit: 8, glass: 6 } },
+  { id: 'p_math', after: 5, unlocks: ['adder', 'subtractor', 'bus'], cost: { precision_part: 4, fuel: 6 } },
+  { id: 'p_math2', after: 5, unlocks: ['multiplier', 'divider', 'oscillator'], cost: { precision_part: 8 }, requires: ['p_math'] },
+  { id: 'p_terminal', after: 5, unlocks: ['terminal'], cost: { precision_part: 12, water: 10 }, requires: ['p_math'] },
+  { id: 'p_radio', after: 5, unlocks: ['radio', 'mast'], cost: { precision_part: 6, fuel: 10 } },
+  { id: 'p_stacker', after: 5, unlocks: ['stacker', 'hall12'], cost: { precision_part: 8, water: 10 } },
+  { id: 'p_hall16', after: 5, unlocks: ['hall16'], cost: { precision_part: 14, water: 20 }, requires: ['p_stacker'] },
   { id: 'p_reactor', after: 6, unlocks: ['reactor'], cost: { precision_part: 8, circuit: 12, steel_frame: 10 } },
 ];
 export const PROJECT_BY_ID: Record<string, ProjectDef> = Object.fromEntries(PROJECTS.map((p) => [p.id, p]));
@@ -456,8 +456,8 @@ export const PICKER_RATE = 1; // items per second a grabber arm moves
 export const PICKER_REACH = [1, 2]; // tiles between the arm and its source / target
 export const ROBOT_SPEED = 3; // tiles per second on a road
 export const STORM_ROBOT_FACTOR = 0.6; // robots crawl through dust storms
-/** Wear: machines and miners wear out after this many seconds of work and then run at WORN_SPEED until repaired. */
-export const WEAR_SECONDS = 900;
+/** Wear: machines and miners wear out after this many seconds of work (10 minutes) and then run at WORN_SPEED until repaired. */
+export const WEAR_SECONDS = 600;
 export const WORN_SPEED = 0.5;
 export const WEAR_MIN_MISSION = 2; // story: wear starts once machine parts can be made
 export const REPAIR_COST: Partial<Record<ItemId, number>> = { machine_part: 2, iron_plate: 4 };
