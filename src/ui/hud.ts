@@ -8,7 +8,7 @@ import { ambientEnabled, setAmbient, setSound, sfx, soundEnabled, startAmbient }
 import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, TerrainId, UpgradeId } from '../game/types';
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
-import { hasSave, load as loadSave, lastDropped, serialize } from '../game/save';
+import { hasSave, migrate as migrateSave, lastDropped, serialize } from '../game/save';
 import { SAVE_VERSION } from '../game/world';
 import { MEDALS, challengeBest, recordChallenge, chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
@@ -2904,11 +2904,7 @@ export class Hud {
     try {
       let raw = txt.trim();
       if (raw.startsWith('PE1.')) raw = decodeURIComponent(escape(atob(raw.slice(4))));
-      const st = JSON.parse(raw) as GameState;
-      if (!st || !Array.isArray(st.buildings) || !Array.isArray(st.terrain)) throw new Error('bad');
-      // run through the normal loader for migrations
-      localStorage.setItem('pe_save_v1', JSON.stringify(st));
-      const loaded = loadSave();
+      const loaded = migrateSave(JSON.parse(raw));
       if (!loaded) throw new Error('version');
       this.closeModal();
       this.cb.onImport(loaded);

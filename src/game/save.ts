@@ -36,8 +36,17 @@ export function load(): GameState | null {
   try {
     const raw = localStorage.getItem(KEY);
     if (!raw) return null;
-    const st = JSON.parse(raw) as GameState;
-    if (!Array.isArray(st.buildings)) return null;
+    return migrate(JSON.parse(raw));
+  } catch {
+    return null;
+  }
+}
+
+/** Bring a parsed save of any older version up to date (null when it cannot be read). Also used by the import. */
+export function migrate(parsed: unknown): GameState | null {
+  try {
+    const st = parsed as GameState;
+    if (!st || !Array.isArray(st.buildings) || !Array.isArray(st.terrain)) return null;
     st.robots ??= [];
     if (st.version === 1) {
       st.ship = {};
