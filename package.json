@@ -16,6 +16,7 @@
     "ray:check": "esbuild tools/ray-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/ray-check.mjs --log-level=warning && node mcp/dist/ray-check.mjs",
     "blocks:check": "esbuild tools/blocks-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/blocks-check.mjs --log-level=warning && node mcp/dist/blocks-check.mjs",
     "examples:check": "esbuild tools/examples-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/examples-check.mjs --log-level=warning && node mcp/dist/examples-check.mjs",
+    "trailer:check": "esbuild tools/trailer-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/trailer-check.mjs --log-level=warning && node mcp/dist/trailer-check.mjs",
     "board:check": "esbuild tools/board-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/board-check.mjs --log-level=warning && node mcp/dist/board-check.mjs",
     "solver:check": "esbuild tools/solver-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/solver-check.mjs --log-level=warning && node mcp/dist/solver-check.mjs",
     "save:ttt": "esbuild tools/make-save-ttt.ts --bundle --platform=node --format=esm --outfile=mcp/dist/make-save-ttt.mjs --log-level=warning && node mcp/dist/make-save-ttt.mjs",

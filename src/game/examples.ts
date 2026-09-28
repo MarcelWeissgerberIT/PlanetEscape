@@ -228,6 +228,35 @@ export function buildPongMatrix(): GameState {
   );
 }
 
+// ---------- KORA TRAILER: a 30 s demo of the game, computed by the chip, on 32 LED matrices ----------
+
+export function buildTrailer(): GameState {
+  const c = ctx(80088, 120, 96);
+  const { sim, core, place } = c;
+  const tx = core.x - 6, ty = core.y - 14;
+  const term = terminalWithDisplay(c, tx, ty, true);
+  place('oscillator', tx, ty - 1).turbo = 3; // 6 kHz: the demo redraws sprites on several planes per frame
+  place('oscillator', tx + 1, ty - 1).clock = 3;
+  const RAM_X = tx + 12, RAM_Y = ty - 8, RAM_W = 32, RAM_H = 44; // 1408 cells, the demo needs about 1300 bytes
+  for (let x = tx + 2; x < RAM_X; x++) place('bus', x, ty - 1);
+  for (let y = 0; y < RAM_H; y++) for (let x = 0; x < RAM_W; x++) place('register', RAM_X + x, RAM_Y + y, 1);
+  place('solar', tx - 4, ty + 5);
+  place('solar', tx - 3, ty + 5);
+  sim.setProgram(term, CHIP8_PROGRAMS.find((p) => p.id === 'trailer')!.source);
+  term.run = true;
+  c.tick(1);
+  sim.resetTerminal(term);
+  return finish(
+    c,
+    {
+      title: 'KORA TRAILER',
+      de: 'Ein 30-Sekunden-Trailer des Spiels, aber kein Video: Der Chip rechnet jedes Bild selbst. Fünf Szenen in Assembler, Titel unter Sternen, die gestrandete Rakete auf dem Planeten, die Fabrik mit laufendem Band, der Schiffsbau auf der Rampe, der Start, dann von vorn.\n\nAlles, was du siehst, sind Sprites, die per XOR auf vier Farbebenen gezeichnet werden. Rechts liegt das Programm als Zahlen im 32×44-Feld aus Speicherzellen (etwa 1300 Byte: Code, Zeichensatz, Sprites), die orange Markierung ist der Programmzähler, die Lampen über dem Chip zeigen die Register. Zwei Oszillatoren geben 6,3 kHz, die Wand sind 32 LED-Matrizen à 8×8. Tippe den Chip an und drück „Trace 2 Hz“: dann siehst du, wie jeder Buchstabe aus einzelnen Befehlen entsteht. Im Programm-Editor kannst du den Trailer umschreiben, jede Szene ist ein Block.',
+      en: 'A 30 second trailer of the game, but no video: the chip computes every frame itself. Five scenes in assembly, the title under stars, the stranded ship on the planet, the factory with a running belt, the ship growing on the pad, the launch, then again.\n\nEverything you see is sprites XOR-drawn on four colour planes. On the right the program sits as numbers in the 32×44 field of registers (about 1300 bytes: code, font, sprites), the orange marker is the program counter, the lamps above the chip show the registers. Two oscillators give 6.3 kHz, the wall is 32 LED matrices of 8×8. Tap the chip and press “Trace 2 Hz”: you watch every letter appear instruction by instruction. In the program editor you can rewrite the trailer, every scene is one block.',
+    },
+    { x: tx + 10, y: ty + 4, zoom: 0.8 },
+  );
+}
+
 // ---------- Video wall: a receiver and 16x8 LED matrices ----------
 
 export function buildVideoWall(): GameState {
@@ -514,6 +543,7 @@ export function buildAdder(): GameState {
 export const EXAMPLES: Example[] = [
   { id: 'pong', title: 'KORA Terminal · PONG', icon: 'terminal', de: 'CPU aus Bauteilen, RAM aus Speicherzellen, Bausteinspieler drücken die Tasten.', en: 'CPU from parts, RAM from registers, block players press the keys.', build: buildPongBoard },
   { id: 'pongmini', title: 'PONG · LED-Matrix', icon: 'matrix', de: 'Dasselbe Spiel auf 32 LED-Matrizen statt 2048 Lampen.', en: 'The same game on 32 LED matrices instead of 2048 lamps.', build: buildPongMatrix },
+  { id: 'trailer', title: 'KORA TRAILER', icon: 'terminal', de: '30-Sekunden-Trailer, vom Chip in Assembler gerechnet, auf 32 LED-Matrizen.', en: 'A 30 second trailer computed by the chip in assembly, on 32 LED matrices.', build: buildTrailer },
   { id: 'video', title: 'Videowand · Video wall', icon: 'screen', de: 'YouTube-Tab, Kamera oder Datei auf 128 LED-Matrizen, mit Ton und Abtast-Band.', en: 'A YouTube tab, camera or file on 128 LED matrices, with sound and a sampling belt.', build: buildVideoWall },
   { id: 'ray', title: 'KORA RAY', icon: 'oscillator', de: 'Doom-artiges Ego-Labyrinth mit 60 kHz Turbo-Takt.', en: 'Doom-style first-person maze on a 60 kHz turbo clock.', build: buildRay },
   { id: 'blocks', title: 'KORA BLOCKS', icon: 'register', de: 'Bunte 2D-Blockwelt, die Karte liegt als Zahlen im RAM.', en: 'Colour 2D block world, the map sits in RAM as numbers.', build: buildBlocks },

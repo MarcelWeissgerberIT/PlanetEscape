@@ -676,6 +676,309 @@ pl:
   DB 0x80, 0x80
 `;
 
+
+// ---------- KORA TRAILER: a 30 second demo of the game, generated from small building blocks ----------
+
+/** 4x5 letter glyphs (the hex font covers digits). */
+const GLYPHS: Record<string, number[]> = {
+  A: [0xf0, 0x90, 0xf0, 0x90, 0x90], B: [0xe0, 0x90, 0xe0, 0x90, 0xe0], C: [0xf0, 0x80, 0x80, 0x80, 0xf0], D: [0xe0, 0x90, 0x90, 0x90, 0xe0],
+  E: [0xf0, 0x80, 0xf0, 0x80, 0xf0], H: [0x90, 0x90, 0xf0, 0x90, 0x90], I: [0xe0, 0x40, 0x40, 0x40, 0xe0], K: [0x90, 0xa0, 0xc0, 0xa0, 0x90],
+  L: [0x80, 0x80, 0x80, 0x80, 0xf0], N: [0x90, 0xd0, 0xb0, 0x90, 0x90], O: [0xf0, 0x90, 0x90, 0x90, 0xf0], P: [0xf0, 0x90, 0xf0, 0x80, 0x80],
+  R: [0xf0, 0x90, 0xf0, 0xa0, 0x90], S: [0xf0, 0x80, 0xf0, 0x10, 0xf0], T: [0xe0, 0x40, 0x40, 0x40, 0x40], U: [0x90, 0x90, 0x90, 0x90, 0xf0],
+  Y: [0x90, 0x90, 0x60, 0x40, 0x40], G: [0xf0, 0x80, 0xb0, 0x90, 0xf0], M: [0x90, 0xf0, 0x90, 0x90, 0x90], V: [0x90, 0x90, 0x90, 0x90, 0x60],
+};
+const hx = (v: number) => '0x' + (v & 0xff).toString(16).toUpperCase().padStart(2, '0');
+/** Assembly that draws a word at (x, y) in colour c (plane bitmask 1..15); letters 5 px apart. */
+function word(text: string, x: number, y: number, c: number): string {
+  const out = [`  LD VB, ${c}`, `  LD V1, ${y}`];
+  let cx = x;
+  for (const ch of text) {
+    if (ch !== ' ') out.push(`  LD I, g_${ch}`, `  LD V0, ${cx}`, '  CALL draw5');
+    cx += 5;
+  }
+  return out.join('\n');
+}
+/** A draw routine for sprites of n rows: draws the sprite at I once on every plane set in VB (XOR per plane). */
+function drawRoutine(n: number): string {
+  const out = [`draw${n}:`];
+  for (const p of [1, 2, 4, 8]) out.push('  LD V2, VB', `  LD V3, ${p}`, '  AND V2, V3', '  SE V2, 0', `  CALL d${n}p${p}`);
+  out.push('  RET');
+  for (const p of [1, 2, 4, 8]) out.push(`d${n}p${p}:`, `  PLANE ${p}`, `  DRW V0, V1, ${n}`, '  RET');
+  return out.join('\n');
+}
+const wait = (frames: number) => `  LD V4, ${frames}\n  CALL wait`;
+
+const TRAILER_SOURCE = `; KORA TRAILER: thirty seconds of Planet Escape, drawn by the CPU. No video: every frame is sprites and XOR.
+; Colours are display planes: 1 = the terminal's item, 3 grey, 5 copper, 7 blue, 8 white, 9 orange, 12 teal, 14 cyan.
+start:
+  PLANE 15         ; CLS only clears the selected planes
+  CLS
+; ---- scene 1: title under a twinkling sky (5 s) ----
+${word('PLANET', 17, 9, 7)}
+${word('ESCAPE', 17, 17, 1)}
+  LD VD, 75
+s1:
+  RND V0, 63
+  RND V1, 7
+  RND V2, 1
+  SE V2, 0
+  ADD V1, 24
+  LD I, dot
+  PLANE 8
+  DRW V0, V1, 1
+${wait(4)}
+  ADD VD, 0xFF
+  SE VD, 0
+  JP s1
+; ---- scene 2: stranded: the ship tumbles onto the planet (6 s) ----
+  PLANE 15         ; CLS only clears the selected planes
+  CLS
+  LD VB, 7
+  LD I, pl_tl
+  LD V0, 24
+  LD V1, 12
+  CALL draw8
+  LD I, pl_tr
+  LD V0, 32
+  CALL draw8
+  LD I, pl_bl
+  LD V0, 24
+  LD V1, 20
+  CALL draw8
+  LD I, pl_br
+  LD V0, 32
+  CALL draw8
+  LD V5, 52        ; ship x
+  LD V6, 0         ; ship y (wraps from the top edge)
+  LD VD, 14
+s2:
+  LD VB, 8
+  LD I, ship
+  LD V0, V5
+  LD V1, V6
+  CALL draw6
+${wait(4)}
+  LD I, ship
+  LD V0, V5
+  LD V1, V6
+  CALL draw6
+  ADD V5, 0xFE
+  ADD V6, 1
+  ADD VD, 0xFF
+  SE VD, 0
+  JP s2
+  LD VB, 8
+  LD I, ship
+  LD V0, V5
+  LD V1, V6
+  CALL draw6
+  LD VD, 6         ; impact flashes
+s2b:
+  LD VB, 9
+  LD I, boom
+  LD V0, V5
+  LD V1, V6
+  CALL draw6
+${wait(6)}
+  ADD VD, 0xFF
+  SE VD, 0
+  JP s2b
+${word('STRANDED', 12, 1, 1)}
+${wait(90)}
+; ---- scene 3: print, build: a belt feeds the core (7 s) ----
+  PLANE 15         ; CLS only clears the selected planes
+  CLS
+${word('BUILD', 20, 1, 8)}
+  LD VB, 3
+  LD I, belt
+  LD V1, 27
+  LD V0, 0
+s3a:
+  CALL draw2
+  ADD V0, 8
+  SE V0, 64
+  JP s3a
+  LD VB, 5
+  LD I, blk
+  LD V0, 4
+  LD V1, 18
+  CALL draw8
+  LD VB, 9
+  LD I, blk
+  LD V0, 28
+  CALL draw8
+  LD VB, 14
+  LD I, core
+  LD V0, 50
+  CALL draw8
+  LD VE, 3         ; three passes of items
+s3:
+  LD V5, 12
+s3b:
+  LD VB, 1
+  LD I, dot
+  LD V0, V5
+  LD V1, 26
+  CALL draw1
+  LD V0, V5
+  ADD V0, 0xF0
+  CALL draw1
+  LD V0, V5
+  ADD V0, 0xE0
+  CALL draw1
+${wait(2)}
+  LD V0, V5
+  LD V1, 26
+  CALL draw1
+  LD V0, V5
+  ADD V0, 0xF0
+  CALL draw1
+  LD V0, V5
+  ADD V0, 0xE0
+  CALL draw1
+  ADD V5, 2
+  SE V5, 50
+  JP s3b
+  ADD VE, 0xFF
+  SE VE, 0
+  JP s3
+; ---- scene 4: the ship grows on the pad (6 s) ----
+  PLANE 15         ; CLS only clears the selected planes
+  CLS
+${word('SHIP', 22, 1, 8)}
+  LD VB, 3
+  LD I, belt
+  LD V0, 24
+  LD V1, 30
+  CALL draw2
+  LD V0, 32
+  CALL draw2
+  LD VB, 12
+  LD I, rk_fin
+  LD V0, 28
+  LD V1, 25
+  CALL draw5
+${wait(50)}
+  LD I, rk_body
+  LD V1, 20
+  CALL draw5
+${wait(50)}
+  LD I, rk_body
+  LD V1, 15
+  CALL draw5
+${wait(50)}
+  LD I, rk_nose
+  LD V1, 10
+  CALL draw5
+${wait(70)}
+; ---- scene 5: launch (6 s) ----
+  PLANE 15         ; CLS only clears the selected planes
+  CLS
+${word('LAUNCH', 17, 1, 1)}
+  LD V6, 10        ; rocket top
+  LD VD, 24
+s5:
+  LD VB, 12
+  LD V0, 28
+  LD V1, V6
+  LD I, rk_nose
+  CALL draw5
+  ADD V1, 5
+  LD I, rk_body
+  CALL draw5
+  ADD V1, 5
+  LD I, rk_body
+  CALL draw5
+  ADD V1, 5
+  LD I, rk_fin
+  CALL draw5
+  ADD V1, 5
+  LD VB, 9
+  LD I, flame
+  LD V2, VD
+  LD V3, 1
+  AND V2, V3
+  SE V2, 0
+  LD I, flame2
+  CALL draw3
+${wait(4)}
+  LD VB, 12
+  LD V0, 28
+  LD V1, V6
+  LD I, rk_nose
+  CALL draw5
+  ADD V1, 5
+  LD I, rk_body
+  CALL draw5
+  ADD V1, 5
+  LD I, rk_body
+  CALL draw5
+  ADD V1, 5
+  LD I, rk_fin
+  CALL draw5
+  ADD V1, 5
+  LD VB, 9
+  LD I, flame
+  LD V2, VD
+  LD V3, 1
+  AND V2, V3
+  SE V2, 0
+  LD I, flame2
+  CALL draw3
+  SE V6, 0
+  ADD V6, 0xFF
+  ADD VD, 0xFF
+  SE VD, 0
+  JP s5
+  PLANE 15         ; CLS only clears the selected planes
+  CLS
+${word('PLAY', 22, 6, 14)}
+${word('KORA', 22, 18, 8)}
+${wait(120)}
+  JP start
+
+wait:              ; V4 frames at 60 Hz
+  LD DT, V4
+w1:
+  LD V0, DT
+  SE V0, 0
+  JP w1
+  RET
+${[1, 2, 3, 5, 6, 8].map(drawRoutine).join('\n')}
+
+dot:
+  DB 0x80
+belt:
+  DB 0xFF, 0xAA
+blk:
+  DB 0xFF, 0x81, 0xBD, 0xA5, 0xA5, 0xBD, 0x81, 0xFF
+core:
+  DB 0x3C, 0x42, 0x99, 0xA5, 0xA5, 0x99, 0x42, 0x3C
+ship:
+  DB 0x10, 0x38, 0x7C, 0xFE, 0x28, 0x44
+boom:
+  DB 0x24, 0x18, 0x7E, 0x18, 0x24, 0x42
+rk_nose:
+  DB 0x10, 0x10, 0x38, 0x38, 0x7C
+rk_body:
+  DB 0x7C, 0x7C, 0x6C, 0x7C, 0x7C
+rk_fin:
+  DB 0x7C, 0xFE, 0xFE, 0x82, 0x00
+flame:
+  DB 0x28, 0x38, 0x10
+flame2:
+  DB 0x38, 0x10, 0x10
+pl_tl:
+  DB 0x07, 0x1F, 0x3F, 0x7F, 0x7F, 0xFF, 0xFF, 0xFF
+pl_tr:
+  DB 0xE0, 0xF8, 0xFC, 0xFE, 0xFE, 0xFF, 0xFF, 0xFF
+pl_bl:
+  DB 0xFF, 0xFF, 0xFF, 0x7F, 0x7F, 0x3F, 0x1F, 0x07
+pl_br:
+  DB 0xFF, 0xFF, 0xFF, 0xFE, 0xFE, 0xFC, 0xF8, 0xE0
+${Object.entries(GLYPHS).map(([k, rows]) => `g_${k}:\n  DB ${rows.map(hx).join(', ')}`).join('\n')}
+`;
+
 export const CHIP8_PROGRAMS: Chip8Program[] = [
   {
     id: 'pong',
@@ -1060,5 +1363,11 @@ spark:
     name: 'KORA BLOCKS',
     keys: 'A/D walk · W jump · S dig below · E dig ahead · Q place (keys 7 9 5 8 6 4)',
     source: BLOCKS_SOURCE,
+  },
+  {
+    id: 'trailer',
+    name: 'KORA TRAILER',
+    keys: 'no keys: a 30 s demo loop',
+    source: TRAILER_SOURCE,
   },
 ];
