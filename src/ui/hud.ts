@@ -1,6 +1,6 @@
 import { buildingUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { CHALLENGES, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -1531,6 +1531,20 @@ export class Hud {
         body = `${statusLine(` · ${n}/${CRATE_SIZE}${b.bufL?.length ? ` ${itemImg(b.bufL[0], 'icon sm')}` : ''} · ${b.acc ?? 0} ${t('stacker_crates')}`)}
           <div class="dirs"><span class="lbl">${t('stacker_mode')}</span><button class="chip ${unpack ? '' : 'active'}" data-mode="pack">${t('stacker_pack')}</button><button class="chip ${unpack ? 'active' : ''}" data-mode="unpack">${t('stacker_unpack')}</button></div>
           <p class="save-hint">${t(unpack ? 'stacker_hint_unpack' : 'stacker_hint_pack')}</p>${dirPicker}`;
+      } else if (b.type === 'service') {
+        const store = b.store ?? {};
+        const area = this.sim.serviceArea(b);
+        const worn = area.filter((m) => (m.wear ?? 0) >= 0.75).length;
+        body = `${statusLine()}
+          <div class="bufs"><span class="lbl">${t('service_stock')}</span>${Object.entries(SERVICE_STOCK).map(([k, cap]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${store[k as ItemId] ?? 0}<small>/${cap}</small></span>`).join('')}</div>
+          <div class="lbl">${t('service_area', { n: area.length, w: worn, r: SERVICE_RANGE, d: b.acc ?? 0 })}</div>
+          <p class="save-hint">${t('service_hint')}</p>`;
+      } else if (b.type === 'recycler') {
+        const q = b.bufR ?? [], out = b.bufL ?? [];
+        body = `${statusLine()}
+          <div class="bufs"><span class="lbl">${t('recycler_in')}</span>${q.map((k) => itemImg(k, 'icon sm')).join('') || '–'}<span class="lbl">${t('recycler_out')}</span>${out.slice(0, 8).map((k) => itemImg(k, 'icon sm')).join('') || '–'}</div>
+          <div class="lbl">${t('recycler_done', { n: b.acc ?? 0 })}</div>
+          <p class="save-hint">${t('recycler_hint')}</p>${dirPicker}`;
       } else if (b.type === 'dock') {
         const unload = b.mode === 'unload', buf = b.bufL ?? [];
         const counts: Partial<Record<string, number>> = {};

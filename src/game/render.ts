@@ -1,6 +1,6 @@
 import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
-import { BELT_SPACING, BUILDINGS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
+import { SERVICE_RANGE, BELT_SPACING, BUILDINGS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from './chip8';
 import { audioLevel } from './video';
 import { ARITH } from './sim';
@@ -1464,7 +1464,15 @@ export class Renderer {
       if (b.recipe && !this.lowDetail) this.drawItem(b.recipe as ItemId, b.x * TILE + TILE - 11, b.y * TILE + 11, 16);
       return;
     }
-    if (def.kind === 'miner' || def.kind === 'machine' || def.kind === 'storage' || def.kind === 'splitter' || def.kind === 'logic') {
+    if (b.type === 'service' && (this.overlay || this.selected === b) && !this.lowDetail) {
+      const r = SERVICE_RANGE * TILE, c = BUILDINGS[b.type].size * TILE / 2;
+      ctx.strokeStyle = 'rgba(245,158,11,0.55)';
+      ctx.lineWidth = 2 / Math.max(0.5, this.cam.zoom);
+      ctx.setLineDash([10, 8]);
+      ctx.strokeRect(b.x * TILE + c - r, b.y * TILE + c - r, 2 * r, 2 * r);
+      ctx.setLineDash([]);
+    }
+    if ((def.kind === 'miner' || def.kind === 'machine' || def.kind === 'storage' || def.kind === 'splitter' || def.kind === 'logic') && b.type !== 'service') {
       this.drawArrow(b, b.dir, (b.type === 'valve' || b.type === 'switch') && b.open === false ? '#ef4444' : '#22d3ee');
       if ((def.kind === 'splitter' && b.type !== 'merger') || b.type === 'overflow') {
         this.drawArrow(b, ((b.dir + 1) & 3) as Dir, b.type === 'overflow' ? '#f59e0b' : '#22d3ee');

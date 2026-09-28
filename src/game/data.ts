@@ -77,6 +77,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   // roads and robots: a depot sends its robots over road tiles between loading docks
   road: { id: 'road', kind: 'road', size: 1, cost: { iron_plate: 1 }, power: 0, rotatable: false },
   dock: { id: 'dock', kind: 'logic', size: 1, cost: { iron_plate: 4, motor: 1 }, power: 1, rotatable: true },
+  service: { id: 'service', kind: 'logic', size: 2, cost: { iron_plate: 12, machine_part: 4, copper_wire: 6 }, power: 2, rotatable: false },
+  recycler: { id: 'recycler', kind: 'logic', size: 1, cost: { iron_plate: 10, steel_frame: 2, machine_part: 2 }, power: 3, rotatable: true },
   depot: { id: 'depot', kind: 'logic', size: 2, cost: { iron_plate: 10, steel_frame: 2, circuit: 2 }, power: 4, rotatable: false },
   // a stacker packs eight equal items into one crate (an item of its own on the belt); in unpack mode it opens crates again
   stacker: { id: 'stacker', kind: 'logic', size: 1, cost: { iron_plate: 6, motor: 2 }, power: 2, rotatable: true },
@@ -160,6 +162,8 @@ export const BUILD_ORDER: BuildingId[] = [
   'sensor',
   'radio',
   'battery',
+  'service',
+  'recycler',
   'switch',
   'terminal',
   'oscillator',
@@ -419,6 +423,8 @@ export interface ProjectDef {
   requires?: string[]; // other projects first
 }
 export const PROJECTS: ProjectDef[] = [
+  { id: 'p_service', after: 2, unlocks: ['service'], cost: { machine_part: 6, copper_wire: 10 } },
+  { id: 'p_recycler', after: 3, unlocks: ['recycler'], cost: { steel_frame: 6, copper_wire: 12 } },
   { id: 'p_sensor', after: 3, unlocks: ['sensor', 'speaker'], cost: { copper_wire: 16, steel_frame: 2 } },
   { id: 'p_wind', after: 3, unlocks: ['wind'], cost: { steel_frame: 6, copper_wire: 10 } },
   { id: 'p_picker', after: 3, unlocks: ['picker'], cost: { steel_frame: 4, copper_wire: 8 } },
@@ -463,7 +469,7 @@ export const SCREEN_SAMPLE_RATE = 4;
 export const BUILD_GROUPS: { id: 'logistics' | 'storage' | 'production' | 'energy' | 'circuit' | 'computer'; items: BuildingId[] }[] = [
   { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'merger', 'sorter', 'overflow', 'mixer', 'valve', 'picker', 'kitport', 'road', 'dock', 'depot', 'radio', 'mast'] },
   { id: 'storage', items: ['storage', 'hall4', 'hall8', 'hall12', 'hall16', 'stacker'] },
-  { id: 'production', items: ['miner', 'smelter', 'assembler', 'printer', 'refinery', 'fabricator'] },
+  { id: 'production', items: ['miner', 'smelter', 'assembler', 'printer', 'refinery', 'fabricator', 'service', 'recycler'] },
   { id: 'energy', items: ['solar', 'wind', 'battery', 'generator', 'reactor'] },
   { id: 'circuit', items: ['lamp', 'matrix', 'switch', 'timer', 'sensor', 'bus', 'register', 'adder', 'subtractor', 'multiplier', 'divider'] },
   { id: 'computer', items: ['terminal', 'oscillator', 'keyboard', 'screen', 'speaker'] },
@@ -502,6 +508,15 @@ export const WORN_SPEED = 0.5;
 export const WEAR_MIN_MISSION = 2; // story: wear starts once machine parts can be made
 export const REPAIR_COST: Partial<Record<ItemId, number>> = { machine_part: 2, iron_plate: 4 };
 export const QUAKE_WEAR = 0.6;
+/** Service station: repairs machines in this range (tiles from its centre) with spare parts from its own stock. */
+export const SERVICE_RANGE = 10;
+export const SERVICE_SECONDS = 2; // per repair
+export const SERVICE_WEAR = 0.9; // repairs a little before the machine slows down
+export const SERVICE_STOCK: Partial<Record<ItemId, number>> = { machine_part: 20, iron_plate: 40 };
+/** Recycler: half of what went into a part comes back; plates and raw materials are only disposed of. */
+export const RECYCLE_SHARE = 0.5;
+export const RECYCLE_SECONDS = 1;
+export const RECYCLER_QUEUE = 4;
 export const ROBOT_CAP = 8; // items one robot carries
 export const ROBOT_RATE = 4; // items per second loaded / unloaded at a dock
 export const DOCK_CAP = 8; // items a dock buffers

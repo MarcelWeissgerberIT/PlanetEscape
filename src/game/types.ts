@@ -45,6 +45,8 @@ export type BuildingId =
   | 'storage'
   | 'splitter'
   | 'merger'
+  | 'service'
+  | 'recycler'
   | 'tunnel'
   | 'fabricator'
   | 'printer'
@@ -153,6 +155,7 @@ export interface Building {
   merge?: (ItemId | null)[]; // merger: one waiting item per input side (behind, left, right)
   bufL?: ItemId[];
   bufR?: ItemId[];
+  salvage?: Partial<Record<ItemId, number>>; // recycler: fractions of parts not handed out yet
   threshold?: number;
   mode?: 'hold' | 'pass' | 'pulse' | 'off' | 'avg' | 'centre' | 'scan' | 'tx' | 'rx' | 'load' | 'unload' | 'pack' | 'unpack'; // lamp: hold keeps the item lit, pass forwards it; switch: pulse closes itself after one item; screen: sample output
   ratio?: number;

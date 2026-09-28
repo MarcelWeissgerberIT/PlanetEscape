@@ -216,6 +216,31 @@ S.merger = `${housing()}
   ${chevron(128, 62, 16, AMBER)}${chevron(128, 92, 12, AMBER)}
   ${plate(160, 206, 56, 13, 'MRG-3')}${ledRow(44, 50, [GREEN, AMBER], 11)}`;
 
+S.service = `${housing(10, 10, 236, 236, 30)}
+  <rect x="30" y="30" width="112" height="112" rx="10" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  <circle cx="86" cy="86" r="40" fill="none" stroke="${AMBER}" stroke-width="4" stroke-dasharray="10 7" opacity="0.8"/>
+  ${hazard(40, 130, 92, 8)}
+  <g filter="url(#shadow)">
+    ${[[86 - 26, 86 - 26], [86 + 26, 86 - 26], [86 - 26, 86 + 26], [86 + 26, 86 + 26]].map(([x, y]) => `<line x1="86" y1="86" x2="${x}" y2="${y}" stroke="url(#chrome)" stroke-width="6" stroke-linecap="round"/><circle cx="${x}" cy="${y}" r="11" fill="#0b0e12" opacity="0.6"/><circle cx="${x}" cy="${y}" r="11" fill="none" stroke="#94a3b8" stroke-width="2"/>`).join('')}
+    <rect x="72" y="74" width="28" height="24" rx="5" fill="url(#steel)" stroke="#12161b" stroke-width="3"/>
+    <circle cx="86" cy="86" r="5" fill="${AMBER}" filter="url(#glow)"/></g>
+  <rect x="154" y="30" width="72" height="112" rx="8" fill="url(#steelV)" stroke="#12161b" stroke-width="3"/>
+  ${Array.from({ length: 4 }, (_, k) => `<rect x="162" y="${40 + k * 24}" width="56" height="16" rx="3" fill="#1b2027" stroke="#0b0e12" stroke-width="1.5"/><rect x="166" y="${44 + k * 24}" width="${14 + k * 9}" height="8" rx="2" fill="${k < 2 ? GREEN : AMBER}" opacity="0.85"/>`).join('')}
+  <g transform="translate(58 160) rotate(-35)"><rect x="0" y="-7" width="92" height="14" rx="7" fill="url(#chrome)" stroke="#12161b" stroke-width="3"/><path d="M92 -18a20 20 0 1 1 0 36l6-12a8 8 0 1 0 0-12z" fill="url(#chrome)" stroke="#12161b" stroke-width="3"/></g>
+  ${plate(146, 206, 84, 16, 'SERVICE', '#fde68a')}${ledRow(40, 214, [GREEN, AMBER, CYAN], 12)}${strip(154, 152, 72, 6, AMBER)}`;
+
+S.recycler = `${housing()}
+  <g transform="rotate(180 128 124)">
+  <path d="M60 58h136l-22 58H82z" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  ${[0, 1, 2, 3, 4].map((k) => `<path d="M${74 + k * 24} 116l12 -22l12 22z" fill="url(#chrome)" stroke="#12161b" stroke-width="2"/>`).join('')}
+  <rect x="70" y="116" width="116" height="44" rx="6" fill="#141a22" stroke="#12161b" stroke-width="3"/>
+  ${[0, 1].map((r) => `<circle cx="${104 + r * 48}" cy="138" r="17" fill="url(#chrome)" stroke="#12161b" stroke-width="3"/>` + Array.from({ length: 8 }, (_, k) => `<rect x="${104 + r * 48 - 2}" y="${138 - 20}" width="4" height="8" fill="#94a3b8" transform="rotate(${k * 45} ${104 + r * 48} 138)"/>`).join('')).join('')}
+  <path d="M100 176h56l-8 20h-40z" fill="url(#steelV)" stroke="#12161b" stroke-width="3"/>
+  </g>
+  ${chevron(128, 44, 14, GREEN)}
+  <g fill="none" stroke="${GREEN}" stroke-width="5" stroke-linecap="round" filter="url(#glow)"><path d="M40 150a88 88 0 0 1 10 -64"/><path d="M216 106a88 88 0 0 1 -10 64"/></g>
+  ${plate(92, 204, 72, 14, 'RE-CYCLE', '#bbf7d0')}${warn(206, 214, 12)}`;
+
 S.kitport = `${housing()}
   <rect x="50" y="118" width="156" height="88" rx="6" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
   ${Array.from({ length: 4 }, (_, k) => `<rect x="58" y="${128 + k * 19}" width="140" height="11" rx="5.5" fill="url(#chromeV)" stroke="#12161b" stroke-width="1.2"/>`).join('')}

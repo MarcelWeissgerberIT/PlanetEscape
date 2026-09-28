@@ -14,6 +14,13 @@ import {
   TERRAIN_ITEM,
   TUNNEL_RANGE,
   CONTRACT_INTERVAL,
+  SERVICE_RANGE,
+  SERVICE_SECONDS,
+  SERVICE_WEAR,
+  SERVICE_STOCK,
+  RECYCLE_SHARE,
+  RECYCLE_SECONDS,
+  RECYCLER_QUEUE,
   CHALLENGE_BY_ID,
   flightMission,
   PROJECTS,
@@ -589,6 +596,8 @@ export class Sim {
         if (b.type === 'picker' || b.type === 'kitport' || b.type === 'mast') return false; // they fetch their items themselves
         if (b.type === 'dock') return b.mode !== 'unload'; // a loading dock is filled from any side
         if (b.type === 'depot') return true; // robots are delivered from any side
+        if (b.type === 'service') return true; // spare parts from any side
+        if (b.type === 'recycler') return ((from + 2) & 3) !== b.dir; // from behind or either side
         return from === b.dir;
     }
   }
@@ -765,6 +774,20 @@ export class Sim {
           return true;
         }
         if (b.type === 'picker' || b.type === 'kitport' || b.type === 'mast') return false;
+        if (b.type === 'service') {
+          const cap = SERVICE_STOCK[item];
+          const store = (b.store ??= {});
+          if (!cap || (store[item] ?? 0) >= cap) return false;
+          store[item] = (store[item] ?? 0) + 1;
+          return true;
+        }
+        if (b.type === 'recycler') {
+          if (((from + 2) & 3) === b.dir || isCrate(item)) return false;
+          const q = (b.bufR ??= []);
+          if (q.length >= RECYCLER_QUEUE) return false;
+          q.push(item);
+          return true;
+        }
         if (b.type === 'depot') {
           // the fleet is built elsewhere: every delivered robot joins the depot
           if (item !== 'robot' || (b.value ?? 0) >= DEPOT_ROBOTS_MAX) return false;
@@ -989,6 +1012,12 @@ export class Sim {
           break;
         case 'depot':
           this.tickDepot(b);
+          break;
+        case 'service':
+          this.tickService(b, dt, ratio);
+          break;
+        case 'recycler':
+          this.tickRecycler(b, dt, ratio);
           break;
         case 'stacker':
           this.tickStacker(b);
@@ -1761,6 +1790,95 @@ export class Sim {
     this.addInv('robot', -1);
     b.value = (b.value ?? 0) + 1;
     return true;
+  }
+
+  /** Machines and drills a service station looks after (centre within SERVICE_RANGE). */
+  serviceArea(b: Building): Building[] {
+    const c = BUILDINGS[b.type].size / 2;
+    const cx = b.x + c, cy = b.y + c;
+    return this.state.buildings.filter((m) => {
+      const k = BUILDINGS[m.type].kind;
+      if ((k !== 'machine' && k !== 'miner') || m.site) return false;
+      const h = BUILDINGS[m.type].size / 2;
+      return Math.max(Math.abs(m.x + h - cx), Math.abs(m.y + h - cy)) <= SERVICE_RANGE;
+    });
+  }
+
+  /** Does a stocked service station cover this machine? */
+  serviced(m: Building): boolean {
+    return this.state.buildings.some((s) => s.type === 'service' && !s.site && this.hasRepairStock(s) && this.serviceArea(s).includes(m));
+  }
+
+  private hasRepairStock(s: Building): boolean {
+    for (const k in REPAIR_COST) if ((s.store?.[k as ItemId] ?? 0) < REPAIR_COST[k as ItemId]!) return false;
+    return true;
+  }
+
+  private tickService(b: Building, dt: number, ratio: number) {
+    b.timer = Math.max(0, (b.timer ?? 0) - dt * ratio);
+    b.working = (b.timer ?? 0) > 0;
+    if (!this.hasRepairStock(b)) {
+      b.status = 'starved';
+      b.missing = (Object.keys(REPAIR_COST) as ItemId[]).filter((k) => (b.store?.[k] ?? 0) < REPAIR_COST[k]!);
+      return;
+    }
+    b.missing = undefined;
+    b.status = 'ok';
+    if ((b.timer ?? 0) > 0 || !this.wearOn()) return;
+    // the most worn machine in range first
+    let worst: Building | null = null;
+    for (const m of this.serviceArea(b)) if ((m.wear ?? 0) >= SERVICE_WEAR && (!worst || (m.wear ?? 0) > (worst.wear ?? 0))) worst = m;
+    if (!worst) return;
+    for (const k in REPAIR_COST) b.store![k as ItemId]! -= REPAIR_COST[k as ItemId]!;
+    worst.wear = 0;
+    if (worst.status === 'worn') worst.status = 'ok';
+    b.timer = SERVICE_SECONDS;
+    b.acc = (b.acc ?? 0) + 1;
+    this.events.push({ type: 'repaired', b: worst });
+  }
+
+  /** What a recycler gives back for one item: half of its recipe inputs (or of a kit's material); nothing for plates and raw materials. */
+  salvageOf(item: ItemId): Partial<Record<ItemId, number>> {
+    if (isKit(item)) {
+      const cost = BUILDINGS[kitOf(item)!]?.cost ?? {};
+      return Object.fromEntries(Object.entries(cost).map(([k, n]) => [k, n! * RECYCLE_SHARE]));
+    }
+    const r = RECIPES.find((rc) => rc.output === item);
+    if (!r) return {};
+    const inputs = Object.keys(r.inputs) as ItemId[];
+    if (inputs.every((k) => !RECIPES.some((rc) => rc.output === k))) return {}; // made straight from raw material: disposed of
+    return Object.fromEntries(inputs.map((k) => [k, (r.inputs[k]! / r.outputCount) * RECYCLE_SHARE]));
+  }
+
+  private tickRecycler(b: Building, dt: number, ratio: number) {
+    const out = (b.bufL ??= []);
+    const q = (b.bufR ??= []);
+    if (out.length && this.pushDir(b, out[0], b.dir)) out.shift();
+    if (out.length >= 8) {
+      b.status = 'blocked';
+      b.working = false;
+      return;
+    }
+    if (!q.length) {
+      b.status = 'idle';
+      b.working = false;
+      return;
+    }
+    b.status = ratio < 1 ? 'low_power' : 'ok';
+    b.working = true;
+    b.progress = (b.progress ?? 0) + (dt * ratio) / RECYCLE_SECONDS;
+    if (b.progress < 1) return;
+    b.progress = 0;
+    const item = q.shift()!;
+    const acc = (b.salvage ??= {});
+    for (const [k, n] of Object.entries(this.salvageOf(item))) {
+      acc[k as ItemId] = (acc[k as ItemId] ?? 0) + n!;
+      while (acc[k as ItemId]! >= 1 - 1e-9) {
+        out.push(k as ItemId);
+        acc[k as ItemId]! -= 1;
+      }
+    }
+    b.acc = (b.acc ?? 0) + 1;
   }
 
   private tickDepot(b: Building) {
@@ -3385,6 +3503,7 @@ export class Sim {
       const s = b.status;
       if (!s || s === 'ok' || s === 'idle' || s === 'closed' || s === 'waiting') continue;
       if (s === 'worn' && this.state.autoRepair !== false && this.inReach(b.x, b.y, BUILDINGS[b.type].size) && this.canRepair(b)) continue; // the drones handle it
+      if (s === 'worn' && this.serviced(b)) continue; // a service station handles it
       if (s === 'low_power') continue; // reported globally
       if (s === 'blocked' && BUILDINGS[b.type].kind === 'logic') continue; // a full belt behind a module is normal
       if (s === 'blocked' && (b.type === 'miner' || BUILDINGS[b.type].kind === 'machine')) {
