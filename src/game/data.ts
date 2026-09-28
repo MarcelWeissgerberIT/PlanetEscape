@@ -285,14 +285,14 @@ export const CHALLENGES: ChallengeDef[] = [
   },
   {
     id: 'c_print', icon: 'printer', seed: 2303, size: 48, rocks: 4,
-    basics: [{ type: 'iron_ore', dist: 6, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.4 }],
-    inventory: { iron_plate: 160, copper_plate: 60, machine_part: 6 },
+    basics: [{ type: 'iron_ore', dist: 6, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.4 }, { type: 'copper_ore', dist: 13, r: 2.2 }],
+    inventory: { iron_plate: 160, copper_plate: 60, machine_part: 12 },
     kits: {},
     noPrint: [],
     buildings: ['miner', 'smelter', 'conveyor', 'splitter', 'merger', 'assembler', 'printer', 'solar', 'storage'],
     recipes: ['iron_plate', 'copper_plate', 'copper_wire', 'machine_part'],
     deliver: { copper_wire: 60, machine_part: 12 },
-    medals: [360, 540, 900],
+    medals: [240, 360, 600],
   },
   {
     id: 'c_power', icon: 'solar', seed: 2404, size: 44, rocks: 3,

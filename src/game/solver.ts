@@ -1,6 +1,6 @@
 // Automatic planner: routes belts and builds whole production chains.
 // DOM-free so it can run in the game, in tests and in the MCP server.
-import { BUILDINGS, MINE_SECONDS, PLANT_FUEL, RECIPES, TERRAIN_ITEM } from './data';
+import { TUNNEL_RANGE, BUILDINGS, MINE_SECONDS, PLANT_FUEL, RECIPES, TERRAIN_ITEM } from './data';
 import type { Sim } from './sim';
 import type { Building, BuildingId, Dir, ItemId, TerrainId } from './types';
 import { DX, DY } from './types';
@@ -18,6 +18,13 @@ interface Target {
   building: Building;
 }
 
+/** Does a building of `size` at (x, y) overlap the two-tile ring around the core that stays free for belts? */
+export function inCoreRing(sim: Sim, x: number, y: number, size: number): boolean {
+  const c = sim.state.buildings[0];
+  if (!c || c.type !== 'core') return false;
+  return x + size > c.x - 2 && x < c.x + 5 && y + size > c.y - 2 && y < c.y + 5;
+}
+
 /** Buildable free tile: inside the map, ground (no deposit, no rock), unoccupied. */
 export function isFree(sim: Sim, x: number, y: number): boolean {
   return sim.inBounds(x, y) && sim.terrain(x, y) === 'ground' && !sim.at(x, y);
@@ -27,11 +34,15 @@ export function isFree(sim: Sim, x: number, y: number): boolean {
  * Find the cheapest belt path from `start` (a free tile that the belt line starts on) to any tile from
  * which `target` accepts items. Turns cost extra so routes stay straight. Returns tiles with directions.
  */
-export function routeBelt(sim: Sim, start: { x: number; y: number }, target: Target, maxNodes = 40000): { x: number; y: number; dir: Dir }[] | null {
+export type PathTile = { x: number; y: number; dir: Dir; tunnel?: 'in' | 'out' };
+
+export function routeBelt(sim: Sim, start: { x: number; y: number }, target: Target, maxNodes = 40000): PathTile[] | null {
   const W = sim.state.width;
   if (!isFree(sim, start.x, start.y)) return null;
   const tb = target.building;
-  const key = (x: number, y: number, d: number) => (y * W + x) * 4 + d;
+  // a state is a tile, the direction the line entered it with, and whether that tile is a tunnel exit
+  const key = (x: number, y: number, d: number, exit = 0) => ((y * W + x) * 4 + d) * 2 + exit;
+  const tunnels = sim.state.unlockedBuildings.includes('tunnel') || sim.creative;
   const dist = new Map<number, number>();
   const prev = new Map<number, number>();
   // simple binary heap
@@ -64,8 +75,10 @@ export function routeBelt(sim: Sim, start: { x: number; y: number }, target: Tar
     }
     return top;
   };
+  const startKeys = new Set<number>();
   for (let d = 0; d < 4; d++) {
     const k = key(start.x, start.y, d);
+    startKeys.add(k);
     dist.set(k, 0);
     push(k, 0);
   }
@@ -83,17 +96,29 @@ export function routeBelt(sim: Sim, start: { x: number; y: number }, target: Tar
         if (nb && nb !== tb && nb.type !== 'conveyor') v += 3;
         else if (!nb && sim.isDeposit(ax, ay)) v += 1;
       }
+      // the ring around the core is kept for the lines that deliver into it
+      if (inCoreRing(sim, x, y, 1)) v += tb.type === 'core' ? 1 : 12;
       hugCache.set(ck, v);
     }
     return v;
+  };
+  // into the core, a new line may also join a belt that already runs into it (from the side or from behind)
+  const feeders = tb.type === 'core' ? coreFeeders(sim, tb) : null;
+  const relax = (nk: number, nc: number, from: number) => {
+    if (nc < (dist.get(nk) ?? Infinity)) {
+      dist.set(nk, nc);
+      prev.set(nk, from);
+      push(nk, nc);
+    }
   };
   let nodes = 0;
   let endKey = -1;
   while (heap.length && nodes++ < maxNodes) {
     const { k, c } = pop();
     if ((dist.get(k) ?? Infinity) < c) continue;
-    const d = k % 4;
-    const cell = (k - d) / 4;
+    const exit = k & 1;
+    const d = (k >> 1) % 4;
+    const cell = ((k >> 1) - d) / 4;
     const x = cell % W, y = (cell - x) / W;
     // does a belt here pointing `d` deliver into the target?
     const nx = x + DX[d], ny = y + DY[d];
@@ -102,17 +127,25 @@ export function routeBelt(sim: Sim, start: { x: number; y: number }, target: Tar
       endKey = k;
       break;
     }
-    // continue straight or turn (turning means the belt on this tile points the new way)
+    if (feeders && nb && nb.type === 'conveyor' && feeders.has(nb.id) && d !== ((nb.dir + 2) & 3)) {
+      endKey = k;
+      break;
+    }
+    // continue straight or turn (turning means the belt on this tile points the new way); a tunnel exit only goes straight
     for (let nd = 0; nd < 4; nd++) {
-      if (nd === ((d + 2) & 3)) continue;
+      if (nd === ((d + 2) & 3) || (exit && nd !== d)) continue;
       const tx = x + DX[nd], ty = y + DY[nd];
       if (!isFree(sim, tx, ty)) continue;
-      const nk = key(tx, ty, nd);
-      const nc = c + 1 + (nd === d ? 0 : 2) + hug(tx, ty);
-      if (nc < (dist.get(nk) ?? Infinity)) {
-        dist.set(nk, nc);
-        prev.set(nk, k);
-        push(nk, nc);
+      relax(key(tx, ty, nd), c + 1 + (nd === d ? 0 : 2) + hug(tx, ty), k);
+    }
+    // or dive under whatever is ahead: this tile becomes a tunnel entrance, the exit lands up to TUNNEL_RANGE tiles on
+    if (tunnels && !exit && !startKeys.has(k) && !isFree(sim, nx, ny)) {
+      for (let j = 2; j <= TUNNEL_RANGE + 1; j++) {
+        const tx = x + DX[d] * j, ty = y + DY[d] * j;
+        if (!sim.inBounds(tx, ty)) break;
+        if (!isFree(sim, tx, ty)) continue;
+        relax(key(tx, ty, d, 1), c + 8 + j + hug(tx, ty), k);
+        break;
       }
     }
   }
@@ -128,33 +161,38 @@ export function routeBelt(sim: Sim, start: { x: number; y: number }, target: Tar
     k = prev.get(k);
   }
   states.reverse();
-  const out: { x: number; y: number; dir: Dir }[] = [];
+  const out: PathTile[] = [];
   for (let i = 0; i < states.length; i++) {
     const sk = states[i];
-    const d = sk % 4;
-    const cell = (sk - d) / 4;
+    const d = (sk >> 1) % 4;
+    const cell = ((sk >> 1) - d) / 4;
     const x = cell % W, y = (cell - x) / W;
-    const dir = (i < states.length - 1 ? states[i + 1] % 4 : d) as Dir;
-    out.push({ x, y, dir });
+    const next = states[i + 1];
+    const dir = (next !== undefined ? (next >> 1) % 4 : d) as Dir;
+    const tile: PathTile = { x, y, dir };
+    if (sk & 1) tile.tunnel = 'out';
+    if (next !== undefined && next & 1) tile.tunnel = 'in';
+    out.push(tile);
   }
   return out;
 }
 
-/** Place belts along a path. Existing belts on the path are re-pointed. */
-export function layPath(sim: Sim, path: { x: number; y: number; dir: Dir }[], log: SolverLog): boolean {
+/** Place belts (and tunnel pairs) along a path. Existing belts on the path are re-pointed. */
+export function layPath(sim: Sim, path: PathTile[], log: SolverLog): boolean {
   for (const p of path) {
     const b = sim.at(p.x, p.y);
-    if (b?.type === 'conveyor') {
+    const type = p.tunnel ? 'tunnel' : 'conveyor';
+    if (b?.type === 'conveyor' && type === 'conveyor') {
       sim.rotate(b, p.dir);
       continue;
     }
-    const nb = sim.place('conveyor', p.x, p.y, p.dir);
+    const nb = sim.place(type, p.x, p.y, p.dir);
     if (!nb) {
-      const err = sim.placementError('conveyor', p.x, p.y);
-      log.error = `belt at ${p.x},${p.y}: ${err}`;
+      const err = sim.placementError(type, p.x, p.y);
+      log.error = `${type === 'tunnel' ? 'tunnel' : 'belt'} at ${p.x},${p.y}: ${err}`;
       if (err === 'err_cost') {
         log.fatal = true;
-        log.fatalType = 'conveyor';
+        log.fatalType = type;
       }
       return false;
     }
@@ -162,6 +200,38 @@ export function layPath(sim: Sim, path: { x: number; y: number; dir: Dir }[], lo
   }
   return true;
 }
+
+/** Belts whose items end up in `core` (following belt directions). */
+export function coreFeeders(sim: Sim, core: Building): Set<number> {
+  const memo = new Map<number, boolean>();
+  const reaches = (b: Building): boolean => {
+    const chain: Building[] = [];
+    let cur: Building | null = b;
+    let ok = false;
+    for (let guard = 0; cur && guard < 600; guard++) {
+      const known = memo.get(cur.id);
+      if (known !== undefined) {
+        ok = known;
+        break;
+      }
+      if (cur.type !== 'conveyor') {
+        ok = cur === core;
+        break;
+      }
+      memo.set(cur.id, false); // loop guard
+      chain.push(cur);
+      const next = sim.at(cur.x + DX[cur.dir], cur.y + DY[cur.dir]);
+      if (!next || !sim.canReceiveFrom(next, cur.dir)) break;
+      cur = next;
+    }
+    for (const c of chain) memo.set(c.id, ok);
+    return ok;
+  };
+  const out = new Set<number>();
+  for (const b of sim.state.buildings) if (b.type === 'conveyor' && !b.site && reaches(b)) out.add(b.id);
+  return out;
+}
+
 
 /** Spiral search for a spot where `type` fits and its front tiles are free (so output can be routed). */
 export function findSpot(sim: Sim, type: BuildingId, near: { x: number; y: number }, dir: Dir, maxR = 14): { x: number; y: number } | null {
@@ -172,6 +242,7 @@ export function findSpot(sim: Sim, type: BuildingId, near: { x: number; y: numbe
         if (Math.max(Math.abs(dx), Math.abs(dy)) !== r) continue;
         const x = near.x + dx, y = near.y + dy;
         if (sim.placementError(type, x, y) && sim.placementError(type, x, y) !== 'err_cost') continue;
+        if (inCoreRing(sim, x, y, s)) continue;
         // front tiles free
         const fake: Building = { id: -1, type, x, y, dir };
         const fronts = sim.frontTiles(fake);
@@ -210,6 +281,8 @@ export function spotsFacing(sim: Sim, type: BuildingId, consumer: Building, maxR
       const x = Math.round(cc.x + dx - (s - 1) / 2), y = Math.round(cc.y + dy - (s - 1) / 2);
       const err = sim.placementError(type, x, y);
       if (err && err !== 'err_cost') continue;
+      // keep a ring of two tiles around the core for belts: machines docked right onto it wall it in
+      if (inCoreRing(sim, x, y, s)) continue;
       const mc = { x: x + (s - 1) / 2, y: y + (s - 1) / 2 };
       const dir = dirTowards(mc, cc);
       const fake: Building = { id: -1, type, x, y, dir };
@@ -326,7 +399,7 @@ export function buildChain(sim: Sim, item: ItemId, consumer: Building, perMin: n
       return false;
     }
     const want = Math.max(1, Math.min(4, Math.ceil(perMin / minerRate(sim))));
-    for (const e of edges.slice(0, 24)) {
+    for (const e of edges.slice(0, 60)) {
       if (!st.unlockedBuildings.includes('miner')) {
         log.error = 'miner locked';
         return false;
@@ -371,14 +444,19 @@ export function buildChain(sim: Sim, item: ItemId, consumer: Building, perMin: n
     log.error = `${recipe.machine} locked`;
     return false;
   }
+  // a machine with one raw input goes right to the deposit (drill feeds it directly), only its product travels
+  if (atDeposit(sim, recipe, consumer, consumerCenter, perMin, log)) return true;
+  if (log.fatal) return false;
   // machine near the consumer, facing it; retry other spots when the inputs cannot be routed
-  const spots = spotsFacing(sim, recipe.machine, consumer, 16, rawSource(sim, item, consumerCenter));
+  const spots = spotsFacing(sim, recipe.machine, consumer, consumer.type === 'core' ? 24 : 16, rawSource(sim, item, consumerCenter));
   if (!spots.length) {
     log.error = `no space for ${recipe.machine} near ${consumer.type}`;
     return false;
   }
-  for (let attempt = 0; attempt < Math.min(6, spots.length); attempt++) {
-    const spot = spots[attempt];
+  // up to 6 real attempts; spots whose output cannot reach the consumer are skipped without counting
+  let attempts = 0;
+  for (let si = 0; si < Math.min(120, spots.length) && attempts < 6; si++) {
+    const spot = spots[si];
     const before = log.placed.length;
     const stepsBefore = log.steps.length;
     const machine = sim.place(recipe.machine, spot.x, spot.y, spot.dir);
@@ -394,8 +472,14 @@ export function buildChain(sim: Sim, item: ItemId, consumer: Building, perMin: n
     log.placed.push(machine);
     sim.setRecipe(machine, recipe.id);
     const front = sim.frontTiles(machine)[0];
-    const outPath = routeBelt(sim, front, { building: consumer });
-    let good = !!outPath && layPath(sim, outPath, log);
+    const outPath = routeBelt(sim, front, { building: consumer }, 15000);
+    if (!outPath) {
+      log.placed.splice(before);
+      sim.remove(machine);
+      continue;
+    }
+    attempts++;
+    let good = layPath(sim, outPath, log);
     if (good && depth <= 6) {
       for (const k in recipe.inputs) {
         const need = (perMin * recipe.inputs[k as ItemId]!) / recipe.outputCount;
@@ -417,6 +501,77 @@ export function buildChain(sim: Sim, item: ItemId, consumer: Building, perMin: n
     if (log.fatal) return false;
   }
   log.error = log.error ?? `could not connect ${recipe.machine} for ${item}`;
+  return false;
+}
+
+/**
+ * Drill on a deposit edge, the machine on the tile in front of it, and a belt from the machine to the consumer.
+ * Keeps the crowded area around the consumer free for the later steps.
+ */
+function atDeposit(sim: Sim, recipe: (typeof RECIPES)[number], consumer: Building, consumerCenter: { x: number; y: number }, perMin: number, log: SolverLog): boolean {
+  const inputs = Object.keys(recipe.inputs) as ItemId[];
+  if (inputs.length !== 1 || BUILDINGS[recipe.machine].size !== 1) return false;
+  const terrain = (Object.keys(TERRAIN_ITEM) as TerrainId[]).find((t) => TERRAIN_ITEM[t] === inputs[0]);
+  if (!terrain || !sim.state.unlockedBuildings.includes('miner')) return false;
+  const st = sim.state;
+  // nearest edges first, but spread out: a crowded deposit must not use up all the tries
+  const tried: { x: number; y: number }[] = [];
+  const edges = depositEdges(sim, terrain, consumerCenter).filter((e) => {
+    if (tried.length >= 16 || tried.some((t) => Math.abs(t.x - e.x) + Math.abs(t.y - e.y) < 4)) return false;
+    tried.push(e);
+    return true;
+  });
+  for (const e of edges) {
+    const mx = e.x + DX[e.dir], my = e.y + DY[e.dir];
+    if (!isFree(sim, mx, my) || inCoreRing(sim, mx, my, 1)) continue;
+    const toward = dirTowards({ x: mx, y: my }, consumerCenter);
+    const outs: Dir[] = [toward, 0, 1, 2, 3].filter((d, i, a) => a.indexOf(d) === i && d !== ((e.dir + 2) & 3)) as Dir[];
+    for (const od of outs) {
+      const front = { x: mx + DX[od], y: my + DY[od] };
+      if (!isFree(sim, front.x, front.y)) continue;
+      if (!routeBelt(sim, front, { building: consumer }, 20000)) continue;
+      const before = log.placed.length;
+      const miner = sim.place('miner', e.x, e.y, e.dir);
+      const machine = miner && sim.place(recipe.machine, mx, my, od);
+      if (!miner || !machine) {
+        const failedType = !miner ? 'miner' : recipe.machine;
+        if (miner) sim.remove(miner);
+        if (sim.placementError(failedType, !miner ? e.x : mx, !miner ? e.y : my) === 'err_cost') {
+          log.error = `cannot afford a ${failedType}`;
+          log.fatal = true;
+          log.fatalType = failedType;
+          return false;
+        }
+        continue;
+      }
+      log.placed.push(miner, machine);
+      sim.setRecipe(machine, recipe.id);
+      // route again now that the drill and the machine stand (the first route may have crossed their tiles)
+      const path = routeBelt(sim, front, { building: consumer }, 20000);
+      if (!path) {
+        for (const b of log.placed.splice(before)) if (st.buildings.includes(b)) sim.remove(b);
+        continue;
+      }
+      // more drills behind the first one when the rate asks for it
+      const want = Math.max(1, Math.min(3, Math.ceil(((perMin * recipe.inputs[inputs[0]]!) / recipe.outputCount) / minerRate(sim))));
+      let bx = e.x - DX[e.dir], by = e.y - DY[e.dir];
+      for (let n = 1; n < want; n++) {
+        if (!sim.isDeposit(bx, by) || st.terrain[by * st.width + bx] !== terrain || sim.at(bx, by)) break;
+        const m2 = sim.place('miner', bx, by, e.dir);
+        if (!m2) break;
+        log.placed.push(m2);
+        bx -= DX[e.dir];
+        by -= DY[e.dir];
+      }
+      if (!layPath(sim, path, log)) {
+        for (const b of log.placed.splice(before)) if (st.buildings.includes(b)) sim.remove(b);
+        if (log.fatal) return false;
+        continue;
+      }
+      log.steps.push(`${recipe.machine} (${recipe.id}) at the deposit ${mx},${my}, belt ${path.length} tiles to ${consumer.type}`);
+      return true;
+    }
+  }
   return false;
 }
 
@@ -486,6 +641,7 @@ export function solveOrder(sim: Sim, perMin = 10): SolverLog {
       log.steps.push(`order needs ${type}`);
     }
   }
+  const failed: string[] = [];
   for (const k in m.deliver) {
     const item = k as ItemId;
     if (hasSupply(sim, item, core)) {
@@ -494,11 +650,18 @@ export function solveOrder(sim: Sim, perMin = 10): SolverLog {
     }
     if (!buildChain(sim, item, core, perMin, log)) {
       log.ok = false;
+      if (!log.fatal) {
+        // this part cannot be wired right now (space, routes): build the other parts first, a later round retries
+        failed.push(`${item}: ${log.error}`);
+        log.error = undefined;
+        continue;
+      }
       if (log.fatal) {
         // out of plates: make sure plates flow into the core so the caller can tick, then solve again
         const err = log.error;
         const cost = BUILDINGS[log.fatalType ?? 'conveyor'].cost;
-        const missing = (Object.keys(cost) as ItemId[]).filter((k) => (sim.state.inventory[k] ?? 0) < cost[k]!);
+        // short or running low (a few more buildings of this kind): make sure it flows into the core
+        const missing = (Object.keys(cost) as ItemId[]).filter((k) => (sim.state.inventory[k] ?? 0) < cost[k]! * 4);
         if (!missing.includes('iron_plate')) missing.push('iron_plate'); // belts always need plates
         for (const mat of missing) {
           if (hasSupply(sim, mat, core)) continue;
@@ -514,6 +677,7 @@ export function solveOrder(sim: Sim, perMin = 10): SolverLog {
       return log;
     }
   }
+  if (failed.length) log.error = failed.join(' | ');
   ensurePower(sim, log);
   return log;
 }

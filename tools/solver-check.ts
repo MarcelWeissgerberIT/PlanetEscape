@@ -13,10 +13,10 @@ for (let ch = 1; ch <= LEVELS.length; ch++) {
   let log = solveOrder(sim, 6);
   let secs = 0;
   let rounds = 1;
-  while (secs < 3000 && sim.state.missionIndex < ch) {
+  while (secs < (Number(process.env.PE_SECS) || 3000) && sim.state.missionIndex < ch) {
     sim.tick(1 / 30);
     secs += 1 / 30;
-    if (!log.ok && Math.round(secs * 30) % (240 * 30) === 0 && rounds < 8) { const l2 = solveOrder(sim, 6); rounds++; log = { ...l2, placed: [...log.placed, ...l2.placed] }; }
+    if (!log.ok && Math.round(secs * 30) % ((Number(process.env.PE_EVERY) || 240) * 30) === 0 && rounds < (Number(process.env.PE_ROUNDS) || 8)) { const l2 = solveOrder(sim, 6); rounds++; log = { ...l2, placed: [...log.placed, ...l2.placed] }; }
   }
   console.log(`  rounds ${rounds}`);
   const pb = powerBalance(sim);
