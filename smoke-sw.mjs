@@ -1,0 +1,14 @@
+import { chromium } from 'playwright';
+const browser = await chromium.launch({ executablePath: '/opt/pw-browsers/chromium' });
+const page = await browser.newPage({ viewport: { width: 1200, height: 800 } });
+page.on('pageerror', (e) => console.log('PAGEERROR', e.message));
+page.on('response', (r) => { if (r.status() >= 400) console.log('HTTP', r.status(), r.url()); });
+await page.goto('http://localhost:4179/', { waitUntil: 'load' });
+await page.waitForTimeout(3000);
+console.log('1st load', (await page.$('[data-act="playview"]')) ? 'ok' : 'MISSING', 'sw', await page.evaluate(() => !!navigator.serviceWorker.controller));
+await page.reload({ waitUntil: 'load' });
+await page.waitForTimeout(3000);
+console.log('reload', (await page.$('[data-act="playview"]')) ? 'ok' : 'MISSING', 'sw', await page.evaluate(() => !!navigator.serviceWorker.controller), 'caches', await page.evaluate(() => caches.keys()));
+const hall = await page.evaluate(async () => { const r = await fetch('./assets/buildings/hall8.webp'); return r.status + ' ' + (await r.blob()).size; });
+console.log('hall8 sprite via sw', hall);
+await browser.close();

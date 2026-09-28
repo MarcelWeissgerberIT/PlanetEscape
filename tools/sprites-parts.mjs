@@ -177,6 +177,10 @@ S.hall = `${housing(10, 10, 236, 236, 26)}
     <rect x="${46 + c * 62}" y="${46 + r * 62}" width="${[36, 20, 40, 12, 28, 40, 8, 32, 24][r * 3 + c]}" height="5" rx="2" fill="${CYAN}" filter="url(#glow)"/>`).join('')).join('')}
   ${hazard(26, 232, 204, 8)}`;
 
+for (const n of [4, 8, 12, 16]) {
+  S[`hall${n}`] = `${S.hall}<rect x="84" y="112" width="88" height="34" rx="8" fill="#0c0f13" stroke="${CYAN}" stroke-width="3" filter="url(#glow)"/><text x="128" y="137" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-weight="bold" font-size="24" fill="#ecfeff">${n}×${n}</text>`;
+}
+
 const windBase = `<g filter="url(#shadow)"><path d="${oct(30, 30, 196, 196, 40)}" fill="url(#steel)" stroke="#12161b" stroke-width="4"/>
   <path d="${oct(30, 30, 196, 196, 40)}" fill="#000" filter="url(#grain)"/></g>
   <path d="${oct(44, 44, 168, 168, 34)}" fill="url(#plate)" stroke="#12161b" stroke-width="3"/>

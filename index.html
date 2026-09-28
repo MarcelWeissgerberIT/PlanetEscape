@@ -13,6 +13,21 @@
     <link rel="icon" type="image/png" href="./favicon.png" />
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <title>Planet Escape</title>
+    <script>
+      // A deploy replaces every bundle; a page loaded in that moment may ask for a file that is gone. Reload once.
+      window.addEventListener('error', function (e) {
+        var t = e.target;
+        if (!t || t.tagName !== 'SCRIPT' && t.tagName !== 'LINK') return;
+        try {
+          if (sessionStorage.getItem('pe_reloaded')) return;
+          sessionStorage.setItem('pe_reloaded', '1');
+        } catch (_) {}
+        setTimeout(function () { location.reload(); }, 1500);
+      }, true);
+      window.addEventListener('load', function () {
+        setTimeout(function () { try { sessionStorage.removeItem('pe_reloaded'); } catch (_) {} }, 10000);
+      });
+    </script>
   </head>
   <body>
     <canvas id="game"></canvas>
