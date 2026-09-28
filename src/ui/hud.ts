@@ -1083,6 +1083,11 @@ export class Hud {
     const cam = this.renderer.cam;
     const [sx0, sy0] = cam.worldToScreen(x * TILE, y * TILE);
     const [sx1, sy1] = cam.worldToScreen((x + w) * TILE, (y + h) * TILE);
+    if (cam.width >= 900) {
+      // wide screens: the panel sits at the side, so the map only moves when the selection is off screen entirely
+      if (sx1 < 0 || sx0 > cam.width || sy1 < 0 || sy0 > cam.height) this.renderer.panTo((x + w / 2) * TILE, (y + h / 2) * TILE, cam.width / 2, cam.height / 2);
+      return;
+    }
     const topH = (this.top.getBoundingClientRect().height || 120) + 16;
     const panel = this.info.getBoundingClientRect();
     const barLimit = cam.height - (this.bottom.getBoundingClientRect().height || 160);
