@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP_ROM_BYTES, CRYSTAL_HZ, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_REGION, itemRgb, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -51,6 +51,24 @@ export type SimEvent =
   | { type: 'beep'; b: Building };
 
 export const ARITH = new Set<BuildingId>(['register', 'adder', 'subtractor', 'multiplier', 'divider']);
+const ITEM_RGB = (Object.keys(ITEMS) as ItemId[]).map((id) => {
+  const v = itemRgb(id);
+  return { id, r: v >> 16, g: (v >> 8) & 255, b: v & 255 };
+});
+/** The item whose colour is closest to the pixel, or null for a dark pixel (lamp off). */
+function nearestItem(r: number, g: number, b: number): ItemId | null {
+  if (r + g + b < 90) return null;
+  let best: ItemId | null = null, bd = Infinity;
+  for (const it of ITEM_RGB) {
+    const d = (it.r - r) ** 2 + (it.g - g) ** 2 + (it.b - b) ** 2;
+    if (d < bd) {
+      bd = d;
+      best = it.id;
+    }
+  }
+  return best;
+}
+
 /** A terminal's mainboard: connected tiles, its RAM cells in address order and the crystals of its oscillators. */
 export type Board = { key: string; tiles: Set<number>; cells: Building[]; crystals: number; turbo: number };
 
@@ -114,11 +132,17 @@ export class Sim {
   /** The item a lamp currently shows, if any. */
   lampItem(b: Building): ItemId | null {
     const k = Object.keys(b.output ?? {})[0] as ItemId | undefined;
-    return k ?? null;
+    if (k) return k;
+    // pass mode: an item that just ran through keeps the lamp lit for a moment, otherwise it would never be seen
+    return b.mode === 'pass' && (b.timer ?? 0) > 0 && b.mineItem ? b.mineItem : null;
   }
 
   /** Empty a lamp; the item goes back to the core stock. */
   clearLamp(b: Building) {
+    if (b.type === 'matrix') {
+      b.px = undefined;
+      return;
+    }
     const k = this.lampItem(b);
     if (k) this.addInv(k, 1);
     b.output = {};
@@ -137,6 +161,7 @@ export class Sim {
     this.state = state;
     this.grid = new Array(state.width * state.height).fill(null);
     this.rebuildGrid();
+    this.creative = state.options.mode === 'playground'; // the playground is always free of cost and requirements
   }
 
   rebuildGrid() {
@@ -507,6 +532,14 @@ export class Sim {
           buf.push(item);
           return true;
         }
+        if (b.type === 'matrix') {
+          // a pixel bucket: every item fills the next dark pixel in its colour
+          const px = b.px ?? (b.px = new Array<number>(MATRIX_SIZE * MATRIX_SIZE).fill(0));
+          const i = px.indexOf(0);
+          if (i < 0) return false;
+          px[i] = itemRgb(item);
+          return true;
+        }
         if (b.type === 'oscillator') {
           if ((b.clock ?? 0) + (b.turbo ?? 0) >= OSCILLATOR_CRYSTALS) return false;
           if (item === 'quartz') b.clock = (b.clock ?? 0) + 1;
@@ -675,7 +708,12 @@ export class Sim {
           b.missing = (b.clock ?? 0) + (b.turbo ?? 0) ? undefined : ['quartz'];
           break;
         case 'bus':
+        case 'matrix':
           b.status = 'ok';
+          break;
+        case 'screen':
+          b.working = this.state.time - (b.progress ?? -10) < 1; // a frame arrived within the last second
+          b.status = b.working ? 'ok' : 'idle';
           break;
         case 'adder':
         case 'subtractor':
@@ -1095,7 +1133,56 @@ export class Sim {
       for (let x = 0; x < r.w; x++) {
         const l = this.at(r.x + x, r.y + y);
         if (l?.type === 'lamp') l.output = {};
+        else if (l?.type === 'matrix' && x < r.w / MATRIX_SIZE && y < r.h / MATRIX_SIZE) l.px = undefined;
       }
+  }
+
+  // ---------- Video receiver ----------
+
+  /** Pixel region a receiver drives: 64x32 px (8x4 matrices) per scale step, right of the building. */
+  screenRect(b: Building): { x: number; y: number; w: number; h: number } {
+    const k = Math.max(1, Math.min(4, b.value ?? 1));
+    return { x: b.x + SCREEN_REGION.dx, y: b.y, w: SCREEN_REGION.w * MATRIX_SIZE * k, h: SCREEN_REGION.h * MATRIX_SIZE * k };
+  }
+
+  /** Write an RGBA frame (w x h, the receiver's resolution) onto matrices (8x8 blocks) and lamps (one pixel per tile). */
+  pushFrame(b: Building, rgba: Uint8ClampedArray, w: number, h: number) {
+    const r = this.screenRect(b);
+    if (w !== r.w || h !== r.h) return;
+    b.progress = this.state.time;
+    const tilesW = w / MATRIX_SIZE, tilesH = h / MATRIX_SIZE;
+    for (let my = 0; my < tilesH; my++)
+      for (let mx = 0; mx < tilesW; mx++) {
+        const m = this.at(r.x + mx, r.y + my);
+        if (m?.type !== 'matrix') continue;
+        const px = m.px ?? new Array<number>(MATRIX_SIZE * MATRIX_SIZE).fill(0);
+        for (let yy = 0; yy < MATRIX_SIZE; yy++)
+          for (let xx = 0; xx < MATRIX_SIZE; xx++) {
+            const i = ((my * MATRIX_SIZE + yy) * w + mx * MATRIX_SIZE + xx) * 4;
+            const rr = rgba[i], gg = rgba[i + 1], bb = rgba[i + 2];
+            px[yy * MATRIX_SIZE + xx] = rr + gg + bb < 60 ? 0 : (rr << 16) | (gg << 8) | bb;
+          }
+        m.px = px;
+      }
+    // lamps: one pixel per tile, nearest item colour
+    for (let y = 0; y < h; y++)
+      for (let x = 0; x < w; x++) {
+        const l = this.at(r.x + x, r.y + y);
+        if (l?.type !== 'lamp') continue;
+        const i = (y * w + x) * 4;
+        const item = nearestItem(rgba[i], rgba[i + 1], rgba[i + 2]);
+        l.mode = 'hold';
+        const cur = l.output ? Object.keys(l.output)[0] : undefined;
+        if (item && cur !== item) l.output = { [item]: 1 };
+        else if (!item && cur) l.output = {};
+      }
+  }
+
+  /** Packed colour of a display value: 1 = the terminal's own item, others from the palette. */
+  private displayRgb(b: Building, v: number): number {
+    if (!v) return 0;
+    const item = CHIP8_PALETTE[v & 15] ?? ((b.recipe as ItemId | null) ?? 'copper_wire');
+    return itemRgb(item);
   }
 
   private pushDisplay(b: Building, cpu: Chip8, force = false) {
@@ -1117,11 +1204,29 @@ export class Sim {
         const l = this.at(r.x + x, r.y + y);
         if (l?.type !== 'lamp') continue;
         l.mode = 'hold';
-        const on = cpu.display[y * CHIP8_W + x] === 1;
-        const has = !!Object.keys(l.output ?? {}).length;
-        if (on && !has) l.output = { [item]: 1 };
-        else if (!on && has) l.output = {};
-        else if (on && has && !(item in l.output!)) l.output = { [item]: 1 };
+        const v = cpu.display[y * CHIP8_W + x];
+        const want = v ? (CHIP8_PALETTE[v] ?? item) : null;
+        const cur = l.output ? Object.keys(l.output)[0] : undefined;
+        if (want && cur !== want) l.output = { [want]: 1 };
+        else if (!want && cur) l.output = {};
+      }
+    // LED matrices in the top-left 8x4 tiles of the region show 8x8 pixel blocks each (64 pixels per tile)
+    for (let my = 0; my < r.h / MATRIX_SIZE; my++)
+      for (let mx = 0; mx < r.w / MATRIX_SIZE; mx++) {
+        const m = this.at(r.x + mx, r.y + my);
+        if (m?.type !== 'matrix') continue;
+        const px = m.px ?? new Array<number>(MATRIX_SIZE * MATRIX_SIZE).fill(0);
+        let changed = !m.px;
+        for (let yy = 0; yy < MATRIX_SIZE; yy++)
+          for (let xx = 0; xx < MATRIX_SIZE; xx++) {
+            const rgb = this.displayRgb(b, cpu.display[(my * MATRIX_SIZE + yy) * CHIP8_W + mx * MATRIX_SIZE + xx]);
+            const k = yy * MATRIX_SIZE + xx;
+            if (px[k] !== rgb) {
+              px[k] = rgb;
+              changed = true;
+            }
+          }
+        if (changed) m.px = px;
       }
   }
 
@@ -1531,7 +1636,12 @@ export class Sim {
     if (b.type === 'lamp') {
       // hold: the pixel keeps its item and stays lit; pass: it forwards the item and is lit while one is inside
       b.status = 'ok';
-      if (key && b.mode === 'pass' && this.pushDir(b, key, b.dir)) b.output = {};
+      if ((b.timer ?? 0) > 0) b.timer = Math.max(0, b.timer! - 1 / 30);
+      if (key && b.mode === 'pass' && this.pushDir(b, key, b.dir)) {
+        b.output = {};
+        b.mineItem = key;
+        b.timer = 0.3; // afterglow
+      }
       return;
     }
     if (b.type === 'terminal' || ARITH.has(b.type)) return;

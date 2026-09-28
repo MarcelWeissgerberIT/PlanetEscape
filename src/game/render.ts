@@ -3,7 +3,7 @@ import { Camera, TILE } from './camera';
 import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W } from './chip8';
 import { ARITH } from './sim';
-import { BOARD_PARTS, CHIP_ROM_BYTES, CRYSTAL_HZ, OSCILLATOR_CRYSTALS, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -634,6 +634,10 @@ export class Renderer {
       this.drawBus(b);
       return;
     }
+    if (b.type === 'matrix' && alpha === 1) {
+      this.drawMatrix(b);
+      return;
+    }
     let img = buildingSprite(b.type);
     if (b.type === 'core') {
       const p = this.sim.shipProgress();
@@ -691,14 +695,17 @@ export class Renderer {
         sc.frame = frame;
         const c2 = sc.canvas.getContext('2d')!;
         const img = c2.createImageData(CHIP8_W, CHIP8_H);
-        const col = ITEMS[(b.recipe as ItemId) ?? 'copper_wire'].color;
-        const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(col);
-        const [cr, cg, cb] = m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [34, 211, 238];
+        const own = (b.recipe as ItemId) ?? 'copper_wire';
+        const rgb = (item: ItemId) => {
+          const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(ITEMS[item].color);
+          return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [34, 211, 238];
+        };
+        const pal = CHIP8_PALETTE.map((it, k) => (k ? rgb(it ?? own) : [4, 20, 26]));
         for (let i = 0; i < CHIP8_W * CHIP8_H; i++) {
-          const on = cpu.display[i];
-          img.data[i * 4] = on ? cr : 4;
-          img.data[i * 4 + 1] = on ? cg : 20;
-          img.data[i * 4 + 2] = on ? cb : 26;
+          const c = pal[cpu.display[i] & 15];
+          img.data[i * 4] = c[0];
+          img.data[i * 4 + 1] = c[1];
+          img.data[i * 4 + 2] = c[2];
           img.data[i * 4 + 3] = 255;
         }
         c2.putImageData(img, 0, 0);
@@ -737,6 +744,20 @@ export class Renderer {
       }
       return;
     }
+    if (b.type === 'screen') {
+      if (b.working && !this.lowDetail) this.animGlow(cx + sz * 0.3, cy - sz * 0.3, 4, '#f43f5e');
+      if (this.overlay || this.selected === b) {
+        const r = this.sim.screenRect(b);
+        const tw = r.w / MATRIX_SIZE, th = r.h / MATRIX_SIZE;
+        ctx.strokeStyle = 'rgba(244,63,94,0.7)';
+        ctx.lineWidth = 2 / Math.max(0.5, this.cam.zoom);
+        ctx.setLineDash([10, 6]);
+        ctx.strokeRect(r.x * TILE, r.y * TILE, tw * TILE, th * TILE);
+        ctx.setLineDash([]);
+        this.drawTag(r.x * TILE + (tw * TILE) / 2, r.y * TILE - 6, `${tw}×${th} LED matrix · ${r.w}×${r.h} px`, '#f43f5e');
+      }
+      return;
+    }
     if (b.type === 'oscillator') {
       const q = b.clock ?? 0, g = b.turbo ?? 0;
       for (let i = 0; i < OSCILLATOR_CRYSTALS; i++) {
@@ -758,6 +779,7 @@ export class Renderer {
         ctx.lineWidth = 3;
         ctx.strokeRect(b.x * TILE + 2, b.y * TILE + 2, TILE - 4, TILE - 4);
       }
+      if (this.lowDetail) return; // thousands of RAM cells: no arrows or numbers when zoomed out
       // arithmetic modules: output arrow, side inputs, and the number they hold
       this.drawArrow(b, b.dir, '#22d3ee');
       const back = ((b.dir + 2) & 3) as Dir;
@@ -1079,6 +1101,43 @@ export class Renderer {
         if (pc2) this.cellMark.set(pc2.id, '#f59e0b');
         if (ir && !this.cellMark.has(ir.id)) this.cellMark.set(ir.id, '#22d3ee');
       }
+    }
+  }
+
+  /** 8x8 RGB LEDs on one tile. */
+  private drawMatrix(b: Building) {
+    const { ctx } = this;
+    const x0 = b.x * TILE, y0 = b.y * TILE;
+    ctx.fillStyle = '#0b1016';
+    roundRect(ctx, x0 + 1, y0 + 1, TILE - 2, TILE - 2, 6);
+    ctx.fill();
+    const cell = TILE / MATRIX_SIZE;
+    const px = b.px;
+    if (this.lowDetail) {
+      // far away: one average colour per tile
+      if (!px) return;
+      let r = 0, g = 0, bl = 0, n = 0;
+      for (const v of px) if (v) { r += v >> 16; g += (v >> 8) & 255; bl += v & 255; n++; }
+      if (!n) return;
+      ctx.fillStyle = `rgba(${Math.round(r / n)},${Math.round(g / n)},${Math.round(bl / n)},${Math.min(1, 0.25 + n / 64)})`;
+      roundRect(ctx, x0 + 3, y0 + 3, TILE - 6, TILE - 6, 5);
+      ctx.fill();
+      return;
+    }
+    for (let i = 0; i < MATRIX_SIZE * MATRIX_SIZE; i++) {
+      const v = px ? px[i] : 0;
+      const cx = x0 + (i % MATRIX_SIZE) * cell, cy = y0 + Math.floor(i / MATRIX_SIZE) * cell;
+      if (!v) {
+        ctx.fillStyle = 'rgba(255,255,255,0.06)';
+        ctx.fillRect(cx + 2, cy + 2, cell - 3, cell - 3);
+        continue;
+      }
+      const col = `#${v.toString(16).padStart(6, '0')}`;
+      ctx.globalAlpha = 0.35;
+      ctx.fillStyle = col;
+      ctx.fillRect(cx, cy, cell, cell); // bloom
+      ctx.globalAlpha = 1;
+      ctx.fillRect(cx + 1.5, cy + 1.5, cell - 2.5, cell - 2.5);
     }
   }
 

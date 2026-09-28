@@ -21,7 +21,8 @@ export class Chip8 {
   stack: number[] = [];
   dt = 0;
   st = 0;
-  display = new Uint8Array(CHIP8_W * CHIP8_H);
+  display = new Uint8Array(CHIP8_W * CHIP8_H); // per pixel: bitmask of the 4 colour planes (XO-CHIP style), 0 = off
+  plane = 1; // planes DRW and CLS act on (Fn01)
   keys = new Uint8Array(16);
   waitingKey = -1; // register waiting for a key press (Fx0A), -1 = none
   dirty = true;
@@ -52,6 +53,7 @@ export class Chip8 {
     this.dt = 0;
     this.st = 0;
     this.display.fill(0);
+    this.plane = 1;
     this.keys.fill(0);
     this.waitingKey = -1;
     this.dirty = true;
@@ -130,7 +132,8 @@ export class Chip8 {
     switch (op >> 12) {
       case 0x0:
         if (op === 0x00e0) {
-          this.display.fill(0);
+          if (this.plane === 15) this.display.fill(0);
+          else for (let i = 0; i < this.display.length; i++) this.display[i] &= ~this.plane;
           this.dirty = true;
           this.syncHint = false;
         } else if (op === 0x00ee) {
@@ -230,23 +233,29 @@ export class Chip8 {
         v[x] = this.random() & nn;
         break;
       case 0xd: {
-        if (this.i + n > this.memLimit) {
-          this.halted = `memory at 0x${(this.i + n).toString(16).toUpperCase()} missing`;
+        // sprite: n rows of 8 pixels at (Vx, Vy), XOR drawn on every selected plane (one sprite per plane, back to
+        // back in memory), VF = collision, wraps around the edges
+        const planes = [1, 2, 4, 8].filter((p) => this.plane & p);
+        if (this.i + n * planes.length > this.memLimit) {
+          this.halted = `memory at 0x${(this.i + n * planes.length).toString(16).toUpperCase()} missing`;
           return;
         }
-        // sprite: n rows of 8 pixels at (Vx, Vy), XOR drawn, VF = collision, wraps around the edges
         const px = v[x] % CHIP8_W, py = v[y] % CHIP8_H;
         v[0xf] = 0;
-        for (let row = 0; row < n; row++) {
-          const bits = this.mem[(this.i + row) & 0xfff];
-          const yy = (py + row) % CHIP8_H;
-          for (let col = 0; col < 8; col++) {
-            if (!(bits & (0x80 >> col))) continue;
-            const xx = (px + col) % CHIP8_W;
-            const idx = yy * CHIP8_W + xx;
-            if (this.display[idx]) v[0xf] = 1;
-            this.display[idx] ^= 1;
+        let off = 0;
+        for (const p of planes) {
+          for (let row = 0; row < n; row++) {
+            const bits = this.mem[(this.i + off + row) & 0xfff];
+            const yy = (py + row) % CHIP8_H;
+            for (let col = 0; col < 8; col++) {
+              if (!(bits & (0x80 >> col))) continue;
+              const xx = (px + col) % CHIP8_W;
+              const idx = yy * CHIP8_W + xx;
+              if (this.display[idx] & p) v[0xf] = 1;
+              this.display[idx] ^= p;
+            }
           }
+          off += n;
         }
         this.dirty = true;
         this.syncHint = false;
@@ -269,6 +278,7 @@ export class Chip8 {
             this.waitingKey = x;
             this.syncHint = true;
             break;
+          case 0x01: this.plane = x; break; // Fn01: select colour planes (XO-CHIP)
           case 0x15: this.dt = v[x]; break;
           case 0x18: this.st = v[x]; break;
           case 0x1e: this.i = (this.i + v[x]) & 0xfff; break;
@@ -319,7 +329,7 @@ export function disasm(op: number): string {
     case 0xd: return `DRW ${R(x)}, ${R(y)}, ${n}`;
     case 0xe: return nn === 0x9e ? `SKP ${R(x)}` : nn === 0xa1 ? `SKNP ${R(x)}` : '?';
     case 0xf:
-      return nn === 0x07 ? `LD ${R(x)}, DT` : nn === 0x0a ? `LD ${R(x)}, K` : nn === 0x15 ? `LD DT, ${R(x)}` : nn === 0x18 ? `LD ST, ${R(x)}` : nn === 0x1e ? `ADD I, ${R(x)}` : nn === 0x29 ? `LD F, ${R(x)}` : nn === 0x33 ? `LD B, ${R(x)}` : nn === 0x55 ? `LD [I], ${R(x)}` : nn === 0x65 ? `LD ${R(x)}, [I]` : '?';
+      return nn === 0x01 ? `PLANE ${x}` : nn === 0x07 ? `LD ${R(x)}, DT` : nn === 0x0a ? `LD ${R(x)}, K` : nn === 0x15 ? `LD DT, ${R(x)}` : nn === 0x18 ? `LD ST, ${R(x)}` : nn === 0x1e ? `ADD I, ${R(x)}` : nn === 0x29 ? `LD F, ${R(x)}` : nn === 0x33 ? `LD B, ${R(x)}` : nn === 0x55 ? `LD [I], ${R(x)}` : nn === 0x65 ? `LD ${R(x)}, [I]` : '?';
   }
   return '?';
 }
@@ -454,6 +464,7 @@ export function assemble(source: string): AsmResult {
       case 'SHL': emit(0x800e | (reg(a0, it) << 8) | ((a1 ? reg(a1, it) : 0) << 4)); break;
       case 'RND': emit(0xc000 | (reg(a0, it) << 8) | num(a1, it, 0xff)); break;
       case 'DRW': emit(0xd000 | (reg(a0, it) << 8) | (reg(a1, it) << 4) | num(a2, it, 0xf)); break;
+      case 'PLANE': emit(0xf001 | (num(a0, it, 0xf) << 8)); break;
       case 'SKP': emit(0xe09e | (reg(a0, it) << 8)); break;
       case 'SKNP': emit(0xe0a1 | (reg(a0, it) << 8)); break;
       default:

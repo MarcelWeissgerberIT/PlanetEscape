@@ -56,6 +56,10 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   valve: { id: 'valve', kind: 'logic', size: 1, cost: { iron_plate: 6, circuit: 2 }, power: 0, rotatable: true },
   // display & control elements: a lamp is one pixel, a switch is a hand-operated gate
   lamp: { id: 'lamp', kind: 'logic', size: 1, cost: { iron_plate: 2, copper_wire: 1 }, power: 0, rotatable: true },
+  // 8x8 RGB LED matrix: 64 pixels on one tile, any colour; a terminal drives 8x4 of them as its display, belts fill it pixel by pixel
+  matrix: { id: 'matrix', kind: 'logic', size: 1, cost: { iron_plate: 4, circuit: 2, glass: 1 }, power: 0, rotatable: false },
+  // video receiver: streams a shared browser tab, the camera or a video file onto the matrices / lamps right of it
+  screen: { id: 'screen', kind: 'logic', size: 1, cost: { circuit: 4, glass: 4, copper_wire: 6 }, power: 2, rotatable: false },
   switch: { id: 'switch', kind: 'logic', size: 1, cost: { iron_plate: 3 }, power: 0, rotatable: true },
   // an 8-bit computer (CHIP-8): drives a 64x32 lamp display to its right, reads switches on its rim as keys
   terminal: { id: 'terminal', kind: 'logic', size: 2, cost: { machine_part: 10, steel_frame: 4 }, power: 6, rotatable: false },
@@ -91,6 +95,8 @@ export const BUILD_ORDER: BuildingId[] = [
   'mixer',
   'valve',
   'lamp',
+  'matrix',
+  'screen',
   'switch',
   'terminal',
   'oscillator',
@@ -148,7 +154,7 @@ export const SHIP_TOTAL = Object.values(SHIP_PARTS).reduce((a, c) => a + (c ?? 0
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
   { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
-  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'switch'], unlockRecipes: ['steel_frame'] },
+  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'matrix', 'screen', 'switch'], unlockRecipes: ['steel_frame'] },
   { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: [], unlockRecipes: ['circuit', 'glass'] },
   { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
@@ -203,6 +209,14 @@ export const TERMINAL_RAM_BANKS = 16; // circuits -> 256 B each = 4 KB
 export const TERMINAL_BANK_BYTES = 256;
 export const TERMINAL_CRYSTALS = 6; // quartz / glass -> 100 Hz each
 export const REGISTER_MAX = 255;
+export const MATRIX_SIZE = 8; // pixels per side of an LED matrix
+export const SCREEN_REGION = { dx: 2, w: 8, h: 4 }; // receiver display: 8x4 matrices (64x32 px) per scale step, right of the receiver
+/** Item colour as a packed 0xRRGGBB number (LED matrix pixels). */
+export function itemRgb(id: ItemId): number {
+  return parseInt(ITEMS[id].color.replace('#', ''), 16) || 0x22d3ee;
+}
+/** Display colours: pixel value (plane bitmask 1..15) -> item whose colour the lamp shows; 1 = the terminal's own colour item. */
+export const CHIP8_PALETTE: (ItemId | null)[] = [null, null, 'iron_ore', 'iron_plate', 'fuel', 'copper_ore', 'circuit', 'water', 'hull_plate', 'engine', 'quartz', 'ice', 'precision_part', 'fuel_cell', 'nav_computer', 'oil'];
 export const OSCILLATOR_CRYSTALS = 3; // crystals one oscillator holds
 export const CRYSTAL_HZ = { quartz: 100, glass: 2000 }; // glass = turbo crystal
 export const TERMINAL_HZ_MAX = 60000;

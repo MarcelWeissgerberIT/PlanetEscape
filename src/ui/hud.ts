@@ -1,4 +1,5 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
+import { EXAMPLES } from '../game/examples';
 import { BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_ORDER, ITEMS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
@@ -12,7 +13,7 @@ import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 import { CHIP8_H, CHIP8_W, disasm } from '../game/chip8';
-import { CRYSTAL_HZ, OSCILLATOR_CRYSTALS } from '../game/data';
+import { CHIP8_PALETTE, CRYSTAL_HZ, OSCILLATOR_CRYSTALS } from '../game/data';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
 export interface HudCallbacks {
@@ -26,6 +27,10 @@ export interface HudCallbacks {
   onCenter: () => void;
   onPlayChapter: (chapter: number) => void;
   onNewEditor: (w: number, h: number, random: boolean, seed?: number) => void;
+  onLoadExample: (id: string) => void;
+  onVideo: (b: Building, kind: 'screen' | 'camera' | 'file', file?: File) => Promise<string | null>; // resolves with an error message or null
+  onVideoStop: (b: Building) => void;
+  videoLive: (b: Building) => 'screen' | 'camera' | 'file' | null;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] {
@@ -79,6 +84,7 @@ export class Hud {
   private koraAction: { label: string; run: () => void } | null = null;
   editor = false;
   private editorTab: 'terrain' | 'build' = 'terrain';
+  private paintColor = '#22d3ee'; // LED matrix painter
   private brush = 1;
   private problemSince = new Map<number, number>(); // building id -> game time the problem was first seen
   private powerLowSince = -1;
@@ -181,7 +187,7 @@ export class Hud {
   }
 
   private freeOptions: GameOptions = { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
-  private titleView: 'main' | 'free' = 'main';
+  private titleView: 'main' | 'free' | 'playground' = 'main';
 
   private renderTitle() {
     const lang = getLang();
@@ -196,13 +202,22 @@ export class Hud {
                <button class="btn ghost small-line" data-act="story">${t('story_restart')}</button>`
             : `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story"><b>${t('mode_story')}</b><small>${t('mode_story_desc')}</small></button>`}
           <button class="btn mode" data-act="freeview"><b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small></button>
+          <button class="btn mode" data-act="playview"><b>${t('mode_playground')}</b><small>${t('mode_playground_desc')}</small></button>
           ${seedInput}
           <div class="row2">
             <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
             <button class="btn ghost" data-act="howto">${t('how_to')}</button>
           </div>
-          <button class="btn ghost small-line" data-act="editor">✎ ${t('editor')}</button>
           <a class="btn ghost ai-link" href="./ai/">${t('ai_page')} →</a>
+        </div>`;
+    const playView = `
+        <div class="title-buttons">
+          <button class="btn mode primary" data-act="editor"><b>✎ ${t('pg_empty')}</b><small>${t('pg_empty_desc')}</small></button>
+          <div class="lbl">${t('pg_examples')}</div>
+          <div class="examples">
+            ${EXAMPLES.map((ex) => `<button class="btn mode example" data-example="${ex.id}"><img class="icon" src="${buildingUrl(ex.icon as BuildingId)}" alt=""><span><b>${ex.title}</b><small>${getLang() === 'de' ? ex.de : ex.en}</small></span></button>`).join('')}
+          </div>
+          <button class="btn ghost" data-act="back">${t('back')}</button>
         </div>`;
     const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
     const freeView = `
@@ -222,8 +237,8 @@ export class Hud {
       <div class="title-content">
         <h1 class="logo"><span>PLANET</span><span class="accent">ESCAPE</span></h1>
         <p class="tagline">${t('tagline')}</p>
-        ${this.titleView === 'main' ? `<p class="intro">${t('intro')}</p>` : `<p class="intro"><b>${t('mode_free')}</b> · ${t('mode_free_desc')}</p>`}
-        ${this.titleView === 'main' ? mainView : freeView}
+        ${this.titleView === 'main' ? `<p class="intro">${t('intro')}</p>` : this.titleView === 'playground' ? `<p class="intro"><b>${t('mode_playground')}</b> · ${t('mode_playground_desc')}</p>` : `<p class="intro"><b>${t('mode_free')}</b> · ${t('mode_free_desc')}</p>`}
+        ${this.titleView === 'main' ? mainView : this.titleView === 'playground' ? playView : freeView}
         <div class="lang-switch">
           <button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">Deutsch</button>
           <button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">English</button>
@@ -269,6 +284,12 @@ export class Hud {
       } else if (act === 'freeview') {
         this.titleView = 'free';
         this.renderTitle();
+      } else if (act === 'playview') {
+        this.titleView = 'playground';
+        this.renderTitle();
+      } else if (target.closest<HTMLElement>('[data-example]')) {
+        const id = target.closest<HTMLElement>('[data-example]')!.dataset.example!;
+        void this.confirmNewGame().then((yes) => yes && this.cb.onLoadExample(id));
       } else if (act === 'back') {
         this.titleView = 'main';
         this.renderTitle();
@@ -300,7 +321,7 @@ export class Hud {
     let random = false;
     const render = () => {
       this.openModal(
-        `<h2>✎ ${t('editor')}</h2><p>${t('editor_desc')}</p>
+        `<h2>✎ ${t('pg_empty')}</h2><p>${t('editor_desc')}</p>
         <div class="menu-row"><span>${t('ed_width')}</span><input id="edw" class="text-input num" type="number" min="24" max="320" value="96"></div>
         <div class="menu-row"><span>${t('ed_height')}</span><input id="edh" class="text-input num" type="number" min="24" max="320" value="96"></div>
         <div class="menu-row"><span>${t('ed_start')}</span><span><button class="chip ${random ? '' : 'active'}" data-rand="0">${t('ed_blank')}</button><button class="chip ${random ? 'active' : ''}" data-rand="1">${t('ed_random')}</button></span></div>
@@ -326,7 +347,7 @@ export class Hud {
 
   setEditor(on: boolean) {
     this.editor = on;
-    this.sim.creative = on;
+    this.sim.creative = on || this.sim.state.options.mode === 'playground';
     this.editorTab = 'terrain';
     this.input.setTool({ kind: 'none' });
     this.selectBuilding(null);
@@ -572,6 +593,7 @@ export class Hud {
         <div class="mrows">${builds}${rows}</div>`;
     } else body = `<div class="mtitle">🚀 ${t('launch_title')}</div>`;
     if (this.editor) body = `<div class="mtitle"><span class="mnum">✎ ${t('editor')}</span> ${st.width}×${st.height}</div><div class="mtext">${t('ed_hint')}</div>`;
+    else if (st.options.mode === 'playground') body = `<div class="mtitle"><span class="mnum">${t('mode_playground')}</span> ${st.width}×${st.height}</div><div class="mtext">${st.note ? (getLang() === 'de' ? st.note.title : st.note.title) + ' · ' : ''}${t('pg_hint')}</div>`;
     if (!tut && m && st.options.mode === 'free') {
       const p = Math.round(this.sim.shipProgress() * 100);
       body += `<div class="mtext">${t('ship_progress')}: ${p}%</div>`;
@@ -582,11 +604,12 @@ export class Hud {
     const low = demand > supply;
     const nProblems = this.problems.length;
     const openContracts = st.contracts.filter((c) => !c.accepted).length;
+    const playground = st.options.mode === 'playground' && !tut;
     const topHtml = `
-      <button class="kora-card" data-act="missions">
+      ${playground && !this.editor ? '' : `<button class="kora-card" data-act="missions">
         <img class="kora-avatar ${tut ? 'talk' : ''}" src="${uiUrl('kora.webp')}" alt="KORA">
         <div class="kora-body">${body}</div>
-      </button>
+      </button>`}
       <div class="top-right">
         <div class="power ${low ? 'low' : ''} ${st.storm > 0 ? 'storm' : ''}" title="${t('power')}">
           <span class="plabel">${st.storm > 0 ? icon('storm', 'sm') : icon('bolt', 'sm')} ${demand}/${supply}</span>
@@ -596,8 +619,8 @@ export class Hud {
         <button class="iconbtn ${this.cb.getSpeed() === 0 ? 'active' : ''}" data-act="pause" title="${t('pause')} (Space)">${this.cb.getSpeed() === 0 ? icon('play') : icon('pause')}</button>
         <button class="iconbtn speed ${this.cb.getSpeed() > 1 ? 'active' : ''}" data-act="speed" title="${t('speed')} (F)">${this.cb.getSpeed() > 1 ? `<b>${this.cb.getSpeed()}×</b>` : icon('fast')}</button>
         <button class="iconbtn ${this.renderer.overlay ? 'active' : ''}" data-act="overlay" title="${t('overlay')}">${icon('scan')}</button>
-        <button class="iconbtn ${openContracts ? 'badge' : ''}" data-act="contracts" title="${t('contracts')}" data-badge="${openContracts}">${icon('contracts')}</button>
-        <button class="iconbtn" data-act="upgrades" title="${t('upgrades')}">${icon('research')}</button>
+        ${playground ? '' : `<button class="iconbtn ${openContracts ? 'badge' : ''}" data-act="contracts" title="${t('contracts')}" data-badge="${openContracts}">${icon('contracts')}</button>
+        <button class="iconbtn" data-act="upgrades" title="${t('upgrades')}">${icon('research')}</button>`}
         <button class="iconbtn ${this.minimapOpen ? 'active' : ''}" data-act="minimap" title="${t('minimap')}">${icon('minimap')}</button>
         <button class="iconbtn" data-act="center" title="${t('reset_view')}">${icon('center')}</button>
         <button class="iconbtn" data-act="menu" title="${t('menu')}">${icon('menu')}</button>
@@ -926,7 +949,11 @@ export class Hud {
     const ttt: Blueprint = grid(t('preset_ttt'), 3, 3);
     // a switch in front of every lamp column so single items can be steered into cells
     const board: Blueprint = { name: t('preset_ttt'), w: 3, h: 5, items: [...ttt.items.map((i) => ({ ...i, dy: i.dy + 2 })), ...[0, 1, 2].map((x) => ({ type: 'switch' as const, dx: x, dy: 1, dir: 2 as const, recipe: null, open: false })), ...[0, 1, 2].map((x) => ({ type: 'conveyor' as const, dx: x, dy: 0, dir: 2 as const, recipe: null }))] };
-    return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8), this.displayBlueprint()];
+    const matrix: Blueprint = { name: t('preset_matrix'), w: 8, h: 4, items: [] };
+    for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) matrix.items.push({ type: 'matrix', dx: x, dy: y, dir: 0, recipe: null });
+    const wall: Blueprint = { name: t('preset_wall'), w: 18, h: 8, items: [{ type: 'screen', dx: 0, dy: 0, dir: 0, recipe: null }] };
+    for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) wall.items.push({ type: 'matrix', dx: 2 + x, dy: y, dir: 0, recipe: null });
+    return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8), matrix, wall, this.displayBlueprint()];
   }
 
   showBlueprints() {
@@ -1263,6 +1290,26 @@ export class Hud {
         body = `<div class="lbl">${t('lamp_state')}</div><div class="bufs">${item ? `${itemImg(item, 'icon')} <b>${tItem(item)}</b> <button class="btn small" data-act="clear">${t('lamp_clear')}</button>` : `<span class="dim">${t('lamp_off')}</span>`}</div>
           <div class="dirs"><span class="lbl">${t('lamp_mode')}</span><button class="chip ${(b.mode ?? 'hold') === 'hold' ? 'active' : ''}" data-mode="hold">${t('lamp_hold')}</button><button class="chip ${b.mode === 'pass' ? 'active' : ''}" data-mode="pass">${t('lamp_pass')}</button></div>
           ${b.mode === 'pass' ? dirPicker : ''}${picker(t('lamp_filter'))}`;
+      } else if (b.type === 'screen') {
+        const live = this.cb.videoLive(b);
+        const r = this.sim.screenRect(b);
+        const k = Math.max(1, Math.min(4, b.value ?? 1));
+        body = `<div class="lbl">${live ? `<span class="okline">● ${t('vid_live')} · ${t(`vid_${live}` as 'vid_screen')}</span>` : `<span class="dim">○ ${t('vid_idle')}</span>`}</div>
+          <div class="term-btns">
+            <button class="btn small ${live === 'screen' ? 'primary' : ''}" data-act="vid-screen">${t('vid_screen')}</button>
+            <button class="btn small ${live === 'camera' ? 'primary' : ''}" data-act="vid-camera">${t('vid_camera')}</button>
+            <button class="btn small ${live === 'file' ? 'primary' : ''}" data-act="vid-file">${t('vid_file')}</button>
+            ${live ? `<button class="btn small" data-act="vid-stop">■ ${t('vid_stop')}</button>` : ''}
+            <input id="vidfile" class="file-hidden" type="file" accept="video/*">
+          </div>
+          <div class="dirs"><span class="lbl">${t('vid_size')}</span>${[1, 2, 3, 4].map((n) => `<button class="chip ${k === n ? 'active' : ''}" data-value="${n}">${8 * n}×${4 * n}</button>`).join('')}<small class="dim"> · ${r.w}×${r.h} px</small></div>
+          <p class="save-hint">${t('vid_hint')}</p>`;
+      } else if (b.type === 'matrix') {
+        const px = b.px ?? [];
+        const cells = Array.from({ length: 64 }, (_, i) => `<button class="mx-cell" data-px="${i}" style="background:${px[i] ? '#' + px[i].toString(16).padStart(6, '0') : 'rgba(255,255,255,0.08)'}"></button>`).join('');
+        body = `<div class="mx-grid">${cells}</div>
+          <div class="dirs"><span class="lbl">${t('mx_color')}</span><input type="color" id="mxcolor" value="${this.paintColor}"><button class="chip" data-act="mx-fill">${t('mx_fill')}</button><button class="chip" data-act="clear">${t('lamp_clear')}</button></div>
+          <p class="save-hint">${t('matrix_hint')}</p>`;
       } else if (b.type === 'oscillator') {
         const q = b.clock ?? 0, g = b.turbo ?? 0;
         body = `${statusLine()}<div class="arith-val">${itemImg('quartz', 'icon xs')} <b class="num">${q}</b> ${itemImg('glass', 'icon xs')} <b class="num">${g}</b> <small>· ${q + g}/${OSCILLATOR_CRYSTALS} · ${q * CRYSTAL_HZ.quartz + g * CRYSTAL_HZ.glass} Hz</small></div><p class="save-hint">${t('oscillator_hint')}</p>`;
@@ -1314,9 +1361,16 @@ export class Hud {
     const c2 = canvas.getContext('2d')!;
     c2.fillStyle = '#04141a';
     c2.fillRect(0, 0, canvas.width, canvas.height);
-    c2.fillStyle = ITEMS[(b.recipe as ItemId) ?? 'copper_wire'].color;
+    const own = ITEMS[(b.recipe as ItemId) ?? 'copper_wire'].color;
     const px = canvas.width / CHIP8_W, py = canvas.height / CHIP8_H;
-    for (let y = 0; y < CHIP8_H; y++) for (let x = 0; x < CHIP8_W; x++) if (cpu.display[y * CHIP8_W + x]) c2.fillRect(x * px, y * py, px - 0.5, py - 0.5);
+    for (let y = 0; y < CHIP8_H; y++)
+      for (let x = 0; x < CHIP8_W; x++) {
+        const v = cpu.display[y * CHIP8_W + x] & 15;
+        if (!v) continue;
+        const it = CHIP8_PALETTE[v];
+        c2.fillStyle = it ? ITEMS[it].color : own;
+        c2.fillRect(x * px, y * py, px - 0.5, py - 0.5);
+      }
   }
 
   private installTerminalKeys() {
@@ -1514,10 +1568,51 @@ export class Hud {
         this.toast(t('term_display_paste', { x: r.x, y: r.y }), 5000);
         return;
       }
-      if (target.dataset.act === 'clear' && b.type === 'lamp') {
+      if (b.type === 'screen' && target.dataset.act?.startsWith('vid-')) {
+        const act = target.dataset.act.slice(4);
+        if (act === 'stop') {
+          this.cb.onVideoStop(b);
+          this.showInfo(b);
+        } else if (act === 'file') {
+          const input = this.info.querySelector('#vidfile') as HTMLInputElement | null;
+          if (!input) return;
+          input.onchange = () => {
+            const f = input.files?.[0];
+            if (f) void this.cb.onVideo(b, 'file', f).then((err) => (err ? this.toast(`⚠ ${err}`, 5000, 'error') : this.showInfo(b)));
+          };
+          input.click();
+        } else {
+          void this.cb.onVideo(b, act as 'screen' | 'camera').then((err) => (err ? this.toast(`⚠ ${err}`, 5000, 'error') : this.showInfo(b)));
+        }
+        sfx.select();
+        return;
+      }
+      if (b.type === 'screen' && target.dataset.value !== undefined) {
+        b.value = Number(target.dataset.value);
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'clear' && (b.type === 'lamp' || b.type === 'matrix')) {
         this.sim.clearLamp(b);
         sfx.select();
         this.showInfo(b);
+        return;
+      }
+      if (b.type === 'matrix' && (target.dataset.px !== undefined || target.dataset.act === 'mx-fill')) {
+        const input = this.info.querySelector('#mxcolor') as HTMLInputElement | null;
+        if (input) this.paintColor = input.value;
+        const rgb = parseInt(this.paintColor.replace('#', ''), 16) || 0;
+        const px = b.px ?? (b.px = new Array<number>(64).fill(0));
+        if (target.dataset.act === 'mx-fill') px.fill(rgb);
+        else {
+          const i = Number(target.dataset.px);
+          px[i] = px[i] === rgb ? 0 : rgb; // same colour again = off
+        }
+        sfx.select();
+        const cell = target.dataset.px !== undefined ? (target as HTMLElement) : null;
+        if (cell) cell.style.background = px[Number(cell.dataset.px)] ? this.paintColor : 'rgba(255,255,255,0.08)';
+        else this.showInfo(b);
         return;
       }
       if (target.dataset.dir !== undefined) {
@@ -1925,28 +2020,31 @@ export class Hud {
       .map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon xs')}${n}</span>`)
       .join(' ');
     this.openModal(
-      `<h2>${t('menu')}</h2>
-      <div class="menu-row"><span>${t('language')}</span>
-        <span><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
-      <div class="menu-row"><span>${t('sound')}</span>
-        <span><button class="chip ${soundEnabled() ? 'active' : ''}" data-sound="on">${t('on')}</button><button class="chip ${soundEnabled() ? '' : 'active'}" data-sound="off">${t('off')}</button></span></div>
-      <div class="menu-row"><span>${t('ambience')}</span>
-        <span><button class="chip ${ambientEnabled() ? 'active' : ''}" data-ambient="on">${t('on')}</button><button class="chip ${ambientEnabled() ? '' : 'active'}" data-ambient="off">${t('off')}</button></span></div>
-      <div class="menu-row"><span>${t('mode')}</span><span>${st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}/${MISSIONS.length}` : t('mode_free')}</span></div>
-      <div class="menu-row"><span>${t('seed')}</span><span class="mono">${st.seed}</span></div>
-      <div class="menu-row"><span>${t('playtime')}</span><span>${fmtTime(st.time)}</span></div>
-      <div class="menu-row"><span>Build</span><span class="mono">${__BUILD__}</span></div>
-      <div class="menu-row"><span>${t('produced')}</span><span class="wrap">${produced || '–'}</span></div>
-      <button class="btn" data-act="save">${icon('save', 'sm')} ${t('save')}</button>
-      <button class="btn" data-act="transfer">${icon('transfer', 'sm')} ${t('transfer')}</button>
-      <button class="btn" data-act="blueprints">${icon('blueprint', 'sm')} ${t('blueprints')}</button>
-      ${st.note && !this.editor ? `<button class="btn" data-act="note">${t('save_note')}</button>` : ''}
-      ${st.options.mode === 'free' ? (this.editor ? `<button class="btn" data-act="ednote">✎ ${t('ed_note')}</button><button class="btn primary" data-act="edtoggle">▶ ${t('ed_play')}</button>` : `<button class="btn" data-act="edtoggle">✎ ${t('editor')}</button>`) : ''}
-      <button class="btn" data-act="howto">${t('how_to')}</button>
-      <a class="btn" href="./ai/" style="text-decoration:none;text-align:center">${t('ai_page')} →</a>
-      <button class="btn danger" data-act="new">${t('new_game')}</button>
-      <button class="btn primary" data-act="close">${t('close')}</button>
-      <p class="save-hint">${t('save_hint')}</p>`,
+      `<h2>${icon('menu', 'sm')} ${t('menu')}</h2>
+      <div class="mgrid">
+        <div class="stat"><small>${t('mode')}</small><b>${st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}/${MISSIONS.length}` : st.options.mode === 'playground' ? t('mode_playground') : t('mode_free')}</b></div>
+        <div class="stat"><small>${t('playtime')}</small><b>${fmtTime(st.time)}</b></div>
+        <div class="stat"><small>${t('seed')}</small><b class="mono">${st.seed}</b></div>
+        <div class="stat"><small>Build</small><b class="mono">${__BUILD__}</b></div>
+      </div>
+      <h3>${icon('settings', 'sm')} ${t('settings')}</h3>
+      <div class="mset">
+        <div class="menu-row"><span>${t('language')}</span><span class="seg"><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
+        <div class="menu-row"><span>${t('sound')}</span><span class="seg"><button class="chip ${soundEnabled() ? 'active' : ''}" data-sound="on">${t('on')}</button><button class="chip ${soundEnabled() ? '' : 'active'}" data-sound="off">${t('off')}</button></span></div>
+        <div class="menu-row"><span>${t('ambience')}</span><span class="seg"><button class="chip ${ambientEnabled() ? 'active' : ''}" data-ambient="on">${t('on')}</button><button class="chip ${ambientEnabled() ? '' : 'active'}" data-ambient="off">${t('off')}</button></span></div>
+      </div>
+      <h3>${icon('save', 'sm')} ${t('section_save')}</h3>
+      <div class="mtiles">
+        <button class="tile" data-act="save">${icon('save')}<span>${t('save_now')}</span></button>
+        <button class="tile" data-act="transfer">${icon('transfer')}<span>${t('transfer_short')}</span></button>
+        <button class="tile" data-act="blueprints">${icon('blueprint')}<span>${t('blueprints')}</span></button>
+        ${st.note && !this.editor ? `<button class="tile" data-act="note">${icon('note')}<span>${t('save_note')}</span></button>` : ''}
+        ${st.options.mode === 'free' || st.options.mode === 'playground' ? (this.editor ? `<button class="tile" data-act="ednote">${icon('note')}<span>${t('ed_note')}</span></button><button class="tile primary" data-act="edtoggle">${icon('play')}<span>${t('ed_play')}</span></button>` : `<button class="tile" data-act="edtoggle">${icon('pencil')}<span>${t('editor')}</span></button>`) : ''}
+        <button class="tile" data-act="howto">${icon('help')}<span>${t('how_to')}</span></button>
+        <a class="tile" href="./ai/">${icon('spark')}<span>${t('ai_page')}</span></a>
+      </div>
+      <div class="row2"><button class="btn danger" data-act="new">${icon('plus', 'sm')} ${t('new_game')}</button><button class="btn primary" data-act="close">${t('close')}</button></div>
+      <p class="save-hint">${t('save_hint')}${produced ? ` · ${t('produced')}: ${produced}` : ''}</p>`,
       (target) => {
         if (target.dataset.lang) {
           setLang(target.dataset.lang as Lang);
@@ -1985,13 +2083,20 @@ export class Hud {
     const raw = JSON.stringify(this.sim.state);
     const encoded = 'PE1.' + btoa(unescape(encodeURIComponent(raw)));
     this.openModal(
-      `<h2>${icon('transfer', 'sm')} ${t('transfer')}</h2>
-      <p>${t('transfer_hint')}</p>
-      <div class="cbtns"><button class="btn small primary" data-act="copy">${t('copy_clip')}</button><button class="btn small" data-act="download">${t('download')}</button></div>
-      <h3>${t('import')}</h3>
-      <textarea id="importbox" rows="4" placeholder="PE1.…"></textarea>
-      <div class="cbtns"><button class="btn small primary" data-act="import">${t('import')}</button><button class="btn small" data-act="pickfile">${t('import_file')}</button><input id="importfile" class="file-hidden" type="file" accept=".json,.txt,application/json,text/plain"></div>
-      <button class="btn" data-act="close">${t('close')}</button>`,
+      `<h2>${icon('transfer', 'sm')} ${t('transfer_short')}</h2>
+      <div class="xcard">
+        <h3>${icon('download', 'sm')} ${t('export')}</h3>
+        <p>${t('export_hint')}</p>
+        <div class="row2"><button class="btn primary" data-act="copy">${icon('copy', 'sm')} ${t('copy_clip')}</button><button class="btn" data-act="download">${icon('download', 'sm')} ${t('download')}</button></div>
+        <div class="xmeta"><span class="mono">${(raw.length / 1024).toFixed(0)} KB</span> · ${this.sim.state.buildings.length} ${t('buildings_n')} · ${this.sim.state.width}×${this.sim.state.height}</div>
+      </div>
+      <div class="xcard" id="importcard">
+        <h3>${icon('upload', 'sm')} ${t('import')}</h3>
+        <p>${t('import_hint')}</p>
+        <textarea id="importbox" rows="3" placeholder="PE1.…  /  { JSON }"></textarea>
+        <div class="row2"><button class="btn primary" data-act="import">${icon('upload', 'sm')} ${t('import')}</button><button class="btn" data-act="pickfile">${t('import_file')}</button><input id="importfile" class="file-hidden" type="file" accept=".json,.txt,application/json,text/plain"></div>
+      </div>
+      <button class="btn ghost" data-act="close">${t('close')}</button>`,
       (target) => {
         const act = target.dataset.act;
         if (act === 'copy') {
@@ -2014,6 +2119,19 @@ export class Hud {
       const f = file.files?.[0];
       if (!f) return;
       f.text().then((txt) => this.importText(txt));
+    });
+    // drag a save file onto the import card
+    const card = this.modal.querySelector('#importcard') as HTMLElement | null;
+    card?.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      card.classList.add('drop');
+    });
+    card?.addEventListener('dragleave', () => card.classList.remove('drop'));
+    card?.addEventListener('drop', (e) => {
+      e.preventDefault();
+      card.classList.remove('drop');
+      const f = e.dataTransfer?.files?.[0];
+      if (f) f.text().then((txt) => this.importText(txt));
     });
   }
 

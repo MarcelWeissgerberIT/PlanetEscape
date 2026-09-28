@@ -102,7 +102,7 @@ export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOpt
   if (options.mode === 'story') return levelState(null, 0, options);
   const width = custom ? Math.max(24, Math.min(320, Math.round(custom.w))) : (MAP_SIZES[options.mapSize] ?? 120);
   const height = custom ? Math.max(24, Math.min(320, Math.round(custom.h))) : width;
-  const all = options.allUnlocked;
+  const all = options.allUnlocked || options.mode === 'playground';
   const terrain: TerrainId[] = custom?.blank ? new Array(width * height).fill('ground') : generateTerrain(seed, width, height);
   const r2 = rng(seed ^ 0x5bd1e995);
   const hard = options.difficulty === 'hard';

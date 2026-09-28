@@ -1,6 +1,8 @@
 import './style.css';
 import { preloadAll } from './game/assets';
 import { BUILD_ORDER, ITEM_ORDER } from './game/data';
+import { EXAMPLES } from './game/examples';
+import { startVideo, stopVideo, tickVideo, videoLive } from './game/video';
 import { Input } from './game/input';
 import { Renderer } from './game/render';
 import * as Save from './game/save';
@@ -92,10 +94,30 @@ const hud = new Hud(sim, input, renderer, {
   },
   onNewEditor: (w: number, h: number, random: boolean, seed?: number) => {
     Save.clear();
-    swapState(newGame(seed ?? Math.floor(Math.random() * 1e9), { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: true, storms: false }, { w, h, blank: !random }));
+    swapState(newGame(seed ?? Math.floor(Math.random() * 1e9), { mode: 'playground', mapSize: 'medium', infiniteOre: true, allUnlocked: true, storms: false }, { w, h, blank: !random }));
     Save.save(sim.state);
     start();
     hud.setEditor(true);
+  },
+  onVideo: async (b, kind, file) => {
+    try {
+      await startVideo(b.id, kind, file);
+      return null;
+    } catch (e) {
+      const name = (e as Error)?.name ?? '';
+      return name === 'NotAllowedError' ? t('vid_denied') : name === 'NotFoundError' || (e as Error)?.message === 'unsupported' ? t('vid_unsupported') : String((e as Error)?.message ?? e);
+    }
+  },
+  onVideoStop: (b) => stopVideo(b.id),
+  videoLive: (b) => videoLive(b.id),
+  onLoadExample: (id: string) => {
+    const ex = EXAMPLES.find((e) => e.id === id);
+    if (!ex) return;
+    Save.clear();
+    swapState(ex.build());
+    Save.save(sim.state);
+    start();
+    if (sim.state.note) setTimeout(() => hud.showNote(), 400);
   },
   onPlayChapter: (chapter: number) => {
     Save.clear();
@@ -192,6 +214,7 @@ function frame(now: number) {
       Save.save(sim.state);
     }
   }
+  if (playing && speed > 0) tickVideo(sim, now);
   renderer.draw(dt);
   if (playing) hud.updateFloating();
   requestAnimationFrame(frame);

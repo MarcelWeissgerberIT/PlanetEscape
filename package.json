@@ -14,10 +14,13 @@
     "mcp:start": "node mcp/dist/index.mjs",
     "mcp:test": "node mcp/test-client.mjs",
     "ray:check": "esbuild tools/ray-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/ray-check.mjs --log-level=warning && node mcp/dist/ray-check.mjs",
+    "blocks:check": "esbuild tools/blocks-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/blocks-check.mjs --log-level=warning && node mcp/dist/blocks-check.mjs",
+    "examples:check": "esbuild tools/examples-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/examples-check.mjs --log-level=warning && node mcp/dist/examples-check.mjs",
     "board:check": "esbuild tools/board-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/board-check.mjs --log-level=warning && node mcp/dist/board-check.mjs",
     "solver:check": "esbuild tools/solver-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/solver-check.mjs --log-level=warning && node mcp/dist/solver-check.mjs",
     "save:ttt": "esbuild tools/make-save-ttt.ts --bundle --platform=node --format=esm --outfile=mcp/dist/make-save-ttt.mjs --log-level=warning && node mcp/dist/make-save-ttt.mjs",
     "save:ray": "esbuild tools/make-save-raycaster.ts --bundle --platform=node --format=esm --outfile=mcp/dist/make-save-raycaster.mjs --log-level=warning && node mcp/dist/make-save-raycaster.mjs",
+    "save:blocks": "esbuild tools/make-save-blocks.ts --bundle --platform=node --format=esm --outfile=mcp/dist/make-save-blocks.mjs --log-level=warning && node mcp/dist/make-save-blocks.mjs",
     "save:terminal": "esbuild tools/make-save-terminal.ts --bundle --platform=node --format=esm --outfile=mcp/dist/make-save-terminal.mjs --log-level=warning && node mcp/dist/make-save-terminal.mjs"
   },
   "devDependencies": {

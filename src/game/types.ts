@@ -49,6 +49,8 @@ export type BuildingId =
   | 'mixer'
   | 'valve'
   | 'lamp'
+  | 'matrix'
+  | 'screen'
   | 'switch'
   | 'terminal'
   | 'oscillator'
@@ -111,6 +113,7 @@ export interface Building {
   working?: boolean;
   // miner
   mineItem?: ItemId;
+  px?: number[]; // LED matrix: 64 pixels row by row, packed 0xRRGGBB, 0 = off
   // splitter / output round robin
   rr?: number;
   // storage
@@ -169,7 +172,7 @@ export interface MissionDef {
   reward?: Partial<Record<ItemId, number>>; // items KORA hands over on completion (bootstraps the next chain)
 }
 
-export type GameMode = 'story' | 'free';
+export type GameMode = 'story' | 'free' | 'playground'; // playground: build anything for free, no orders
 
 export interface GameOptions {
   mode: GameMode;

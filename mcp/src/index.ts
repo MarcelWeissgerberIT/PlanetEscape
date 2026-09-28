@@ -149,7 +149,7 @@ function depositClusters() {
 }
 
 const TERRAIN_CHAR: Record<TerrainId, string> = { ground: '.', rock: '#', iron_ore: 'I', copper_ore: 'C', quartz: 'Q', ice: 'W', oil: 'O' };
-const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L', lamp: 'o', switch: '=', terminal: 'Z', oscillator: 'q', bus: '~', register: 'r', adder: '+', subtractor: '-', multiplier: '*', divider: '/' };
+const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L', lamp: 'o', matrix: '#', screen: 'v', switch: '=', terminal: 'Z', oscillator: 'q', bus: '~', register: 'r', adder: '+', subtractor: '-', multiplier: '*', divider: '/' };
 const ARROWS = ['^', '>', 'v', '<'];
 
 function asciiMap(x0: number, y0: number, w: number, h: number): string {
@@ -172,7 +172,7 @@ function screenText(cpu: { display: Uint8Array }): string {
   const rows: string[] = [];
   for (let y = 0; y < 32; y++) {
     let r = '';
-    for (let x = 0; x < 64; x++) r += cpu.display[y * 64 + x] ? '#' : '.';
+    for (let x = 0; x < 64; x++) r += cpu.display[y * 64 + x] ? (cpu.display[y * 64 + x] === 1 ? '#' : cpu.display[y * 64 + x].toString(16)) : '.';
     rows.push(r);
   }
   return rows.join('\n');

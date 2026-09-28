@@ -1,0 +1,85 @@
+// Builds every playground example headlessly and checks the circuits do what their notes promise.
+import { EXAMPLES, buildAdder, buildBinaryCounter, buildPongMatrix, buildRunningLight, buildVideoWall } from '../src/game/examples';
+import { Sim } from '../src/game/sim';
+
+for (const ex of EXAMPLES) {
+  const st = ex.build();
+  const sim = new Sim(st);
+  for (let i = 0; i < 60; i++) sim.tick(1 / 30);
+  console.log(`${ex.id.padEnd(8)} ${String(st.buildings.length).padStart(5)} buildings, ${st.width}x${st.height}, note ${st.note ? 'ok' : 'MISSING'}, creative ${sim.creative}`);
+  if (!st.note || st.options.mode !== 'playground' || !sim.creative) throw new Error(`${ex.id}: bad state`);
+}
+// adder: 3 + 2 = 5 on the lamps
+{
+  const st = buildAdder();
+  const sim = new Sim(st);
+  const tick = (s: number) => { for (let i = 0; i < s * 30; i++) sim.tick(1 / 30); };
+  const sw = st.buildings.filter((b) => b.type === 'switch').sort((a, b) => a.y - b.y);
+  const tap = (s: typeof sw[0], n: number) => { for (let i = 0; i < n; i++) { s.open = true; tick(1.5); } };
+  tap(sw[0], 3);
+  tap(sw[2], 2);
+  tick(3);
+  const regs = st.buildings.filter((b) => b.type === 'register').sort((a, b) => a.y - b.y || a.x - b.x);
+  console.log('registers before =:', regs.map((r) => r.value));
+  if (regs[0].value !== 3 || regs[2].value !== 2) throw new Error('operands not stored');
+  tap(sw[1], 1);
+  tick(12);
+  const sum = regs.find((r) => r.x === Math.max(...regs.map((q) => q.x)))!;
+  const lamps = st.buildings.filter((b) => b.type === 'lamp').sort((a, b) => a.x - b.x).map((l) => (sim.lampItem(l) ? '1' : '0')).join('');
+  console.log('sum register', sum.value, 'lamps', lamps);
+  if (sum.value !== 5 || lamps !== '00000101') throw new Error('adder wrong');
+}
+// counter: the first lamp blinks far more often than the fourth
+{
+  const st = buildBinaryCounter();
+  const sim = new Sim(st);
+  const lamps = st.buildings.filter((b) => b.type === 'lamp').sort((a, b) => a.y - b.y);
+  const on = lamps.map(() => 0);
+  for (let i = 0; i < 30 * 120; i++) {
+    sim.tick(1 / 30);
+    lamps.forEach((l, k) => { if (sim.lampItem(l)) on[k]++; });
+  }
+  console.log('counter lamp lit ticks per stage:', on.join(' '));
+  if (!(on[0] > on[1] && on[1] > on[2] && on[2] > on[3] && on[3] > 0)) throw new Error('counter stages do not halve');
+}
+// running light: items keep circling
+{
+  const st = buildRunningLight();
+  const sim = new Sim(st);
+  let lit = 0;
+  for (let i = 0; i < 30 * 30; i++) {
+    sim.tick(1 / 30);
+    if (i % 30 === 0) lit += st.buildings.filter((b) => b.type === 'lamp' && sim.lampItem(b)).length;
+  }
+  const items = st.buildings.filter((b) => b.type === 'conveyor').reduce((a, b) => a + (b.items?.length ?? 0), 0);
+  console.log('running light: items on the ring', items, 'lamp-lit samples', lit);
+  if (items < 3 || lit < 5) throw new Error('ring not running');
+}
+// PONG on LED matrices: the 8x4 matrices show the screen (some pixels lit), keys reach the CPU
+{
+  const st = buildPongMatrix();
+  const sim = new Sim(st);
+  for (let i = 0; i < 90; i++) sim.tick(1 / 30);
+  const mats = st.buildings.filter((b) => b.type === 'matrix');
+  const lit = mats.reduce((a, m) => a + (m.px ?? []).filter((v) => v).length, 0);
+  console.log('pong matrix: matrices', mats.length, 'lit pixels', lit);
+  if (mats.length !== 32 || lit < 20) throw new Error('matrix display not driven');
+}
+// video wall: a synthetic frame lands on the matrices, the receiver reports live
+{
+  const st = buildVideoWall();
+  const sim = new Sim(st);
+  const rx = st.buildings.find((b) => b.type === 'screen')!;
+  const r = sim.screenRect(rx);
+  if (r.w !== 128 || r.h !== 64) throw new Error(`wall size ${r.w}x${r.h}`);
+  const frame = new Uint8ClampedArray(r.w * r.h * 4);
+  for (let y = 0; y < r.h; y++) for (let x = 0; x < r.w; x++) { const i = (y * r.w + x) * 4; frame[i] = x * 2; frame[i + 1] = y * 4; frame[i + 2] = 200; frame[i + 3] = 255; }
+  sim.tick(1 / 30);
+  sim.pushFrame(rx, frame, r.w, r.h);
+  sim.tick(1 / 30);
+  const m = st.buildings.find((b) => b.type === 'matrix' && b.x === r.x + 15 && b.y === r.y + 7)!;
+  const v = m.px![63];
+  console.log('video wall: last matrix pixel', '#' + v.toString(16).padStart(6, '0'), 'receiver', rx.status);
+  if (v !== ((254 << 16) | (252 << 8) | 200) || rx.status !== 'ok') throw new Error('frame not applied');
+}
+console.log('examples-check OK');

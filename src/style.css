@@ -479,3 +479,37 @@ textarea.text-input { resize: vertical; min-height: 110px; font-family: inherit;
 .cpu-line small, .cpu-regs small { color: var(--muted); margin-right: 3px; font-size: 9px; }
 .cpu-line .mn { color: var(--accent); font-weight: 700; }
 .cpu-regs { display: grid; grid-template-columns: repeat(8, 1fr); gap: 2px 6px; margin-top: 4px; color: #cbd5e1; }
+
+.examples { display: grid; grid-template-columns: 1fr; gap: 8px; max-height: 42vh; overflow-y: auto; padding-right: 4px; }
+.btn.mode.example { flex-direction: row; align-items: center; gap: 12px; }
+.btn.mode.example img.icon { width: 40px; height: 40px; flex: none; }
+.btn.mode.example span { display: flex; flex-direction: column; gap: 2px; text-align: left; }
+.title-buttons .lbl { color: var(--muted); font-size: 12px; margin-top: 6px; }
+
+/* ---------- Menu & transfer redesign ---------- */
+.mgrid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; margin: 4px 0 10px; }
+.stat { background: rgba(255, 255, 255, 0.05); border: 1px solid var(--line); border-radius: 12px; padding: 8px 10px; min-width: 0; }
+.stat small { display: block; color: var(--muted); font-size: 10px; letter-spacing: 0.08em; text-transform: uppercase; margin-bottom: 2px; }
+.stat b { font-size: 13px; font-weight: 600; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; }
+.mset .menu-row { border-bottom: none; padding: 5px 0; margin: 0; }
+.seg { display: inline-flex; gap: 2px; background: rgba(255, 255, 255, 0.06); border: 1px solid var(--line); border-radius: 999px; padding: 2px; }
+.seg .chip { margin: 0; border-color: transparent; background: transparent; }
+.seg .chip.active { background: linear-gradient(135deg, #0ea5e9, #22d3ee); color: #06202a; }
+.mtiles { display: grid; grid-template-columns: repeat(3, 1fr); gap: 8px; margin: 4px 0 12px; }
+.tile { display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 6px; padding: 12px 6px; min-height: 68px; border-radius: 14px; border: 1px solid var(--glass-line); background: rgba(255, 255, 255, 0.05); color: var(--text); font: inherit; font-size: 12px; line-height: 1.2; cursor: pointer; text-decoration: none; text-align: center; }
+.tile:hover { border-color: var(--accent); background: rgba(34, 211, 238, 0.08); }
+.tile .ico { width: 24px; height: 24px; color: var(--accent); }
+.tile.primary { background: linear-gradient(135deg, rgba(14, 165, 233, 0.35), rgba(34, 211, 238, 0.22)); border-color: rgba(34, 211, 238, 0.5); }
+.modal-card h3 .ico { vertical-align: -3px; margin-right: 2px; }
+.xcard { border: 1px solid var(--line); border-radius: 14px; padding: 12px 12px 10px; margin-bottom: 10px; background: rgba(255, 255, 255, 0.04); transition: border-color 0.15s, background 0.15s; }
+.xcard h3 { margin-top: 0; }
+.xcard p { margin: 0 0 8px; font-size: 13px; }
+.xcard.drop { border-color: var(--accent); background: rgba(34, 211, 238, 0.1); }
+.xmeta { color: var(--muted); font-size: 12px; margin-top: 8px; }
+.row2 .btn .ico { vertical-align: -4px; }
+@media (max-width: 480px) { .mtiles { grid-template-columns: repeat(3, 1fr); } .tile { padding: 10px 4px; font-size: 11px; } }
+
+.mx-grid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 3px; width: min(100%, 240px); aspect-ratio: 1; margin: 4px 0 10px; padding: 6px; background: #0b1016; border-radius: 10px; border: 1px solid var(--line); }
+.mx-cell { border: none; border-radius: 3px; padding: 0; cursor: pointer; min-width: 0; }
+.mx-cell:hover { outline: 2px solid var(--accent); }
+input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: transparent; padding: 0 2px; margin-right: 6px; vertical-align: middle; }
