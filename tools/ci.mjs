@@ -4,7 +4,7 @@ import { execSync, spawnSync } from 'node:child_process';
 
 const CHECKS = [
   'kits', 'logistics', 'storage', 'parts', 'examples', 'board', 'kdos', 'contracts', 'projects', 'wear',
-  'flights', 'challenges', 'merger', 'route', 'saves', 'perf', 'ray', 'blocks', 'blockshd', 'trailer',
+  'flights', 'challenges', 'merger', 'route', 'saves', 'perf', 'tutorial', 'ray', 'blocks', 'blockshd', 'trailer',
 ];
 const SOLVER_CHAPTERS = [1, 2, 3, 4, 5, 6]; // chapter 7 is not finished by the solver yet
 const only = process.argv.slice(2);

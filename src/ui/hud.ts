@@ -12,6 +12,7 @@ import { hasSave, migrate as migrateSave, lastDropped, serialize } from '../game
 import { SAVE_VERSION } from '../game/world';
 import { MEDALS, challengeBest, challengeRival, playerName, recordRival, setPlayerName, recordChallenge, chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
+import { tutorialStepDone } from '../game/tutorial';
 import { cleanName, decodeResult, encodeResult, resultMedal, shareLink } from '../game/share';
 import { DIR_ARROWS, costHtml, el, fmtTime, itemImg } from './dom';
 import { buildingTipHtml, itemTipHtml } from './tips';
@@ -602,25 +603,7 @@ export class Hud {
   // ---------- Tutorial ----------
 
   private tutorialCondition(step: number): boolean {
-    const st = this.sim.state;
-    const sim = this.sim;
-    switch (step) {
-      case 0:
-        return sim.countBuildings('miner') >= 1;
-      case 1:
-        return st.buildings.some((b) => b.type === 'miner' && sim.traceFlow(b).target?.type === 'core');
-      case 2:
-        return st.missionIndex >= 1;
-      case 3:
-        return sim.countBuildings('smelter') >= 1 && (st.delivered.iron_plate ?? 0) >= 1;
-      case 4:
-        return st.missionIndex >= 2;
-      case 5:
-        return sim.countBuildings('printer') >= 1 && (st.delivered.machine_part ?? 0) >= 1;
-      case 6:
-        return st.missionIndex >= 3;
-    }
-    return true;
+    return tutorialStepDone(this.sim, step);
   }
 
   /** Frame the ping target and the core together inside the band between the top and bottom HUD. */
@@ -703,41 +686,46 @@ export class Hud {
     const steps = tTutorial();
     const tut = st.tutorialStep >= 0 && st.tutorialStep < steps.length ? steps[st.tutorialStep] : null;
     let body = '';
+    // order rows (amounts, buildings, rate and its clock): under the tutorial text as well, it refers to them
+    let mrows = '';
+    if (m) {
+        const entries = Object.entries(m.deliver);
+        const compact = window.innerWidth < 900;
+        const shown = compact ? entries.slice(0, 2) : entries;
+        const rows =
+          shown
+            .map(([k, n]) => {
+              const have = Math.min(n!, st.launched ? st.delivered[k as ItemId] ?? 0 : Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0));
+              return `<div class="mrow ${have >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
+            })
+            .join('') + (entries.length > shown.length ? `<div class="mrow more">+${entries.length - shown.length} …</div>` : '');
+        const builds = m.build
+          ? Object.entries(m.build)
+              .map(([k, n]) => {
+                const have = Math.min(n!, this.sim.countBuildings(k as BuildingId));
+                return `<div class="mrow ${have >= n! ? 'done' : ''}"><img class="icon sm" src="${buildingUrl(k as BuildingId)}" alt=""><span class="mname">${t('build_req')}: ${tBuilding(k)}</span><span class="mcount">${have}/${n}</span></div>`;
+              })
+              .join('')
+          : '';
+        const rs = this.sim.rateStatus();
+        const rateRows = rs && m.rate
+          ? Object.entries(m.rate).map(([k, n]) => {
+              const r = this.sim.deliveryRate(k as ItemId);
+              return `<div class="mrow rate ${r >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${t('rate_row', { item: tItem(k as ItemId) })}</span><span class="mcount">${r}/${n}</span></div>`;
+            }).join('') + `<div class="mrow rate ${rs.held >= rs.hold ? 'done' : ''}"><span class="mname">⏱ ${t('rate_hold')}</span><span class="mcount">${Math.floor(Math.min(rs.held, rs.hold))}/${rs.hold} s</span></div>`
+          : '';
+      mrows = `<div class="mrows">${builds}${rows}${rateRows}</div>`;
+    }
     if (tut) {
       body = `<div class="mtitle"><span class="mnum">${t('tutorial_title')} ${st.tutorialStep + 1}/${steps.length}</span> ${tut.title}</div>
-        <div class="mtext">${tut.text}</div>`;
+        <div class="mtext">${tut.text}</div>${mrows}`;
     } else if (m) {
       const mt = this.sim.challenge() ? { title: t(`ch_${m.id}` as 'ch_c_drills'), text: challengeRules(m.id) } : tMission(m.id);
-      const entries = Object.entries(m.deliver);
-      const compact = window.innerWidth < 900;
-      const shown = compact ? entries.slice(0, 2) : entries;
-      const rows =
-        shown
-          .map(([k, n]) => {
-            const have = Math.min(n!, st.launched ? st.delivered[k as ItemId] ?? 0 : Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0));
-            return `<div class="mrow ${have >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
-          })
-          .join('') + (entries.length > shown.length ? `<div class="mrow more">+${entries.length - shown.length} …</div>` : '');
-      const builds = m.build
-        ? Object.entries(m.build)
-            .map(([k, n]) => {
-              const have = Math.min(n!, this.sim.countBuildings(k as BuildingId));
-              return `<div class="mrow ${have >= n! ? 'done' : ''}"><img class="icon sm" src="${buildingUrl(k as BuildingId)}" alt=""><span class="mname">${t('build_req')}: ${tBuilding(k)}</span><span class="mcount">${have}/${n}</span></div>`;
-            })
-            .join('')
-        : '';
-      const rs = this.sim.rateStatus();
-      const rateRows = rs && m.rate
-        ? Object.entries(m.rate).map(([k, n]) => {
-            const r = this.sim.deliveryRate(k as ItemId);
-            return `<div class="mrow rate ${r >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${t('rate_row', { item: tItem(k as ItemId) })}</span><span class="mcount">${r}/${n}</span></div>`;
-          }).join('') + `<div class="mrow rate ${rs.held >= rs.hold ? 'done' : ''}"><span class="mname">⏱ ${t('rate_hold')}</span><span class="mcount">${Math.floor(Math.min(rs.held, rs.hold))}/${rs.hold} s</span></div>`
-        : '';
       const num = this.sim.challenge() ? `🏁 ${st.challengeDone !== undefined ? `${MEDALS[challengeMedal(st.challenge!, st.challengeDone)] || '✓'} ${fmtTime(st.challengeDone)}` : `⏱ ${fmtTime(st.time)}`}` : st.launched ? `🚀 ${t('flight')} ${(st.flights ?? 0) + 1}` : `${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}`;
       body = `<div class="mtitle"><span class="mnum">${num}</span> ${mt.title}</div>
         <div class="mtext">${this.koraMsg && this.koraMsgT > 0 ? this.koraMsg : mt.text}</div>
         ${this.koraMsg && this.koraMsgT > 0 && this.koraAction ? `<div class="mact"><span class="btn small primary" data-act="kora-action">${this.koraAction.label}</span></div>` : ''}
-        <div class="mrows">${builds}${rows}${rateRows}</div>`;
+        ${mrows}`;
     } else body = `<div class="mtitle">🚀 ${t('launch_title')}</div>`;
     if (this.editor) body = `<div class="mtitle"><span class="mnum">✎ ${t('editor')}</span> ${st.width}×${st.height}</div><div class="mtext">${t('ed_hint')}</div>`;
     else if (st.options.mode === 'playground') body = `<div class="mtitle"><span class="mnum">${t('mode_playground')}</span> ${st.width}×${st.height}</div><div class="mtext">${st.note ? (getLang() === 'de' ? st.note.title : st.note.title) + ' · ' : ''}${t('pg_hint')}</div>`;
