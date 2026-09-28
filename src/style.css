@@ -723,3 +723,9 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 .wear { display: flex; align-items: center; gap: 8px; margin: 6px 0 2px; }
 .wear .pbar { flex: 1; }
 .wear .pfill.warn { background: #f59e0b; }
+
+.ch-meta { color: var(--accent); opacity: 0.85; }
+.medal-row { display: flex; gap: 14px; justify-content: center; margin: 8px 0; font-variant-numeric: tabular-nums; }
+.medal-big { font-size: 56px; margin: 4px 0; text-align: center; }
+.kit-row.quota .kit-have { color: #f59e0b; }
+.quota-chip { opacity: 0.8; cursor: default; }

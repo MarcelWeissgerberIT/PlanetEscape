@@ -1,5 +1,5 @@
 import type { Building, GameOptions, GameState, TerrainId } from './types';
-import { BUILD_ORDER, HARD_ORE_FACTOR, LEVELS, MISSIONS, ORE_PER_TILE, RECIPES, STARTING_BUILDINGS, STARTING_RECIPES, UPGRADE_DEFAULTS } from './data';
+import { CHALLENGE_BY_ID, BUILD_ORDER, HARD_ORE_FACTOR, LEVELS, MISSIONS, ORE_PER_TILE, RECIPES, STARTING_BUILDINGS, STARTING_RECIPES, UPGRADE_DEFAULTS } from './data';
 
 export const SAVE_VERSION = 4;
 export const MAP_SIZES: Record<GameOptions['mapSize'], number> = { small: 80, medium: 120, large: 160, huge: 200, giant: 240 };
@@ -144,6 +144,54 @@ export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOpt
     launched: false,
     powerSupply: 10,
     powerDemand: 0,
+  };
+}
+
+/** A challenge: fixed map, kit quota, auto print off. */
+export function challengeState(id: string): GameState {
+  const def = CHALLENGE_BY_ID[id];
+  const width = def.size, height = def.size;
+  const terrain = generateTerrain(def.seed, width, height, { basics: def.basics, extraTypes: [], extra: 0, rocks: def.rocks });
+  const r2 = rng(def.seed ^ 0x5bd1e995);
+  const ore = terrain.map((t) => (t === 'ground' || t === 'rock' ? 0 : Math.round(ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0]))));
+  const core: Building = { id: 1, type: 'core', x: Math.floor(width / 2) - 1, y: Math.floor(height / 2) - 1, dir: 0 };
+  return {
+    version: SAVE_VERSION,
+    options: { mode: 'challenge', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: false },
+    seed: def.seed,
+    width,
+    height,
+    terrain,
+    buildings: [core],
+    nextId: 2,
+    inventory: { ...def.inventory },
+    kits: { ...def.kits },
+    autoPrint: false,
+    printQueue: [],
+    delivered: {},
+    missionIndex: 0,
+    ship: {},
+    ore,
+    upgrades: UPGRADE_DEFAULTS(),
+    contracts: [],
+    contractsDone: 0,
+    nextContractAt: 1e12,
+    event: null,
+    nextEventAt: 1e12,
+    boostUntil: 0,
+    eventsSeen: 0,
+    storm: 0,
+    nextStormAt: 1e12,
+    tutorialStep: -1,
+    introSeen: true,
+    stats: { produced: {}, delivered: {} },
+    unlockedBuildings: [...def.buildings],
+    unlockedRecipes: [...def.recipes],
+    time: 0,
+    launched: false,
+    powerSupply: 10,
+    powerDemand: 0,
+    challenge: id,
   };
 }
 

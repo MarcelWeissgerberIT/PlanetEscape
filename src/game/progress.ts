@@ -1,11 +1,12 @@
 // Persistent player progress across games: chapter stars, best times and best scores.
-import { STAR_EFFICIENCY, LEVELS } from './data';
+import { STAR_EFFICIENCY, LEVELS, challengeMedal } from './data';
 
 export interface Progress {
   stars: Record<number, number>; // chapter index (0-based) -> 1..3
   best: Record<number, number>; // chapter index -> best seconds
   bestScore: { normal: number; hard: number };
   lastChapter?: number; // 1-based chapter the player was in most recently
+  challenges?: Record<string, number>; // challenge id -> best seconds
 }
 
 const KEY = 'pe_progress_v1';
@@ -15,7 +16,7 @@ export function loadProgress(): Progress {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<Progress>;
-      return { stars: p.stars ?? {}, best: p.best ?? {}, bestScore: { normal: p.bestScore?.normal ?? 0, hard: p.bestScore?.hard ?? 0 }, lastChapter: p.lastChapter };
+      return { stars: p.stars ?? {}, best: p.best ?? {}, bestScore: { normal: p.bestScore?.normal ?? 0, hard: p.bestScore?.hard ?? 0 }, lastChapter: p.lastChapter, challenges: p.challenges ?? {} };
     }
   } catch {
     /* ignore */
@@ -85,3 +86,20 @@ export function resumeChapter(): number {
 export function starString(n: number): string {
   return '★★★'.slice(0, n) + '☆☆☆'.slice(0, 3 - n);
 }
+
+/** Store a challenge finish; returns the medal of this run and the best time. */
+export function recordChallenge(id: string, seconds: number): { medal: number; best: number; improved: boolean } {
+  const p = loadProgress();
+  const map = (p.challenges ??= {});
+  const prev = map[id];
+  const improved = prev === undefined || seconds < prev;
+  if (improved) map[id] = Math.round(seconds);
+  store(p);
+  return { medal: challengeMedal(id, seconds), best: map[id], improved };
+}
+
+export function challengeBest(id: string): number | undefined {
+  return loadProgress().challenges?.[id];
+}
+
+export const MEDALS = ['', '🥉', '🥈', '🥇'];

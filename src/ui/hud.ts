@@ -1,6 +1,6 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { REPAIR_COST, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { CHALLENGES, CHALLENGE_BY_ID, challengeMedal, REPAIR_COST, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -10,7 +10,7 @@ import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave, load as loadSave, lastDropped, serialize } from '../game/save';
 import { SAVE_VERSION } from '../game/world';
-import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
+import { MEDALS, challengeBest, recordChallenge, chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W, disasm } from '../game/chip8';
 import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize } from '../game/data';
@@ -27,6 +27,7 @@ export interface HudCallbacks {
   onSave: () => void;
   onCenter: () => void;
   onPlayChapter: (chapter: number) => void;
+  onPlayChallenge: (id: string) => void;
   onNewEditor: (w: number, h: number, random: boolean, seed?: number) => void;
   onLoadExample: (id: string) => void;
   onVideo: (b: Building, kind: 'screen' | 'camera' | 'file', file?: File) => Promise<string | null>; // resolves with an error message or null
@@ -202,7 +203,7 @@ export class Hud {
   }
 
   private freeOptions: GameOptions = { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
-  private titleView: 'main' | 'free' | 'playground' = 'main';
+  private titleView: 'main' | 'free' | 'playground' | 'challenges' = 'main';
 
   private renderTitle() {
     const lang = getLang();
@@ -218,6 +219,7 @@ export class Hud {
             : `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story"><b>${t('mode_story')}</b><small>${t('mode_story_desc')}</small></button>`}
           <button class="btn mode" data-act="freeview"><b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small></button>
           <button class="btn mode" data-act="playview"><b>${t('mode_playground')}</b><small>${t('mode_playground_desc')}</small></button>
+          <button class="btn mode" data-act="challview"><b>🏁 ${t('mode_challenge')} ${this.medalSummary()}</b><small>${t('mode_challenge_desc')}</small></button>
           ${seedInput}
           <div class="row2">
             <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
@@ -231,6 +233,17 @@ export class Hud {
           <div class="lbl">${t('pg_examples')}</div>
           <div class="examples">
             ${EXAMPLES.map((ex) => `<button class="btn mode example" data-example="${ex.id}"><img class="icon" src="${buildingUrl(ex.icon as BuildingId)}" alt=""><span><b>${ex.title}</b><small>${getLang() === 'de' ? ex.de : ex.en}</small></span></button>`).join('')}
+          </div>
+          <button class="btn ghost" data-act="back">${t('back')}</button>
+        </div>`;
+    const challView = `
+        <div class="title-buttons">
+          <div class="examples">
+            ${CHALLENGES.map((c) => {
+              const best = challengeBest(c.id);
+              const medal = best !== undefined ? MEDALS[challengeMedal(c.id, best)] || '✓' : '';
+              return `<button class="btn mode example" data-challenge="${c.id}"><img class="icon" src="${buildingUrl(c.icon)}" alt=""><span><b>${medal} ${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</small><small class="ch-meta">${this.challengeRules(c.id)}${best !== undefined ? ` · ${t('ch_best')} ${fmtTime(best)}` : ''}</small></span></button>`;
+            }).join('')}
           </div>
           <button class="btn ghost" data-act="back">${t('back')}</button>
         </div>`;
@@ -252,8 +265,8 @@ export class Hud {
       <div class="title-content">
         <h1 class="logo"><span>PLANET</span><span class="accent">ESCAPE</span></h1>
         <p class="tagline">${t('tagline')}</p>
-        ${this.titleView === 'main' ? `<p class="intro">${t('intro')}</p>` : this.titleView === 'playground' ? `<p class="intro"><b>${t('mode_playground')}</b> · ${t('mode_playground_desc')}</p>` : `<p class="intro"><b>${t('mode_free')}</b> · ${t('mode_free_desc')}</p>`}
-        ${this.titleView === 'main' ? mainView : this.titleView === 'playground' ? playView : freeView}
+        ${this.titleView === 'main' ? `<p class="intro">${t('intro')}</p>` : this.titleView === 'challenges' ? `<p class="intro"><b>🏁 ${t('mode_challenge')}</b> · ${t('ch_intro')}</p>` : this.titleView === 'playground' ? `<p class="intro"><b>${t('mode_playground')}</b> · ${t('mode_playground_desc')}</p>` : `<p class="intro"><b>${t('mode_free')}</b> · ${t('mode_free_desc')}</p>`}
+        ${this.titleView === 'main' ? mainView : this.titleView === 'playground' ? playView : this.titleView === 'challenges' ? challView : freeView}
         <div class="lang-switch">
           <button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">Deutsch</button>
           <button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">English</button>
@@ -299,6 +312,12 @@ export class Hud {
       } else if (act === 'freeview') {
         this.titleView = 'free';
         this.renderTitle();
+      } else if (act === 'challview') {
+        this.titleView = 'challenges';
+        this.renderTitle();
+      } else if (target.closest<HTMLElement>('[data-challenge]')) {
+        const id = target.closest<HTMLElement>('[data-challenge]')!.dataset.challenge!;
+        void this.confirmNewGame().then((yes) => yes && this.cb.onPlayChallenge(id));
       } else if (act === 'playview') {
         this.titleView = 'playground';
         this.renderTitle();
@@ -321,6 +340,61 @@ export class Hud {
   private confirmNewGame(): Promise<boolean> {
     if (!hasSave()) return Promise.resolve(true);
     return this.confirmModal(t('new_game_confirm'), t('new_game'));
+  }
+
+  private medalSummary(): string {
+    const n = CHALLENGES.filter((c) => {
+      const b = challengeBest(c.id);
+      return b !== undefined && challengeMedal(c.id, b) === 3;
+    }).length;
+    return n ? `· 🥇 ${n}/${CHALLENGES.length}` : '';
+  }
+
+  /** Short rule line of a challenge: the kit quota and the parts that must not be printed. */
+  challengeRules(id: string): string {
+    const c = CHALLENGE_BY_ID[id];
+    const kits = Object.entries(c.kits).map(([k, n]) => `${n}× ${tBuilding(k)}`).join(', ');
+    const locked = c.noPrint.map((k) => tBuilding(k)).join(', ');
+    return `${kits ? `${t('ch_kits')}: ${kits}` : t('ch_no_kits')}${locked ? ` · ${t('ch_no_print', { p: locked })}` : ''} · 🥇 ${fmtTime(c.medals[0])}`;
+  }
+
+  /** A challenge was loaded. */
+  challengeStart() {
+    const c = this.sim.challenge();
+    if (!c) return;
+    this.lastTopHtml = '';
+    this.lastBottomHtml = '';
+    this.undoStack = [];
+    this.openModal(`<h2>🏁 ${t(`ch_${c.id}` as 'ch_c_drills')}</h2><p>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</p><p class="save-hint">${this.challengeRules(c.id)}</p><p class="save-hint">${t('ch_how')}</p>
+      <div class="bufs">${Object.entries(c.deliver).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('')}</div>
+      <div class="medal-row">${c.medals.map((s, i) => `<span>${MEDALS[3 - i]} ${fmtTime(s)}</span>`).join('')}</div>
+      <button class="btn primary" data-act="close">${t('ch_go')}</button>`, () => {});
+    this.refresh();
+  }
+
+  /** The challenge goal was met. */
+  challengeDone(seconds: number) {
+    const c = this.sim.challenge();
+    if (!c) return;
+    const r = recordChallenge(c.id, seconds);
+    sfx.mission();
+    this.openModal(`<div class="launch"><h2>🏁 ${t('ch_done')}</h2>
+      <p class="medal-big">${MEDALS[r.medal] || '✓'}</p>
+      <p>${t('ch_time', { time: fmtTime(seconds) })}${r.improved ? ` <span class="rec">${t('new_record')}</span>` : ''}</p>
+      <div class="medal-row">${c.medals.map((s, i) => `<span>${MEDALS[3 - i]} ${fmtTime(s)}</span>`).join('')}</div>
+      <p class="save-hint">${t('ch_best')} ${fmtTime(r.best)}</p>
+      <button class="btn primary" data-act="ch-again">${t('ch_again')}</button>
+      <button class="btn" data-act="ch-list">${t('ch_list')}</button>
+      <button class="btn ghost" data-act="close">${t('keep_playing')}</button></div>`, (target) => {
+      if (target.dataset.act === 'ch-again') {
+        this.closeModal();
+        this.cb.onPlayChallenge(c.id);
+      } else if (target.dataset.act === 'ch-list') {
+        this.closeModal();
+        this.titleView = 'challenges';
+        this.showTitle();
+      }
+    });
   }
 
   private starsSummary(): string {
@@ -583,7 +657,7 @@ export class Hud {
       body = `<div class="mtitle"><span class="mnum">${t('tutorial_title')} ${st.tutorialStep + 1}/${steps.length}</span> ${tut.title}</div>
         <div class="mtext">${tut.text}</div>`;
     } else if (m) {
-      const mt = tMission(m.id);
+      const mt = this.sim.challenge() ? { title: t(`ch_${m.id}` as 'ch_c_drills'), text: this.challengeRules(m.id) } : tMission(m.id);
       const entries = Object.entries(m.deliver);
       const compact = window.innerWidth < 900;
       const shown = compact ? entries.slice(0, 2) : entries;
@@ -609,7 +683,7 @@ export class Hud {
             return `<div class="mrow rate ${r >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${t('rate_row', { item: tItem(k as ItemId) })}</span><span class="mcount">${r}/${n}</span></div>`;
           }).join('') + `<div class="mrow rate ${rs.held >= rs.hold ? 'done' : ''}"><span class="mname">⏱ ${t('rate_hold')}</span><span class="mcount">${Math.floor(Math.min(rs.held, rs.hold))}/${rs.hold} s</span></div>`
         : '';
-      const num = st.launched ? `🚀 ${t('flight')} ${(st.flights ?? 0) + 1}` : `${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}`;
+      const num = this.sim.challenge() ? `🏁 ${st.challengeDone !== undefined ? `${MEDALS[challengeMedal(st.challenge!, st.challengeDone)] || '✓'} ${fmtTime(st.challengeDone)}` : `⏱ ${fmtTime(st.time)}`}` : st.launched ? `🚀 ${t('flight')} ${(st.flights ?? 0) + 1}` : `${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}`;
       body = `<div class="mtitle"><span class="mnum">${num}</span> ${mt.title}</div>
         <div class="mtext">${this.koraMsg && this.koraMsgT > 0 ? this.koraMsg : mt.text}</div>
         ${this.koraMsg && this.koraMsgT > 0 && this.koraAction ? `<div class="mact"><span class="btn small primary" data-act="kora-action">${this.koraAction.label}</span></div>` : ''}
@@ -627,9 +701,9 @@ export class Hud {
     const low = demand > supply;
     const nProblems = this.problems.length;
     const openContracts = st.contracts.filter((c) => !c.accepted).length;
-    const playground = st.options.mode === 'playground' && !tut;
+    const playground = (st.options.mode === 'playground' || st.options.mode === 'challenge') && !tut;
     const topHtml = `
-      ${playground && !this.editor ? '' : `<button class="kora-card" data-act="missions">
+      ${playground && !this.editor && st.options.mode !== 'challenge' ? '' : `<button class="kora-card" data-act="missions">
         <img class="kora-avatar ${tut ? 'talk' : ''}" src="${uiUrl('kora.webp')}" alt="KORA">
         <div class="kora-body">${body}</div>
       </button>`}
@@ -658,7 +732,7 @@ export class Hud {
       if (act === 'kora-action') {
         e.stopPropagation();
         this.koraAction?.run();
-      } else if (act === 'missions') this.showMissions();
+      } else if (act === 'missions') { if (this.sim.challenge()) this.challengeStart(); else this.showMissions(); }
       else if (act === 'pause') this.togglePause();
       else if (act === 'speed') this.cycleSpeed();
       else if (act === 'menu') this.showMenu();
@@ -1669,7 +1743,7 @@ export class Hud {
     this.printerOpen = true;
     this.openModal(this.printerHtml(), (target) => {
       const act = target.dataset.act;
-      if (act === 'auto-on' || act === 'auto-off') this.sim.state.autoPrint = act === 'auto-on';
+      if ((act === 'auto-on' || act === 'auto-off') && !this.sim.challenge()) this.sim.state.autoPrint = act === 'auto-on';
       else if (target.dataset.print) {
         const n = this.sim.queuePrint(target.dataset.print as BuildingId, Number(target.dataset.n ?? 1));
         if (!n) this.toast(t('err_cost'), 1500, 'error');
@@ -1714,12 +1788,12 @@ export class Hud {
     const ids = BUILD_GROUPS.flatMap((g) => g.items).filter((id) => st.unlockedBuildings.includes(id));
     const list = ids.map((id) => {
       const have = st.kits?.[id] ?? 0;
-      const can = this.sim.canAfford(id);
-      return `<div class="kit-row"><img class="icon" src="${buildingUrl(id)}" alt="" data-building="${id}"><span class="kit-name">${tBuilding(id)}<small>${printSeconds(id)} s · ${costHtml(BUILDINGS[id].cost, inv)}</small></span><b class="kit-have ${have ? '' : 'none'}">×${have}</b><button class="iconbtn" data-bp-building="${id}" title="${t('bp_title')}">${icon('research', 'sm')}</button><button class="chip" data-print="${id}" data-n="1" ${can ? '' : 'disabled'}>+1</button><button class="chip" data-print="${id}" data-n="5" ${can ? '' : 'disabled'}>+5</button></div>`;
+      const can = this.sim.canAfford(id) && !this.sim.printLocked(id);
+      return `<div class="kit-row ${this.sim.printLocked(id) ? 'quota' : ''}"><img class="icon" src="${buildingUrl(id)}" alt="" data-building="${id}"><span class="kit-name">${tBuilding(id)}<small>${printSeconds(id)} s · ${costHtml(BUILDINGS[id].cost, inv)}</small></span><b class="kit-have ${have ? '' : 'none'}">×${have}</b><button class="iconbtn" data-bp-building="${id}" title="${t('bp_title')}">${icon('research', 'sm')}</button>${this.sim.printLocked(id) ? `<span class="chip quota-chip">🔒 ${t('ch_quota')}</span>` : `<button class="chip" data-print="${id}" data-n="1" ${can ? '' : 'disabled'}>+1</button><button class="chip" data-print="${id}" data-n="5" ${can ? '' : 'disabled'}>+5</button>`}</div>`;
     }).join('');
     return `<h2>${icon('print')} ${t('printer_title')}</h2>
       <p class="save-hint">${t('printer_hint')} ${t('printer_reach')}</p>
-      <div class="dirs"><span class="lbl">${t('printer_auto')}</span><button class="chip ${auto ? 'active' : ''}" data-act="auto-on">${t('on')}</button><button class="chip ${auto ? '' : 'active'}" data-act="auto-off">${t('off')}</button></div>
+      ${this.sim.challenge() ? `<p class="save-hint">🏁 ${t('ch_printer')}</p>` : `<div class="dirs"><span class="lbl">${t('printer_auto')}</span><button class="chip ${auto ? 'active' : ''}" data-act="auto-on">${t('on')}</button><button class="chip ${auto ? '' : 'active'}" data-act="auto-off">${t('off')}</button></div>`}
       <h3>${t('printer_queue')}</h3><div class="pq">${queue}</div>
       <h3>${t('printer_kits')}</h3><div class="kit-list">${list}</div>
       <button class="btn primary" data-act="close">${t('close')}</button>`;
@@ -2522,7 +2596,7 @@ export class Hud {
     this.openModal(
       `<h2>${icon('menu', 'sm')} ${t('menu')}</h2>
       <div class="mgrid">
-        <div class="stat"><small>${t('mode')}</small><b>${st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}/${MISSIONS.length}` : st.options.mode === 'playground' ? t('mode_playground') : t('mode_free')}</b></div>
+        <div class="stat"><small>${t('mode')}</small><b>${st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}/${MISSIONS.length}` : st.options.mode === 'playground' ? t('mode_playground') : st.options.mode === 'challenge' ? `${t('mode_challenge')} · ${t(`ch_${st.challenge}` as 'ch_c_drills')}` : t('mode_free')}</b></div>
         <div class="stat"><small>${t('playtime')}</small><b>${fmtTime(st.time)}</b></div>
         <div class="stat"><small>${t('seed')}</small><b class="mono">${st.seed}</b></div>
         <div class="stat"><small>Build</small><b class="mono">${__BUILD__}</b></div>

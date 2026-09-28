@@ -14,6 +14,7 @@ import {
   TERRAIN_ITEM,
   TUNNEL_RANGE,
   CONTRACT_INTERVAL,
+  CHALLENGE_BY_ID,
   flightMission,
   PROJECTS,
   PROJECT_BY_ID,
@@ -37,7 +38,7 @@ import {
   BUILD_ORDER,
   printSeconds,
 } from './data';
-import type { Drone, PrintJob, Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
+import type { MissionDef, Drone, PrintJob, Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
 import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, itemSpacing, RADIO_RANGE, CORE_REACH, CORE_DRONES, DRONE_SPEED, DRONE_DELAY, KITPORT_RATE, KIT_TRANSIT_TIMEOUT, isKit, kitOf, kitId, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, STORM_ROBOT_FACTOR, WEAR_SECONDS, WORN_SPEED, WEAR_MIN_MISSION, REPAIR_COST, QUAKE_WEAR, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
@@ -52,6 +53,7 @@ export type SimEvent =
   | { type: 'contract_offer'; contract: Contract }
   | { type: 'repaired'; b: Building }
   | { type: 'flight'; n: number }
+  | { type: 'challenge_done'; seconds: number }
   | { type: 'contract_done'; contract: Contract }
   | { type: 'contract_failed'; contract: Contract }
   | { type: 'storm'; on: boolean }
@@ -1256,6 +1258,7 @@ export class Sim {
 
   /** Queue kits for the stock; stops when the material runs out. Returns how many were queued. */
   queuePrint(type: BuildingId, n = 1): number {
+    if (this.printLocked(type)) return 0;
     let done = 0;
     for (; done < n && this.canAfford(type); done++) {
       this.pay(type);
@@ -3032,7 +3035,7 @@ export class Sim {
   /** Does wear apply in this game? (Not in the playground, in the story once machine parts exist.) */
   wearOn(): boolean {
     const st = this.state;
-    if (this.creative || st.options.mode === 'playground') return false;
+    if (this.creative || st.options.mode === 'playground' || st.options.mode === 'challenge') return false;
     return st.options.mode !== 'story' || st.missionIndex >= WEAR_MIN_MISSION;
   }
 
@@ -3406,7 +3409,24 @@ export class Sim {
     return n;
   }
 
+  private challengeMission: MissionDef | null = null;
+
+  /** The running challenge, if any. */
+  challenge() {
+    return this.state.options.mode === 'challenge' && this.state.challenge ? CHALLENGE_BY_ID[this.state.challenge] ?? null : null;
+  }
+
+  /** Parts whose kits must not be printed in this game (challenge quota). */
+  printLocked(type: BuildingId): boolean {
+    return !!this.challenge()?.noPrint.includes(type);
+  }
+
   currentMission() {
+    const ch = this.challenge();
+    if (ch) {
+      if (this.challengeMission?.id !== ch.id) this.challengeMission = { id: ch.id, deliver: ch.deliver, unlocks: [], unlockRecipes: [] };
+      return this.challengeMission;
+    }
     if (this.state.launched && this.state.options.mode !== 'playground') return flightMission(this.state.flights ?? 0);
     return MISSIONS[this.state.missionIndex] ?? null;
   }
@@ -3466,6 +3486,13 @@ export class Sim {
     }
     if (rs && (this.state.rateHeld ?? 0) < rs.hold) return;
     if (m.build) for (const k in m.build) if (this.countBuildings(k as BuildingId) < m.build[k as BuildingId]!) return;
+    if (this.challenge()) {
+      if (this.state.challengeDone === undefined) {
+        this.state.challengeDone = this.state.time;
+        this.events.push({ type: 'challenge_done', seconds: this.state.time });
+      }
+      return;
+    }
     if (this.state.launched) {
       // a supply flight leaves: its cargo is loaded from the stock, KORA pays with parts
       for (const k in m.deliver) this.addInv(k as ItemId, -Math.min(this.state.inventory[k as ItemId] ?? 0, m.deliver[k as ItemId]!));

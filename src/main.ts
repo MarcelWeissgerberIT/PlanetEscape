@@ -9,7 +9,7 @@ import * as Save from './game/save';
 import { setActivity, sfx } from './game/sfx';
 import { Sim } from './game/sim';
 import type { Blueprint, GameState, TerrainId } from './game/types';
-import { chapterState, levelState, newGame } from './game/world';
+import { challengeState, chapterState, levelState, newGame } from './game/world';
 import { setLastChapter } from './game/progress';
 import { t } from './i18n';
 import { Hud } from './ui/hud';
@@ -120,6 +120,13 @@ const hud = new Hud(sim, input, renderer, {
     start();
     if (sim.state.note) setTimeout(() => hud.showNote(), 400);
   },
+  onPlayChallenge: (id: string) => {
+    Save.clear();
+    swapState(challengeState(id));
+    Save.save(sim.state);
+    start();
+    hud.challengeStart();
+  },
   onPlayChapter: (chapter: number) => {
     Save.clear();
     swapState(chapterState(chapter, { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true }));
@@ -181,6 +188,7 @@ function frame(now: number) {
       switch (ev.type) {
         case 'mission': hud.missionComplete(ev.index); break;
         case 'flight': hud.flightDone(ev.n); break;
+        case 'challenge_done': hud.challengeDone(ev.seconds); break;
         case 'launch':
           if (!launchShown) {
             launchShown = true;

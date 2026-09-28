@@ -216,7 +216,7 @@ export interface MissionDef {
   rateHold?: number; // ... held for this many seconds (default 45)
 }
 
-export type GameMode = 'story' | 'free' | 'playground'; // playground: build anything for free, no orders
+export type GameMode = 'story' | 'free' | 'playground' | 'challenge'; // playground: build anything for free, no orders
 
 export interface GameOptions {
   mode: GameMode;
@@ -268,6 +268,8 @@ export interface GameState {
   unlockedRecipes: string[];
   time: number; // seconds of play
   launched: boolean;
+  challenge?: string; // challenge id (mode 'challenge')
+  challengeDone?: number; // seconds it took, once the goal was met
   flights?: number; // supply flights sent after the launch (endless goals)
   powerSupply: number;
   powerDemand: number;

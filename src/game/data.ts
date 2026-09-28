@@ -238,6 +238,80 @@ export function flightMission(n: number): MissionDef {
   return { id: 'flight', deliver, rate: { [r]: Math.ceil(FLIGHT_RATE[r]! * (1 + 0.2 * n)) }, rateHold: 60, unlocks: [], unlockRecipes: [], reward: { machine_part: 10 + 2 * n, circuit: 6 + n } };
 }
 
+/**
+ * Challenges: a fixed map, a fixed quota of building kits and parts that must not be printed. Auto print is
+ * off, so every building needs a kit from the stock; kits of the other parts can still be printed from plates.
+ * Medals by time: gold, silver, bronze (seconds).
+ */
+export interface ChallengeDef {
+  id: string;
+  icon: BuildingId;
+  seed: number;
+  size: number;
+  basics: { type: TerrainId; dist: number; r: number }[];
+  rocks: number;
+  inventory: Partial<Record<ItemId, number>>;
+  kits: Partial<Record<BuildingId, number>>;
+  noPrint: BuildingId[];
+  buildings: BuildingId[];
+  recipes: string[];
+  deliver: Partial<Record<ItemId, number>>;
+  medals: [number, number, number];
+}
+export const CHALLENGES: ChallengeDef[] = [
+  {
+    id: 'c_drills', icon: 'miner', seed: 2101, size: 44, rocks: 2,
+    basics: [{ type: 'iron_ore', dist: 6, r: 2.4 }, { type: 'copper_ore', dist: 7, r: 2.3 }],
+    inventory: { iron_plate: 40, copper_plate: 20 },
+    kits: { miner: 4, smelter: 3, conveyor: 40, solar: 1 },
+    noPrint: ['miner'],
+    buildings: ['miner', 'smelter', 'conveyor', 'splitter', 'solar', 'storage'],
+    recipes: ['iron_plate', 'copper_plate'],
+    deliver: { iron_plate: 90, copper_plate: 45 },
+    medals: [210, 330, 540],
+  },
+  {
+    id: 'c_belts', icon: 'conveyor', seed: 2202, size: 40, rocks: 2,
+    basics: [{ type: 'iron_ore', dist: 5, r: 2.6 }, { type: 'copper_ore', dist: 6, r: 2.4 }],
+    inventory: { iron_plate: 60, copper_plate: 30 },
+    kits: { miner: 5, smelter: 3, assembler: 1, printer: 1, conveyor: 10, solar: 3 },
+    noPrint: ['conveyor'],
+    buildings: ['miner', 'smelter', 'conveyor', 'splitter', 'assembler', 'printer', 'solar', 'storage'],
+    recipes: ['iron_plate', 'copper_plate', 'copper_wire', 'machine_part'],
+    deliver: { machine_part: 40 },
+    medals: [240, 360, 600],
+  },
+  {
+    id: 'c_print', icon: 'printer', seed: 2303, size: 48, rocks: 4,
+    basics: [{ type: 'iron_ore', dist: 6, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.4 }],
+    inventory: { iron_plate: 160, copper_plate: 60, machine_part: 6 },
+    kits: {},
+    noPrint: [],
+    buildings: ['miner', 'smelter', 'conveyor', 'splitter', 'assembler', 'printer', 'solar', 'storage'],
+    recipes: ['iron_plate', 'copper_plate', 'copper_wire', 'machine_part'],
+    deliver: { copper_wire: 60, machine_part: 12 },
+    medals: [360, 540, 900],
+  },
+  {
+    id: 'c_power', icon: 'solar', seed: 2404, size: 44, rocks: 3,
+    basics: [{ type: 'iron_ore', dist: 6, r: 2.6 }, { type: 'copper_ore', dist: 7, r: 2.4 }],
+    inventory: { iron_plate: 60, copper_plate: 30 },
+    kits: { miner: 4, smelter: 3, assembler: 1, printer: 1, conveyor: 50, solar: 1 },
+    noPrint: ['solar'],
+    buildings: ['miner', 'smelter', 'conveyor', 'splitter', 'assembler', 'printer', 'solar', 'storage', 'switch'],
+    recipes: ['iron_plate', 'copper_plate', 'copper_wire', 'machine_part'],
+    deliver: { machine_part: 40 },
+    medals: [300, 450, 720],
+  },
+];
+export const CHALLENGE_BY_ID: Record<string, ChallengeDef> = Object.fromEntries(CHALLENGES.map((c) => [c.id, c]));
+/** Medal for a finish time: 3 gold, 2 silver, 1 bronze, 0 finished without a medal. */
+export function challengeMedal(id: string, seconds: number): number {
+  const m = CHALLENGE_BY_ID[id]?.medals;
+  if (!m) return 0;
+  return seconds <= m[0] ? 3 : seconds <= m[1] ? 2 : seconds <= m[2] ? 1 : 0;
+}
+
 /** Minimum machine utilisation for the third star of a chapter. */
 export const STAR_EFFICIENCY = 0.45;
 
