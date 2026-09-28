@@ -1,6 +1,6 @@
-import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
+import { buildingUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { CHALLENGES, CHALLENGE_BY_ID, challengeMedal, REPAIR_COST, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { CHALLENGES, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -12,7 +12,14 @@ import { hasSave, migrate as migrateSave, lastDropped, serialize } from '../game
 import { SAVE_VERSION } from '../game/world';
 import { MEDALS, challengeBest, recordChallenge, chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
-import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W, disasm } from '../game/chip8';
+import { DIR_ARROWS, costHtml, el, fmtTime, itemImg } from './dom';
+import { buildingTipHtml, itemTipHtml } from './tips';
+import { siteLine, printerHtml } from './printer';
+import { contractText, contractProgress } from './contracts';
+import { challengeRules, medalSummary } from './challenges';
+import { wearHtml, cpuStateHtml } from './panels';
+import { blueprintContent } from './blueprint';
+import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from '../game/chip8';
 import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize } from '../game/data';
 import { VIDEO_CROPS } from '../game/video';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
@@ -36,34 +43,6 @@ export interface HudCallbacks {
   videoHasAudio: (b: Building) => boolean;
 }
 
-function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] {
-  const e = document.createElement(tag);
-  if (cls) e.className = cls;
-  if (html !== undefined) e.innerHTML = html;
-  return e;
-}
-
-function itemImg(id: ItemId, cls = 'icon'): string {
-  return `<img class="${cls}" src="${itemUrl(id)}" alt="${tItem(id)}" data-item="${id}" draggable="false">`;
-}
-
-function costHtml(cost: Partial<Record<ItemId, number>>, inv: Partial<Record<ItemId, number>>): string {
-  return Object.entries(cost)
-    .map(([k, n]) => {
-      const have = inv[k as ItemId] ?? 0;
-      return `<span class="cost ${have < n! ? 'short' : ''}">${itemImg(k as ItemId, 'icon xs')}${n}</span>`;
-    })
-    .join('');
-}
-
-function fmtTime(sec: number): string {
-  sec = Math.max(0, sec);
-  const m = Math.floor(sec / 60), s = Math.floor(sec % 60);
-  const h = Math.floor(m / 60);
-  return h > 0 ? `${h}h ${m % 60}m` : `${m}:${String(s).padStart(2, '0')}`;
-}
-
-const DIR_ARROWS = ['▲', '▶', '▼', '◀'];
 
 export class Hud {
   root: HTMLElement;
@@ -223,7 +202,7 @@ export class Hud {
             : `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story"><b>${t('mode_story')}</b><small>${t('mode_story_desc')}</small></button>`}
           <button class="btn mode" data-act="freeview"><b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small></button>
           <button class="btn mode" data-act="playview"><b>${t('mode_playground')}</b><small>${t('mode_playground_desc')}</small></button>
-          <button class="btn mode" data-act="challview"><b>🏁 ${t('mode_challenge')} ${this.medalSummary()}</b><small>${t('mode_challenge_desc')}</small></button>
+          <button class="btn mode" data-act="challview"><b>🏁 ${t('mode_challenge')} ${medalSummary()}</b><small>${t('mode_challenge_desc')}</small></button>
           ${seedInput}
           <div class="row2">
             <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
@@ -246,7 +225,7 @@ export class Hud {
             ${CHALLENGES.map((c) => {
               const best = challengeBest(c.id);
               const medal = best !== undefined ? MEDALS[challengeMedal(c.id, best)] || '✓' : '';
-              return `<button class="btn mode example" data-challenge="${c.id}"><img class="icon" src="${buildingUrl(c.icon)}" alt=""><span><b>${medal} ${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</small><small class="ch-meta">${this.challengeRules(c.id)}${best !== undefined ? ` · ${t('ch_best')} ${fmtTime(best)}` : ''}</small></span></button>`;
+              return `<button class="btn mode example" data-challenge="${c.id}"><img class="icon" src="${buildingUrl(c.icon)}" alt=""><span><b>${medal} ${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</small><small class="ch-meta">${challengeRules(c.id)}${best !== undefined ? ` · ${t('ch_best')} ${fmtTime(best)}` : ''}</small></span></button>`;
             }).join('')}
           </div>
           <button class="btn ghost" data-act="back">${t('back')}</button>
@@ -346,21 +325,7 @@ export class Hud {
     return this.confirmModal(t('new_game_confirm'), t('new_game'));
   }
 
-  private medalSummary(): string {
-    const n = CHALLENGES.filter((c) => {
-      const b = challengeBest(c.id);
-      return b !== undefined && challengeMedal(c.id, b) === 3;
-    }).length;
-    return n ? `· 🥇 ${n}/${CHALLENGES.length}` : '';
-  }
 
-  /** Short rule line of a challenge: the kit quota and the parts that must not be printed. */
-  challengeRules(id: string): string {
-    const c = CHALLENGE_BY_ID[id];
-    const kits = Object.entries(c.kits).map(([k, n]) => `${n}× ${tBuilding(k)}`).join(', ');
-    const locked = c.noPrint.map((k) => tBuilding(k)).join(', ');
-    return `${kits ? `${t('ch_kits')}: ${kits}` : t('ch_no_kits')}${locked ? ` · ${t('ch_no_print', { p: locked })}` : ''} · 🥇 ${fmtTime(c.medals[0])}`;
-  }
 
   /** A challenge was loaded. */
   challengeStart() {
@@ -369,7 +334,7 @@ export class Hud {
     this.lastTopHtml = '';
     this.lastBottomHtml = '';
     this.undoStack = [];
-    this.openModal(`<h2>🏁 ${t(`ch_${c.id}` as 'ch_c_drills')}</h2><p>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</p><p class="save-hint">${this.challengeRules(c.id)}</p><p class="save-hint">${t('ch_how')}</p>
+    this.openModal(`<h2>🏁 ${t(`ch_${c.id}` as 'ch_c_drills')}</h2><p>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</p><p class="save-hint">${challengeRules(c.id)}</p><p class="save-hint">${t('ch_how')}</p>
       <div class="bufs">${Object.entries(c.deliver).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('')}</div>
       <div class="medal-row">${c.medals.map((s, i) => `<span>${MEDALS[3 - i]} ${fmtTime(s)}</span>`).join('')}</div>
       <button class="btn primary" data-act="close">${t('ch_go')}</button>`, () => {});
@@ -661,7 +626,7 @@ export class Hud {
       body = `<div class="mtitle"><span class="mnum">${t('tutorial_title')} ${st.tutorialStep + 1}/${steps.length}</span> ${tut.title}</div>
         <div class="mtext">${tut.text}</div>`;
     } else if (m) {
-      const mt = this.sim.challenge() ? { title: t(`ch_${m.id}` as 'ch_c_drills'), text: this.challengeRules(m.id) } : tMission(m.id);
+      const mt = this.sim.challenge() ? { title: t(`ch_${m.id}` as 'ch_c_drills'), text: challengeRules(m.id) } : tMission(m.id);
       const entries = Object.entries(m.deliver);
       const compact = window.innerWidth < 900;
       const shown = compact ? entries.slice(0, 2) : entries;
@@ -1360,17 +1325,6 @@ export class Hud {
     this.floating.style.transform = `translate(${Math.round(sx) - 4}px, ${Math.round(sy) - 40}px)`;
   }
 
-  /** Wear gauge with the repair button for machines and miners. */
-  private wearHtml(b: Building): string {
-    const def = BUILDINGS[b.type];
-    if ((def.kind !== 'machine' && def.kind !== 'miner') || !this.sim.wearOn()) return '';
-    const w = b.wear ?? 0;
-    const st = this.sim.state;
-    const reach = this.sim.inReach(b.x, b.y, def.size);
-    return `<div class="wear"><span class="lbl">${t('wear')}</span><div class="pbar"><div class="pfill ${w >= 1 ? 'warn' : ''}" style="width:${Math.round(w * 100)}%"></div></div><small>${Math.round(w * 100)} %</small>
-      <button class="btn small ${w >= 1 ? 'primary' : ''}" data-act="repair" ${this.sim.canRepair(b) ? '' : 'disabled'}>${t('repair')} · ${costHtml(REPAIR_COST, st.inventory)}</button></div>
-      <p class="save-hint">${w >= 1 ? t('wear_worn') : ''} ${reach ? (st.autoRepair === false ? t('wear_auto_off') : t('wear_auto')) : t('wear_far')} <button class="chip" data-act="auto-repair">${st.autoRepair === false ? t('wear_auto_on_btn') : t('wear_auto_off_btn')}</button></p>`;
-  }
 
   private infoBody(b: Building): string {
     const def = BUILDINGS[b.type];
@@ -1380,7 +1334,7 @@ export class Hud {
       const s = b.status ?? 'ok';
       let txt = s === 'ok' ? (b.working ? t('working') : t('idle')) : s === 'starved' ? `${tStatus(s)} ${(b.missing ?? []).map((m) => tItem(m)).join(', ')}` : tStatus(s);
       if (this.sim.powerRatio < 1 && (def.kind === 'machine' || def.kind === 'miner')) txt += ` · ${t('no_power')}`;
-      return `<div class="status ${s === 'ok' ? '' : 'bad'}">${txt}${extra}</div>${this.wearHtml(b)}`;
+      return `<div class="status ${s === 'ok' ? '' : 'bad'}">${txt}${extra}</div>${wearHtml(this.sim, b)}`;
     };
     const dirPicker = def.rotatable
       ? `<div class="dirs"><span class="lbl">${t('direction')}</span>${[0, 1, 2, 3].map((d) => `<button class="dirbtn ${b.dir === d ? 'active' : ''}" data-dir="${d}">${DIR_ARROWS[d]}</button>`).join('')}</div>`
@@ -1477,7 +1431,7 @@ export class Hud {
           <button class="btn small ${b.trace ? 'primary' : ''}" data-act="term-trace">${t('term_trace')}</button>
           <button class="btn small" data-act="term-step" ${b.run ? 'disabled' : ''}>${t('term_step')}</button>
         </div>
-        <div class="cpu-state" id="cpu-state">${this.cpuStateHtml(b)}</div>
+        <div class="cpu-state" id="cpu-state">${cpuStateHtml(this.sim, b)}</div>
         <div class="keypad">${keys.map((k) => `<button class="key" data-key="${parseInt(k, 16)}">${k}</button>`).join('')}</div>
         <p class="save-hint">${t('term_keys_hint')}${switches.length ? ` · ${t('term_switches', { n: switches.length })}` : ''}</p>
         <div class="dirs"><span class="lbl">${t('term_pixel_item')}</span>${items.map((k) => `<button class="chip ${(b.recipe ?? 'copper_wire') === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon xs')}</button>`).join('')}</div>
@@ -1640,15 +1594,6 @@ export class Hud {
     return { name: `${t('preset_display', { w: CHIP8_W, h: CHIP8_H })}`, w: CHIP8_W, h: CHIP8_H, items };
   }
 
-  /** PC, current instruction and registers of a terminal's CPU. */
-  private cpuStateHtml(b: Building): string {
-    const cpu = this.sim.cpu(b);
-    if (!cpu) return '';
-    const op = (cpu.mem[cpu.pc] << 8) | cpu.mem[cpu.pc + 1];
-    const hx = (v: number, w: number) => v.toString(16).toUpperCase().padStart(w, '0');
-    const regs = Array.from(cpu.v).map((v, i) => `<span><small>V${i.toString(16).toUpperCase()}</small>${hx(v, 2)}</span>`).join('');
-    return `<div class="cpu-line"><span><small>PC</small>${hx(cpu.pc, 3)}</span><span><small>OP</small>${hx(op, 4)}</span><span class="mn">${disasm(op)}</span><span><small>I</small>${hx(cpu.i, 3)}</span><span><small>DT</small>${cpu.dt}</span><span><small>${t('term_cycles')}</small>${cpu.cycles}</span></div><div class="cpu-regs">${regs}</div>`;
-  }
 
   /** Draw the selected terminal's screen into the panel canvas (called from refresh). */
   private drawTerminalScreen(b: Building) {
@@ -1768,11 +1713,6 @@ export class Hud {
     );
   }
 
-  private siteLine(b: Building): string {
-    const s = this.sim.siteInfo(b);
-    const txt = b.deliver ? t(b.enroute === 'drone' ? 'site_drone' : b.enroute === 'item' ? 'site_item' : 'site_deliver') : s.pos === 0 ? t('site_printing', { p: Math.round(s.progress * 100) }) : t('site_waiting', { n: s.pos + 1 });
-    return `<div class="site-line">${icon('print', 'sm')} ${txt}</div>`;
-  }
 
   /** Compact printer status at the end of the stock strip (the bar width is updated in refresh). */
   private printStripHtml(): string {
@@ -1789,7 +1729,7 @@ export class Hud {
 
   openPrinter() {
     this.printerOpen = true;
-    this.openModal(this.printerHtml(), (target) => {
+    this.openModal(printerHtml(this.sim), (target) => {
       const act = target.dataset.act;
       if ((act === 'auto-on' || act === 'auto-off') && !this.sim.challenge()) this.sim.state.autoPrint = act === 'auto-on';
       else if (target.dataset.print) {
@@ -1820,32 +1760,11 @@ export class Hud {
     const card = this.modal.querySelector('.modal-card');
     if (!card) return;
     const scroll = card.querySelector('.kit-list')?.scrollTop ?? 0;
-    card.innerHTML = this.printerHtml();
+    card.innerHTML = printerHtml(this.sim);
     const list = card.querySelector('.kit-list');
     if (list) list.scrollTop = scroll;
   }
 
-  private printerHtml(): string {
-    const st = this.sim.state;
-    const q = this.sim.printQueue();
-    const auto = st.autoPrint !== false;
-    const inv = st.inventory;
-    const queue = q.length
-      ? q.map((j, i) => `<div class="pq-row ${i === 0 ? 'now' : ''}"><img class="icon" src="${buildingUrl(j.type)}" alt=""><span class="pq-name">${tBuilding(j.type)}<small>${j.site ? t('print_site') : t('print_stock')}</small></span>${i === 0 ? `<span class="pbar"><span class="pfill" style="width:${Math.round((1 - j.left / j.total) * 100)}%"></span></span>` : `<span class="pq-time">${j.left.toFixed(1)} s</span>`}${j.site ? '' : `<button class="iconbtn" data-cancel="${i}" title="${t('cancel')}">${icon('close', 'sm')}</button>`}</div>`).join('')
-      : `<p class="save-hint">${t('printer_empty')}</p>`;
-    const ids = BUILD_GROUPS.flatMap((g) => g.items).filter((id) => st.unlockedBuildings.includes(id));
-    const list = ids.map((id) => {
-      const have = st.kits?.[id] ?? 0;
-      const can = this.sim.canAfford(id) && !this.sim.printLocked(id);
-      return `<div class="kit-row ${this.sim.printLocked(id) ? 'quota' : ''}"><img class="icon" src="${buildingUrl(id)}" alt="" data-building="${id}"><span class="kit-name">${tBuilding(id)}<small>${printSeconds(id)} s · ${costHtml(BUILDINGS[id].cost, inv)}</small></span><b class="kit-have ${have ? '' : 'none'}">×${have}</b><button class="iconbtn" data-bp-building="${id}" title="${t('bp_title')}">${icon('research', 'sm')}</button>${this.sim.printLocked(id) ? `<span class="chip quota-chip">🔒 ${t('ch_quota')}</span>` : `<button class="chip" data-print="${id}" data-n="1" ${can ? '' : 'disabled'}>+1</button><button class="chip" data-print="${id}" data-n="5" ${can ? '' : 'disabled'}>+5</button>`}</div>`;
-    }).join('');
-    return `<h2>${icon('print')} ${t('printer_title')}</h2>
-      <p class="save-hint">${t('printer_hint')} ${t('printer_reach')}</p>
-      ${this.sim.challenge() ? `<p class="save-hint">🏁 ${t('ch_printer')}</p>` : `<div class="dirs"><span class="lbl">${t('printer_auto')}</span><button class="chip ${auto ? 'active' : ''}" data-act="auto-on">${t('on')}</button><button class="chip ${auto ? '' : 'active'}" data-act="auto-off">${t('off')}</button></div>`}
-      <h3>${t('printer_queue')}</h3><div class="pq">${queue}</div>
-      <h3>${t('printer_kits')}</h3><div class="kit-list">${list}</div>
-      <button class="btn primary" data-act="close">${t('close')}</button>`;
-  }
 
   showInfo(b: Building) {
     const def = BUILDINGS[b.type];
@@ -1855,7 +1774,7 @@ export class Hud {
         <div class="info-title"><b>${tBuilding(b.type)}</b><small>${tBuildingDesc(b.type)}</small></div>
         <button class="iconbtn" data-act="close">${icon('close')}</button>
       </div>
-      <div class="info-body">${b.site ? this.siteLine(b) : ''}${this.infoBody(b)}</div>
+      <div class="info-body">${b.site ? siteLine(this.sim, b) : ''}${this.infoBody(b)}</div>
       ${b.type !== 'core' ? `<div class="info-actions">
         ${def.rotatable ? `<button class="btn small" data-act="rotate">${icon('rotate', 'sm')} ${t('rotate')}</button>` : ''}
         ${this.sim.state.unlockedBuildings.includes(b.type) ? `<button class="btn small" data-act="pick" title="Q">${icon('pipette', 'sm')} ${t('pipette')}</button>` : ''}
@@ -1984,7 +1903,7 @@ export class Hud {
         this.sim.stepTerminal(b);
         sfx.select();
         const el = this.info.querySelector('#cpu-state');
-        if (el) el.innerHTML = this.cpuStateHtml(b);
+        if (el) el.innerHTML = cpuStateHtml(this.sim, b);
         return;
       }
       if (target.dataset.act === 'term-run' && b.type === 'terminal') {
@@ -2288,7 +2207,7 @@ export class Hud {
   private showTip(src: HTMLElement) {
     const build = (src.dataset.build ?? src.dataset.building) as BuildingId | undefined;
     const item = (src.dataset.chain ?? src.dataset.item) as ItemId | undefined;
-    const html = build && BUILDINGS[build] ? this.buildingTipHtml(build) : item ? this.itemTipHtml(item) : '';
+    const html = build && BUILDINGS[build] ? buildingTipHtml(this.sim, build) : item ? itemTipHtml(item) : '';
     if (!html || !src.isConnected) return;
     this.keepTip();
     if (this.tipKeyOf(src) !== this.tipKeyOf(this.tipFor ?? src) || this.tipFor === null || !this.tipOpen()) this.tip.innerHTML = html;
@@ -2356,51 +2275,9 @@ export class Hud {
     }, 380);
   }
 
-  /** Compact production chain for a tip: every node links to its blueprint. */
-  private miniTree(id: ItemId, n: number, depth: number, seen: Set<ItemId>): string {
-    const r = RECIPES.find((rc) => rc.output === id);
-    const terrain = (Object.keys(TERRAIN_ITEM) as TerrainId[]).some((k) => TERRAIN_ITEM[k] === id);
-    const mach = r ? `<img class="icon xs mt-mach" src="${buildingUrl(r.machine)}" alt="" data-building="${r.machine}" title="${tBuilding(r.machine)}">` : terrain ? `<img class="icon xs mt-mach" src="${buildingUrl('miner')}" alt="" data-building="miner" title="${tBuilding('miner')}">` : '';
-    const label = `<span class="mt-node">${n > 1 ? `<em>${n}×</em>` : ''}${itemImg(id, 'icon xs')}<span>${tItem(id)}</span>${mach ? `<small>←</small>${mach}` : ''}</span>`;
-    if (!r || seen.has(id) || depth >= 5) return `<li>${label}</li>`;
-    const next = new Set(seen).add(id);
-    return `<li>${label}<ul>${Object.entries(r.inputs).map(([k, m]) => this.miniTree(k as ItemId, m!, depth + 1, next)).join('')}</ul></li>`;
-  }
 
-  private recipeRow(r: (typeof RECIPES)[number]): string {
-    const ins = Object.entries(r.inputs).map(([k, n]) => `${itemImg(k as ItemId, 'icon xs')}${n}`).join(' + ');
-    return `<div class="tip-recipe">${ins} → ${itemImg(r.output, 'icon xs')}${r.outputCount > 1 ? r.outputCount : ''} <small>${r.seconds}s</small></div>`;
-  }
 
-  private buildingTipHtml(id: BuildingId): string {
-    const def = BUILDINGS[id];
-    const st = this.sim.state;
-    const recipes = def.kind === 'machine' ? RECIPES.filter((r) => r.machine === id) : [];
-    const cost = Object.keys(def.cost).length ? costHtml(def.cost, st.inventory) : '–';
-    const power = def.power ? `<span class="${def.power < 0 ? 'ok' : ''}">⚡ ${def.power < 0 ? '+' : '−'}${Math.abs(def.power)}</span>` : '';
-    const rate = def.kind === 'miner' ? `${Math.round((60 / MINE_SECONDS) * this.sim.factor('miner'))}/min` : def.kind === 'conveyor' ? `${Math.round(this.sim.beltCapacity())}/min` : '';
-    return `<div class="tip-head"><img src="${buildingUrl(id)}" alt="" data-building="${id}"><div><b>${tBuilding(id)}</b><small>${def.size}×${def.size} ${power} ${rate ? '· ' + rate : ''}</small></div></div>
-      <p>${tBuildingDesc(id)}</p>
-      <div class="tip-line"><span>${t('cost')}</span>${cost}</div>
-      ${recipes.length ? `<div class="tip-line"><span>${t('recipes')}</span></div>${recipes.map((r) => this.recipeRow(r)).join('')}` : ''}
-      ${Object.keys(def.cost).length ? `<div class="tip-line"><span>${t('tip_chain_kit')}</span></div><ul class="mini-tree">${Object.entries(def.cost).map(([k, n]) => this.miniTree(k as ItemId, n!, 0, new Set())).join('')}</ul>` : ''}
-      <button class="btn small" data-bp-building="${id}">${icon('research', 'sm')} ${t('bp_title')}</button>
-      <small class="dim">${t('tip_hint')}</small>`;
-  }
 
-  private itemTipHtml(id: ItemId): string {
-    const made = RECIPES.filter((r) => r.output === id);
-    const used = RECIPES.filter((r) => id in r.inputs);
-    const terrain = (Object.keys(TERRAIN_ITEM) as TerrainId[]).find((k) => TERRAIN_ITEM[k] === id);
-    const usedIn = used.map((r) => `${itemImg(r.output, 'icon xs')}`).join(' ');
-    const costOf = BUILD_ORDER.filter((b) => id in BUILDINGS[b].cost).map((b) => tBuilding(b)).join(', ');
-    return `<div class="tip-head">${itemImg(id, 'icon')}<div><b>${tItem(id)}</b><small>${SHIP_PARTS[id] ? `🚀 ${t('ship_part')} · ${SHIP_PARTS[id]}` : ''}</small></div></div>
-      ${terrain ? `<p>${t('tip_mined', { m: tBuilding('miner') })}</p>` : made.map((r) => `<div class="tip-line"><span>${tBuilding(r.machine)}</span></div>${this.recipeRow(r)}`).join('')}
-      ${usedIn ? `<div class="tip-line"><span>${t('tip_used_in')}</span><span>${usedIn}</span></div>` : ''}
-      ${costOf ? `<div class="tip-line"><span>${t('tip_builds')}</span><span class="wrap">${costOf}</span></div>` : ''}
-      ${made.length ? `<div class="tip-line"><span>${t('tip_chain')}</span></div><ul class="mini-tree">${this.miniTree(id, 1, 0, new Set())}</ul>` : ''}
-      <button class="btn small" data-chain="${id}">${icon('research', 'sm')} ${t('bp_title')}</button>`;
-  }
 
   /** Styled replacement for window.confirm. */
   confirmModal(text: string, okLabel = t('ok')): Promise<boolean> {
@@ -2567,16 +2444,6 @@ export class Hud {
 
   private bpHistory: ({ kind: 'item'; id: ItemId } | { kind: 'building'; id: BuildingId })[] = [];
 
-  /** Where something gets unlocked: "from the start" or the mission that unlocks it. */
-  private unlockNote(kind: 'recipe' | 'building', id: string): string {
-    const st = this.sim.state;
-    const have = kind === 'recipe' ? st.unlockedRecipes.includes(id) : st.unlockedBuildings.includes(id as BuildingId);
-    if (have) return '';
-    const idx = MISSIONS.findIndex((m) => (kind === 'recipe' ? m.unlockRecipes.includes(id) : m.unlocks.includes(id as BuildingId)));
-    const proj = kind === 'building' ? PROJECTS.find((p) => p.unlocks.includes(id as BuildingId)) : undefined;
-    if (proj) return `<span class="bp-lock">🔒 ${t('bp_unlock_project', { p: t(`proj_${proj.id}` as 'proj_p_sensor'), n: proj.after })}</span>`;
-    return idx >= 0 ? `<span class="bp-lock">🔒 ${t('bp_unlock_after', { n: idx + 1 })}</span>` : `<span class="bp-lock">🔒</span>`;
-  }
 
   /**
    * Blueprint overlay: a tree from the target down to the raw deposits. Items show the machine that makes them
@@ -2584,76 +2451,11 @@ export class Hud {
    */
   showBlueprint(what: { kind: 'item'; id: ItemId } | { kind: 'building'; id: BuildingId }, push = true) {
     this.hideTip(true);
-    const st = this.sim.state;
-    const sim = this.sim;
     if (push) {
       const last = this.bpHistory[this.bpHistory.length - 1];
       if (!last || last.kind !== what.kind || last.id !== what.id) this.bpHistory.push(what);
     }
-    const rate = this.chainRate;
-    const minerPerMin = (60 / MINE_SECONDS) * sim.factor('miner') * sim.factor('yield');
-    const beltPerMin = sim.beltCapacity();
-    void beltPerMin;
-    const deposits = (id: ItemId) => (Object.keys(TERRAIN_ITEM) as TerrainId[]).find((k) => TERRAIN_ITEM[k] === id);
-    // qty mode (buildings): amounts instead of rates
-    const node = (id: ItemId, amount: number, qty: boolean, depth: number, seen: Set<ItemId>, per: number | null): string => {
-      const r = RECIPES.find((rc) => rc.output === id);
-      const terrain = deposits(id);
-      const have = st.inventory[id] ?? 0;
-      const amountTxt = qty ? `${Math.ceil(amount)}×` : `${amount.toFixed(amount < 10 ? 1 : 0)}/min`;
-      let body = `<div class="bp-node ${r ? 'made' : terrain ? 'raw' : 'plain'}" data-bp-item="${id}">
-        ${per ? `<span class="bp-per">${per}×</span>` : ''}
-        <div class="bp-top">${itemImg(id, 'icon')}<div><b>${tItem(id)}</b><small>${amountTxt} · ${t('bp_stock')} ${have}</small></div></div>`;
-      if (r) {
-        const crafts = qty ? Math.ceil(amount / r.outputCount) : 0;
-        const perMachine = ((r.outputCount * 60) / r.seconds) * sim.factor('machine');
-        const machines = qty ? 0 : amount / perMachine;
-        const built = st.buildings.filter((b) => !b.site && b.recipe && RECIPE_BY_ID[b.recipe]?.output === id).length;
-        body += `<div class="bp-mach ${!qty && built >= Math.ceil(machines) ? 'ok' : ''}"><img class="icon xs" src="${buildingUrl(r.machine)}" alt="" data-building="${r.machine}">
-          <span>${tBuilding(r.machine)} · ${r.seconds}s${r.outputCount > 1 ? ` → ${r.outputCount}×` : ''}</span>
-          <em>${qty ? t('bp_runs', { n: crafts, s: Math.round((crafts * r.seconds) / sim.factor('machine')) }) : `${Math.ceil(machines)}× (${machines.toFixed(2)}) · ${built} ${t('built')}`}</em>
-          ${this.unlockNote('recipe', r.id)}</div>`;
-      } else if (terrain) {
-        const miners = qty ? 0 : amount / minerPerMin;
-        const built = st.buildings.filter((b) => !b.site && b.type === 'miner' && b.mineItem === id).length;
-        body += `<div class="bp-mach raw ${!qty && built >= Math.ceil(miners) ? 'ok' : ''}"><img class="icon xs" src="${buildingUrl('miner')}" alt="" data-building="miner">
-          <span>${t('bp_mine', { m: tBuilding('miner') })}</span>
-          <em>${qty ? t('bp_mine_qty', { s: Math.round((amount * MINE_SECONDS) / sim.factor('miner')) }) : `${Math.ceil(miners)}× (${miners.toFixed(2)}) · ${built} ${t('built')}`}</em></div>`;
-      }
-      if (!qty && amount > sim.beltCapacity(id)) body += `<div class="bp-warn">⚠ ${t('belt_limit', { n: sim.beltCapacity(id).toFixed(0) })}</div>`;
-      body += `</div>`;
-      let kids = '';
-      if (r && !seen.has(id) && depth < 7) {
-        const next = new Set(seen).add(id);
-        const crafts = qty ? Math.ceil(amount / r.outputCount) : amount / r.outputCount;
-        kids = Object.entries(r.inputs).map(([k, n]) => `<li>${node(k as ItemId, crafts * n!, qty, depth + 1, next, n!)}</li>`).join('');
-      }
-      return kids ? `${body}<ul>${kids}</ul>` : body;
-    };
-    let head = '';
-    let tree = '';
-    if (what.kind === 'item') {
-      const id = what.id;
-      const usedIn = RECIPES.filter((r) => r.inputs[id] !== undefined);
-      const buildsWith = BUILD_ORDER.filter((b) => BUILDINGS[b].cost[id] !== undefined);
-      head = `<h2>${icon('research')} ${t('bp_title')} · ${tItem(id)}</h2>
-        <div class="dirs"><span class="lbl">${t('target_rate')}</span>${[5, 10, 20, 30, 60].map((r) => `<button class="chip ${r === rate ? 'active' : ''}" data-rate="${r}">${r}/min</button>`).join('')}</div>`;
-      tree = `<ul class="bp-tree"><li>${node(id, rate, false, 0, new Set(), null)}</li></ul>`;
-      const uses = [...usedIn.map((r) => `<button class="chip" data-bp-item="${r.output}">${itemImg(r.output, 'icon xs')} ${tItem(r.output)}</button>`), ...buildsWith.map((b) => `<button class="chip" data-bp-building="${b}"><img class="icon xs" src="${buildingUrl(b)}" alt=""> ${tBuilding(b)}</button>`)];
-      tree += uses.length ? `<h3>${t('bp_used_in')}</h3><div class="chain-grid">${uses.join('')}</div>` : '';
-    } else {
-      const id = what.id;
-      const def = BUILDINGS[id];
-      const kits = st.kits?.[id] ?? 0;
-      head = `<h2>${icon('research')} ${t('bp_title')} · ${tBuilding(id)}</h2>
-        <div class="bp-building"><img src="${buildingUrl(id)}" alt=""><div><b>${tBuilding(id)}</b><small>${def.size}×${def.size}${def.power ? ` · ⚡ ${def.power < 0 ? '+' : '−'}${Math.abs(def.power)}` : ''} · ${t('bp_print', { s: printSeconds(id) })} · ${t('printer_kits')}: ${kits}</small><small>${tBuildingDesc(id)}</small>${this.unlockNote('building', id)}</div></div>`;
-      const mats = Object.entries(def.cost);
-      tree = mats.length
-        ? `<ul class="bp-tree"><li><div class="bp-node kit"><div class="bp-top"><img class="icon" src="${buildingUrl(id)}" alt=""><div><b>${t('kit_of', { b: tBuilding(id) })}</b><small>${t('bp_print', { s: printSeconds(id) })}</small></div></div></div><ul>${mats.map(([k, n]) => `<li>${node(k as ItemId, n!, true, 1, new Set(), n!)}</li>`).join('')}</ul></li></ul>`
-        : '';
-      const recipes = RECIPES.filter((r) => r.machine === id);
-      if (recipes.length) tree += `<h3>${t('recipes')}</h3><div class="chain-grid">${recipes.map((r) => `<button class="chip" data-bp-item="${r.output}">${itemImg(r.output, 'icon xs')} ${tItem(r.output)}</button>`).join('')}</div>`;
-    }
+    const { head, tree } = blueprintContent(this.sim, what, this.chainRate);
     const back = this.bpHistory.length > 1 ? `<button class="btn small" data-bp-back="1">← ${t('bp_back')}</button>` : '';
     this.openModal(
       `<div class="bp">${head}<div class="bp-scroll">${tree}</div>
@@ -2685,29 +2487,7 @@ export class Hud {
     this.modal.addEventListener('transitionend', () => undefined, { once: true });
   }
 
-  /** One-line text of a contract (all kinds). */
-  contractText(c: Contract): string {
-    const time = fmtTime(c.deadline - this.sim.state.time);
-    const item = tItem(c.item);
-    if (c.kind === 'steady') return t('contract_steady', { lo: c.lo!, hi: c.hi!, item, s: c.hold!, time });
-    if (c.kind === 'batch') return t('contract_batch', { n: c.n!, item, w: c.window!, k: c.rounds!, time });
-    if (c.kind === 'level') return t('contract_level', { lo: c.lo!, hi: c.hi!, item, s: c.hold!, time });
-    return t('contract_text', { n: c.amount, item, time });
-  }
 
-  /** Progress bar and line of an accepted contract. */
-  private contractProgress(c: Contract): string {
-    const st = this.sim.state;
-    const left = `${t('time_left')} ${fmtTime(c.deadline - st.time)}`;
-    if (!c.kind || c.kind === 'amount') return `<div class="pbar big"><div class="pfill" style="width:${(c.delivered / c.amount) * 100}%"></div></div><div class="cmeta">${c.delivered}/${c.amount} · ${left}</div>`;
-    if (c.kind === 'batch') {
-      const inWin = Math.max(0, Math.ceil((c.winStart ?? st.time) + c.window! - st.time));
-      return `<div class="pbar big"><div class="pfill" style="width:${((c.done ?? 0) / c.rounds!) * 100}%"></div></div><div class="cmeta">${t('contract_batch_now', { d: c.done ?? 0, k: c.rounds!, c: c.winCount ?? 0, n: c.n!, s: inWin })} · ${left}</div>`;
-    }
-    const v = this.sim.automationValue(c);
-    const ok = v >= c.lo! && v <= c.hi!;
-    return `<div class="pbar big"><div class="pfill" style="width:${((c.held ?? 0) / c.hold!) * 100}%"></div></div><div class="cmeta"><span class="${ok ? 'okline' : 'badline'}">${t(c.kind === 'steady' ? 'contract_rate_now' : 'contract_level_now', { v })}</span> · ${Math.floor(c.held ?? 0)}/${c.hold} s · ${left}</div>`;
-  }
 
   showContracts() {
     const st = this.sim.state;
@@ -2715,10 +2495,10 @@ export class Hud {
       ? st.contracts
           .map(
             (c) => `<div class="contract ${c.accepted ? 'accepted' : ''}">
-          <div class="ctitle">${itemImg(c.item, 'icon')} <b>${c.kind && c.kind !== 'amount' ? `<span class="auto-tag">${t('contract_auto')}</span> ` : ''}${this.contractText(c)}</b></div>
+          <div class="ctitle">${itemImg(c.item, 'icon')} <b>${c.kind && c.kind !== 'amount' ? `<span class="auto-tag">${t('contract_auto')}</span> ` : ''}${contractText(this.sim, c)}</b></div>
           ${c.kind && c.kind !== 'amount' ? `<p class="save-hint">${t(`contract_${c.kind}_hint` as 'contract_steady_hint')}</p>` : ''}
           <div class="creward">${t('contract_reward')}: ${Object.entries(c.reward).map(([k, n]) => `${itemImg(k as ItemId, 'icon xs')}${n}`).join(' ')}</div>
-          ${c.accepted ? this.contractProgress(c) : `<div class="cbtns"><button class="btn small primary" data-accept="${c.id}">${t('contract_accept')}</button><button class="btn small" data-decline="${c.id}">${t('contract_decline')}</button></div>`}
+          ${c.accepted ? contractProgress(this.sim, c) : `<div class="cbtns"><button class="btn small primary" data-accept="${c.id}">${t('contract_accept')}</button><button class="btn small" data-decline="${c.id}">${t('contract_decline')}</button></div>`}
         </div>`,
           )
           .join('')
@@ -3105,7 +2885,7 @@ export class Hud {
   }
 
   contractOffer(c: Contract) {
-    this.toast(`${icon('contracts', 'sm')} ${t('contract_new')}: ${this.contractText(c)}`, 6000);
+    this.toast(`${icon('contracts', 'sm')} ${t('contract_new')}: ${contractText(this.sim, c)}`, 6000);
     sfx.select();
   }
 
@@ -3161,7 +2941,7 @@ export class Hud {
           this.drawTerminalScreen(this.selected);
           const el = this.info.querySelector('#cpu-state');
           if (el) {
-            const html = this.cpuStateHtml(this.selected);
+            const html = cpuStateHtml(this.sim, this.selected);
             if (el.innerHTML !== html) el.innerHTML = html;
           }
         }
