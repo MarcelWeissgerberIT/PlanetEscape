@@ -127,6 +127,14 @@ export class Renderer {
     this.panTarget = null;
   }
 
+  /** Is a building (partly) on screen? */
+  isVisible(b: Building): boolean {
+    const sz = BUILDINGS[b.type].size * TILE;
+    const [sx, sy] = this.cam.worldToScreen(b.x * TILE, b.y * TILE);
+    const s = sz * this.cam.zoom;
+    return sx + s > 0 && sy + s > 0 && sx < this.cam.width && sy < this.cam.height;
+  }
+
   centerOn(tx: number, ty: number, zoom?: number) {
     this.cam.x = (tx + 0.5) * TILE;
     this.cam.y = (ty + 0.5) * TILE;

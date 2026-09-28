@@ -49,6 +49,29 @@ function tone(freq: number, dur: number, type: OscillatorType, vol = 0.08, slide
   o.stop(c.currentTime + dur);
 }
 
+/** Filtered noise burst (rumble, hiss). */
+function noise(dur: number, freq: number, vol = 0.08, q = 1) {
+  const c = ac();
+  if (!c) return;
+  const len = Math.floor(c.sampleRate * dur);
+  const buf = c.createBuffer(1, len, c.sampleRate);
+  const data = buf.getChannelData(0);
+  for (let i = 0; i < len; i++) data[i] = Math.random() * 2 - 1;
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const f = c.createBiquadFilter();
+  f.type = 'lowpass';
+  f.frequency.value = freq;
+  f.Q.value = q;
+  const g = c.createGain();
+  g.gain.setValueAtTime(0.0001, c.currentTime);
+  g.gain.exponentialRampToValueAtTime(vol, c.currentTime + Math.min(0.3, dur * 0.2));
+  g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + dur);
+  src.connect(f).connect(g).connect(c.destination);
+  src.start();
+  src.stop(c.currentTime + dur);
+}
+
 // ---------- Ambient soundscape (procedural: wind, drone, factory hum) ----------
 let ambientOn = true;
 try {
@@ -187,6 +210,29 @@ export const sfx = {
     setTimeout(() => tone(659, 0.15, 'triangle', 0.08), 120);
     setTimeout(() => tone(784, 0.25, 'triangle', 0.08), 240);
     setTimeout(() => tone(1046, 0.4, 'triangle', 0.08), 380);
+  },
+  /** Deep rumble with a few knocks: the seismograph reports a quake. */
+  quake: () => {
+    noise(1.8, 140, 0.16, 4);
+    tone(55, 1.6, 'sine', 0.08, -15);
+    [250, 620, 980].forEach((ms) => setTimeout(() => tone(90, 0.12, 'square', 0.04, -30), ms));
+  },
+  /** Two bright chimes and a short radio chirp: a trade drone calls in. */
+  trader: () => {
+    tone(1320, 0.12, 'sine', 0.06);
+    setTimeout(() => tone(1760, 0.18, 'sine', 0.06), 110);
+    setTimeout(() => tone(900, 0.08, 'square', 0.025, 500), 320);
+  },
+  /** Ratchet clicks and a hiss: a drone repaired a machine. */
+  repair: () => {
+    [0, 70, 140, 210].forEach((ms) => setTimeout(() => tone(1600, 0.025, 'square', 0.03), ms));
+    setTimeout(() => noise(0.25, 4000, 0.03, 0.7), 260);
+  },
+  /** Fanfare by medal: bronze short, gold long and high. */
+  medal: (m: number) => {
+    const notes = m >= 3 ? [523, 659, 784, 1046, 1318] : m === 2 ? [523, 659, 784, 1046] : m === 1 ? [523, 659, 784] : [440, 523];
+    notes.forEach((f, i) => setTimeout(() => tone(f, i === notes.length - 1 ? 0.5 : 0.14, 'triangle', 0.08), i * 120));
+    if (m >= 3) setTimeout(() => noise(0.6, 6000, 0.025, 0.5), notes.length * 120);
   },
   launch: () => {
     tone(90, 2.5, 'sawtooth', 0.1, 400);

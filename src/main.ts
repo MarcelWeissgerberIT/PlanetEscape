@@ -20,6 +20,7 @@ let sim = new Sim(Save.load() ?? newGame());
 let renderer = new Renderer(canvas, sim);
 let playing = false;
 let launchShown = false;
+let lastRepairSfx = 0;
 
 const cbs = {
   onPlace: (type: Parameters<Sim['place']>[0], x: number, y: number, dir: Parameters<Sim['place']>[3]) => {
@@ -204,6 +205,13 @@ function frame(now: number) {
         case 'contract_failed': hud.contractFailed(); break;
         case 'storm': hud.storm(ev.on); break;
         case 'event': hud.eventOffer(ev.event); break;
+        case 'repaired':
+          // at most one ratchet every two seconds, and only for machines on screen
+          if (performance.now() - lastRepairSfx > 2000 && renderer.isVisible(ev.b)) {
+            lastRepairSfx = performance.now();
+            sfx.repair();
+          }
+          break;
         case 'event_done': hud.eventDone(ev.event, ev.choice, sim.state.time >= ev.event.until); break;
         case 'meteor': hud.meteorLanded(ev.x, ev.y); break;
         case 'beep': sfx.beep(); break;

@@ -381,7 +381,7 @@ export class Hud {
     const c = this.sim.challenge();
     if (!c) return;
     const r = recordChallenge(c.id, seconds);
-    sfx.mission();
+    sfx.medal(r.medal);
     this.openModal(`<div class="launch"><h2>🏁 ${t('ch_done')}</h2>
       <p class="medal-big">${MEDALS[r.medal] || '✓'}</p>
       <p>${t('ch_time', { time: fmtTime(seconds) })}${r.improved ? ` <span class="rec">${t('new_record')}</span>` : ''}</p>
@@ -3056,7 +3056,9 @@ export class Hud {
 
   /** KORA reports a situation; the player decides (or the safe option happens when the timer runs out). */
   eventOffer(ev: GameEvent) {
-    sfx.select();
+    if (ev.kind === 'quake') sfx.quake();
+    else if (ev.kind === 'trader') sfx.trader();
+    else sfx.select();
     const st = this.sim.state;
     const item = ev.terrain ? tItem(TERRAIN_ITEM[ev.terrain]!) : '';
     const text = t(`event_${ev.kind}_text` as 'event_wreck_text', { item });
