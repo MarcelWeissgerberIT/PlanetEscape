@@ -203,6 +203,23 @@ S.dock = `${housing()}
   ${strip(36, 70, 5, 116)}
   ${chevron(120, 124, 20)}`;
 
+S.kitport = `${housing()}
+  <rect x="50" y="118" width="156" height="88" rx="6" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  ${Array.from({ length: 4 }, (_, k) => `<rect x="58" y="${128 + k * 19}" width="140" height="11" rx="5.5" fill="url(#chromeV)" stroke="#12161b" stroke-width="1.2"/>`).join('')}
+  <g filter="url(#shadow)"><rect x="92" y="46" width="72" height="62" rx="6" fill="#0369a1" stroke="#0c4a6e" stroke-width="4"/>
+  <rect x="100" y="54" width="56" height="46" rx="3" fill="#e0f2fe" opacity="0.9"/>
+  <path d="M108 90V64h16l8 10h16v16z" fill="none" stroke="#0369a1" stroke-width="4" stroke-linejoin="round"/></g>
+  ${chevron(128, 36, 12)}
+  ${plate(58, 210, 70, 13, 'KIT-OUT')}${ledRow(160, 216, [GREEN, CYAN], 11)}
+  ${strip(36, 120, 5, 84)}${strip(215, 120, 5, 84)}`;
+
+S.drone = `<g filter="url(#shadow)">
+  ${[[64, 64], [192, 64], [64, 176], [192, 176]].map(([x, y]) => `<line x1="128" y1="120" x2="${x}" y2="${y}" stroke="#12161b" stroke-width="16" stroke-linecap="round"/><line x1="128" y1="120" x2="${x}" y2="${y}" stroke="url(#chrome)" stroke-width="10" stroke-linecap="round"/><circle cx="${x}" cy="${y}" r="30" fill="#0b0e12" opacity="0.55"/><circle cx="${x}" cy="${y}" r="30" fill="none" stroke="#94a3b8" stroke-width="3"/><circle cx="${x}" cy="${y}" r="9" fill="url(#chrome)" stroke="#0b0e12" stroke-width="2"/>`).join('')}
+  <path d="${oct(92, 84, 72, 72, 16)}" fill="url(#steel)" stroke="#12161b" stroke-width="4"/>
+  <rect x="104" y="96" width="48" height="20" rx="5" fill="#141a22"/>${strip(108, 100, 40, 6)}
+  <circle cx="128" cy="136" r="10" fill="#0b0e12"/><circle cx="128" cy="136" r="6" fill="${AMBER}" filter="url(#glow)"/></g>
+  ${led(64, 64, RED, 4)}${led(192, 64, GREEN, 4)}`;
+
 S.depot = `${housing(10, 10, 236, 236, 30)}
   <rect x="24" y="24" width="208" height="70" rx="6" fill="url(#roof)" stroke="#12161b" stroke-width="3"/>
   ${seam(24, 58, 232, 58)}
@@ -439,6 +456,11 @@ for (const [k, v] of Object.entries(DETAILS)) if (S[k]) S[k] += v;
 hallSizes();
 
 const ITEMS = {
+  kit: `<g filter="url(#shadow)"><rect x="30" y="40" width="196" height="186" rx="14" fill="#075985" stroke="#082f49" stroke-width="8"/>
+    <rect x="30" y="40" width="196" height="186" rx="14" fill="#000" filter="url(#grain)"/>
+    <rect x="46" y="58" width="164" height="150" rx="8" fill="#e0f2fe" opacity="0.18" stroke="#7dd3fc" stroke-width="3" stroke-dasharray="10 6"/>
+    <rect x="96" y="24" width="64" height="30" rx="6" fill="url(#chrome)" stroke="#082f49" stroke-width="4"/>
+    <path d="M52 216h152" stroke="#fbbf24" stroke-width="8"/></g>`,
   motor: `<g filter="url(#shadow)"><rect x="40" y="70" width="150" height="116" rx="20" fill="url(#steel)" stroke="#12161b" stroke-width="6"/>
     ${Array.from({ length: 7 }, (_, k) => `<rect x="${52 + k * 19}" y="74" width="9" height="108" rx="3" fill="#2d333c"/>`).join('')}
     <rect x="186" y="104" width="40" height="48" rx="8" fill="url(#chromeV)" stroke="#12161b" stroke-width="5"/>

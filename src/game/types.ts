@@ -59,6 +59,7 @@ export type BuildingId =
   | 'picker'
   | 'road'
   | 'dock'
+  | 'kitport'
   | 'depot'
   | 'stacker'
   | 'hall4'
@@ -119,6 +120,10 @@ export interface BeltItem {
 
 export interface Building {
   site?: boolean; // placed, waiting for its kit to be printed by the core
+  deliver?: boolean; // site outside the core's reach: its kit is ready and has to be brought here
+  deliverAt?: number; // game time the kit became ready
+  enroute?: 'drone' | 'item'; // how the kit is on its way
+  enrouteAt?: number;
   id: number;
   type: BuildingId;
   x: number; // top-left tile
@@ -262,6 +267,16 @@ export interface GameState {
   kits?: Partial<Record<BuildingId, number>>; // printed building kits in stock
   printQueue?: PrintJob[]; // the core's print jobs, first one is printing
   autoPrint?: boolean; // placing without a kit queues one (default on)
+  drones?: Drone[]; // the core's construction drones
+}
+
+/** A construction drone: flies a kit from the core to a site outside the core's reach. */
+export interface Drone {
+  x: number;
+  y: number;
+  target: number | null;
+  carry: BuildingId | null;
+  state: 'idle' | 'out' | 'back';
 }
 
 /** A kit the core prints: for a construction site (site) or for the stock. */

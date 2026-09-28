@@ -32,9 +32,9 @@ import {
   BUILD_ORDER,
   printSeconds,
 } from './data';
-import type { PrintJob, Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
+import type { Drone, PrintJob, Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, CORE_REACH, CORE_DRONES, DRONE_SPEED, DRONE_DELAY, KITPORT_RATE, KIT_TRANSIT_TIMEOUT, isKit, kitOf, kitId, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -308,11 +308,14 @@ export class Sim {
     if (this.placementError(type, x, y)) return null;
     const def = BUILDINGS[type];
     // a kit from the stock builds at once; otherwise the material goes into a print job and the building waits as a site
-    let site = false;
+    let site = false, deliver = false;
     if (!this.creative) {
       const kits = (this.state.kits ??= {});
-      if ((kits[type] ?? 0) > 0) kits[type] = kits[type]! - 1;
-      else {
+      const far = !this.inReach(x, y, def.size);
+      if ((kits[type] ?? 0) > 0) {
+        kits[type] = kits[type]! - 1;
+        if (far) site = deliver = true; // the kit is ready but has to travel
+      } else {
         this.pay(type);
         const t = printSeconds(type);
         this.printQueue().push({ type, left: t, total: t, site: true });
@@ -321,6 +324,10 @@ export class Sim {
     }
     const b: Building = { id: this.state.nextId++, type, x, y, dir: def.rotatable ? dir : 0 };
     if (site) b.site = true;
+    if (deliver) {
+      b.deliver = true;
+      b.deliverAt = this.state.time;
+    }
     if (type === 'conveyor' || type === 'tunnel') b.items = [];
     if (def.kind === 'machine') {
       b.input = {};
@@ -364,6 +371,7 @@ export class Sim {
         b.bufL = [];
         b.mode = 'load';
       }
+      if (type === 'kitport') b.recipe = null;
       if (type === 'depot') {
         b.threshold = 2;
         b.value = 0; // robots in the depot (delivered)
@@ -470,7 +478,10 @@ export class Sim {
     }
     // a finished building goes back into the kit stock; a site cancels its print job (the material comes back)
     if (!this.creative) {
-      if (b.site) this.cancelSiteJob(b.type);
+      if (b.site && b.deliver) {
+        // a ready kit goes back to stock, unless it is on its way (a drone brings it home, an item arrives somewhere)
+        if (!b.enroute) this.state.kits![b.type] = (this.state.kits![b.type] ?? 0) + 1;
+      } else if (b.site) this.cancelSiteJob(b.type);
       else this.state.kits![b.type] = (this.state.kits![b.type] ?? 0) + 1;
     }
     const dump = (rec?: Partial<Record<ItemId, number>>) => {
@@ -532,7 +543,7 @@ export class Sim {
         if (ARITH.has(b.type)) return from === b.dir || from === ((b.dir + 1) & 3) || from === ((b.dir + 3) & 3); // back = main input, sides = second operand / signal
         if (b.type === 'switch' || b.type === 'timer') return from !== ((b.dir + 2) & 3); // behind = items to gate, sides = control pulses
         if (b.type === 'sensor') return from !== ((b.dir + 2) & 3); // takes the belt from behind or from a side, like a corner
-        if (b.type === 'picker') return false; // the arm fetches its items itself
+        if (b.type === 'picker' || b.type === 'kitport') return false; // they fetch their items themselves
         if (b.type === 'dock') return b.mode !== 'unload'; // a loading dock is filled from any side
         if (b.type === 'depot') return true; // robots are delivered from any side
         return from === b.dir;
@@ -541,8 +552,22 @@ export class Sim {
 
   /** Try to give an item to building b arriving from direction `from` (direction of travel). */
   accept(b: Building, item: ItemId, from: Dir, viaTunnel = false): boolean {
-    if (b.site) return false;
+    if (b.site) {
+      if (b.deliver && item === kitId(b.type)) {
+        this.finishSite(b);
+        return true;
+      }
+      return false;
+    }
     const def = BUILDINGS[b.type];
+    if (isKit(item)) {
+      if (def.kind === 'core') {
+        const k = kitOf(item)!;
+        this.state.kits![k] = (this.state.kits![k] ?? 0) + 1;
+        return true;
+      }
+      if (def.kind === 'machine' || def.kind === 'power' || b.type === 'terminal' || b.type === 'oscillator' || b.type === 'depot') return false;
+    }
     if (isCrate(item) && (def.kind === 'core' || def.kind === 'machine' || def.kind === 'power' || b.type === 'terminal' || b.type === 'oscillator')) return false; // crates must be unpacked first
     switch (def.kind) {
       case 'core': {
@@ -680,7 +705,7 @@ export class Sim {
           } else b.open = b.open === false;
           return true;
         }
-        if (b.type === 'picker') return false;
+        if (b.type === 'picker' || b.type === 'kitport') return false;
         if (b.type === 'depot') {
           // the fleet is built elsewhere: every delivered robot joins the depot
           if (item !== 'robot' || (b.value ?? 0) >= DEPOT_ROBOTS_MAX) return false;
@@ -843,6 +868,7 @@ export class Sim {
     const ratio = demand <= supply ? 1 : supply / demand;
     this.powerRatio = ratio;
     this.tickPrint(dt, ratio);
+    this.tickDrones(dt);
 
     for (const b of st.buildings) {
       if (b.site) continue;
@@ -886,6 +912,9 @@ export class Sim {
           break;
         case 'picker':
           this.tickPicker(b, dt);
+          break;
+        case 'kitport':
+          this.tickKitport(b, dt);
           break;
         case 'road':
           break;
@@ -1202,11 +1231,24 @@ export class Sim {
   }
 
   private waitingSites(type: BuildingId): Building[] {
-    return this.state.buildings.filter((b) => b.site && b.type === type).sort((a, c) => a.id - c.id);
+    return this.state.buildings.filter((b) => b.site && !b.deliver && b.type === type).sort((a, c) => a.id - c.id);
+  }
+
+  /** A printed kit for a site: built at once within the core's reach, otherwise it waits for delivery. */
+  private siteKitReady(b: Building) {
+    if (this.inReach(b.x, b.y, BUILDINGS[b.type].size)) this.finishSite(b);
+    else {
+      b.deliver = true;
+      b.deliverAt = this.state.time;
+    }
   }
 
   private finishSite(b: Building) {
     delete b.site;
+    delete b.deliver;
+    delete b.deliverAt;
+    delete b.enroute;
+    delete b.enrouteAt;
     this.events.push({ type: 'craft', b, item: (Object.keys(BUILDINGS[b.type].cost)[0] as ItemId) ?? 'iron_plate' });
   }
 
@@ -1219,7 +1261,7 @@ export class Sim {
     if (job.left > 0) return;
     q.shift();
     const site = this.waitingSites(job.type)[0];
-    if (job.site && site) this.finishSite(site);
+    if (job.site && site) this.siteKitReady(site);
     else {
       const kits = this.state.kits!;
       kits[job.type] = (kits[job.type] ?? 0) + 1;
@@ -1230,9 +1272,118 @@ export class Sim {
         q.splice(j, 1);
         this.pay(job.type, 1);
         kits[job.type]! -= 1;
-        this.finishSite(waiting);
+        this.siteKitReady(waiting);
       }
     }
+  }
+
+  core(): Building | null {
+    const b = this.state.buildings[0];
+    return b?.type === 'core' ? b : this.state.buildings.find((x) => x.type === 'core') ?? null;
+  }
+
+  /** Is a footprint at (x, y) of `size` tiles within the core's construction reach? */
+  inReach(x: number, y: number, size: number): boolean {
+    const c = this.core();
+    if (!c || this.creative) return true;
+    const cs = BUILDINGS.core.size;
+    const dx = Math.max(c.x - (x + size - 1), 0, x - (c.x + cs - 1));
+    const dy = Math.max(c.y - (y + size - 1), 0, y - (c.y + cs - 1));
+    return Math.max(dx, dy) <= CORE_REACH;
+  }
+
+  drones(): Drone[] {
+    return (this.state.drones ??= []);
+  }
+
+  /** Far sites waiting for their kit, oldest first. */
+  private deliverSites(): Building[] {
+    return this.state.buildings.filter((b) => b.site && b.deliver).sort((a, c) => a.id - c.id);
+  }
+
+  private tickDrones(dt: number) {
+    const core = this.core();
+    if (!core || this.creative) return;
+    const st = this.state;
+    const home = { x: core.x + BUILDINGS.core.size / 2, y: core.y + BUILDINGS.core.size / 2 };
+    const drones = this.drones();
+    while (drones.length < CORE_DRONES) drones.push({ x: home.x, y: home.y, target: null, carry: null, state: 'idle' });
+    const far = this.deliverSites();
+    // a kit sent by belt that got lost: after a while a drone takes over
+    for (const b of far) if (b.enroute === 'item' && st.time - (b.enrouteAt ?? 0) > KIT_TRANSIT_TIMEOUT) delete b.enroute;
+    const speed = DRONE_SPEED * (st.storm > 0 ? 0.6 : 1) * dt;
+    for (const d of drones) {
+      if (d.state === 'idle') {
+        const s = far.find((b) => !b.enroute && st.time - (b.deliverAt ?? 0) >= DRONE_DELAY);
+        if (!s) continue;
+        s.enroute = 'drone';
+        d.target = s.id;
+        d.carry = s.type;
+        d.state = 'out';
+      }
+      const tgt = d.state === 'out' ? this.byId(d.target) : null;
+      if (d.state === 'out' && (!tgt || !tgt.site || !tgt.deliver)) d.state = 'back'; // removed or delivered otherwise
+      const size = tgt ? BUILDINGS[tgt.type].size : 0;
+      const goal = d.state === 'out' && tgt ? { x: tgt.x + size / 2, y: tgt.y + size / 2 } : home;
+      const dx = goal.x - d.x, dy = goal.y - d.y, dist = Math.hypot(dx, dy);
+      if (dist > speed) {
+        d.x += (dx / dist) * speed;
+        d.y += (dy / dist) * speed;
+        continue;
+      }
+      d.x = goal.x;
+      d.y = goal.y;
+      if (d.state === 'out' && tgt) {
+        this.finishSite(tgt);
+        d.carry = null;
+        d.state = 'back';
+      } else if (d.state === 'back') {
+        if (d.carry) st.kits![d.carry] = (st.kits![d.carry] ?? 0) + 1;
+        d.carry = null;
+        d.target = null;
+        d.state = 'idle';
+      }
+    }
+  }
+
+  /** Kit port: puts the kits of far sites on a belt, one per second. */
+  private tickKitport(b: Building, dt: number) {
+    if (!this.inReach(b.x, b.y, 1)) {
+      b.status = 'dead_end';
+      b.working = false;
+      return;
+    }
+    b.rateT = Math.min(1, (b.rateT ?? 0) + dt * KITPORT_RATE);
+    // nearest far site first, even if its kit is still being printed (then wait): a belt towards far sites builds
+    // itself outwards and never carries a kit past a gap
+    let s: Building | null = null, best = Infinity;
+    for (const x of this.state.buildings) {
+      if (!x.site || x.enroute || (b.recipe && b.recipe !== x.type)) continue;
+      if (!x.deliver && this.inReach(x.x, x.y, BUILDINGS[x.type].size)) continue;
+      const d = Math.abs(x.x - b.x) + Math.abs(x.y - b.y);
+      if (d < best) {
+        best = d;
+        s = x;
+      }
+    }
+    if (s && !s.deliver) {
+      b.status = 'waiting';
+      b.working = false;
+      return;
+    }
+    if (!s) {
+      b.status = 'idle';
+      b.working = false;
+      return;
+    }
+    if (b.rateT >= 1 && this.pushDir(b, kitId(s.type), b.dir)) {
+      s.enroute = 'item';
+      s.enrouteAt = this.state.time;
+      b.rateT = 0;
+      b.acc = (b.acc ?? 0) + 1;
+      b.working = true;
+      b.status = 'ok';
+    } else if (b.rateT >= 1) b.status = 'blocked';
   }
 
   /** Where a construction site stands in the print queue: position (0 = printing now) and progress. */

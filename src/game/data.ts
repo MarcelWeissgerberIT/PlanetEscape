@@ -87,6 +87,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   // power plants next to solar: a wind turbine (wind changes, storms help) and a fusion plant burning water
   wind: { id: 'wind', kind: 'power', size: 2, cost: { iron_plate: 10, copper_wire: 6, motor: 2 }, power: -8, rotatable: false },
   reactor: { id: 'reactor', kind: 'power', size: 3, cost: { steel_frame: 20, circuit: 10, precision_part: 6, glass: 10 }, power: -60, rotatable: false },
+  // puts the kits of far construction sites on a belt (must stand within the core's reach)
+  kitport: { id: 'kitport', kind: 'logic', size: 1, cost: { iron_plate: 6, copper_wire: 4 }, power: 1, rotatable: true },
   timer: { id: 'timer', kind: 'logic', size: 1, cost: { iron_plate: 4, copper_wire: 2, circuit: 1 }, power: 1, rotatable: true },
   sensor: { id: 'sensor', kind: 'logic', size: 1, cost: { iron_plate: 3, copper_wire: 2 }, power: 0, rotatable: true },
   radio: { id: 'radio', kind: 'logic', size: 1, cost: { circuit: 2, copper_wire: 6, cell: 1 }, power: 3, rotatable: true },
@@ -141,6 +143,7 @@ export const BUILD_ORDER: BuildingId[] = [
   'picker',
   'road',
   'dock',
+  'kitport',
   'depot',
   'stacker',
   'lamp',
@@ -215,7 +218,7 @@ export const STAR_EFFICIENCY = 0.45;
 
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
-  { id: 'm2', rate: { iron_plate: 10 }, rateHold: 45, deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
+  { id: 'm2', rate: { iron_plate: 10 }, rateHold: 45, deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage', 'kitport'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
   { id: 'm3', rate: { machine_part: 4 }, rateHold: 45, deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'wind', 'splitter', 'tunnel', 'sorter', 'overflow', 'picker', 'lamp', 'speaker', 'switch', 'sensor'], unlockRecipes: ['steel_frame', 'motor'] },
   { id: 'm4', rate: { copper_wire: 8, steel_frame: 3 }, rateHold: 45, deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: ['road', 'dock', 'depot', 'battery', 'hall4', 'hall8', 'matrix', 'screen', 'keyboard', 'timer'], unlockRecipes: ['circuit', 'glass', 'cell', 'robot'] },
   { id: 'm5', rate: { circuit: 4 }, rateHold: 45, deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'radio', 'stacker', 'hall12', 'hall16', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
@@ -286,7 +289,7 @@ export const SCREEN_TINT = 0.35; // how much the delivered item's colour tints t
 export const SCREEN_SAMPLE_RATE = 4;
 /** Build menu tabs. */
 export const BUILD_GROUPS: { id: 'logistics' | 'storage' | 'production' | 'energy' | 'circuit' | 'computer'; items: BuildingId[] }[] = [
-  { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'sorter', 'overflow', 'mixer', 'valve', 'picker', 'road', 'dock', 'depot', 'radio'] },
+  { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'sorter', 'overflow', 'mixer', 'valve', 'picker', 'kitport', 'road', 'dock', 'depot', 'radio'] },
   { id: 'storage', items: ['storage', 'hall4', 'hall8', 'hall12', 'hall16', 'stacker'] },
   { id: 'production', items: ['miner', 'smelter', 'assembler', 'printer', 'refinery', 'fabricator'] },
   { id: 'energy', items: ['solar', 'wind', 'battery', 'generator', 'reactor'] },
@@ -300,6 +303,23 @@ export function isHall(id: BuildingId): boolean {
 }
 export const HALL_SLOT_CAP = 50; // items per shelf slot
 export const WIND_STORM_FACTOR = 1.6;
+/** Construction logistics: the core builds directly within CORE_REACH tiles; farther sites need their kit delivered. */
+export const CORE_REACH = 14;
+export const CORE_DRONES = 2; // construction drones of the core (slow fallback for far sites)
+export const DRONE_SPEED = 3; // tiles per second
+export const DRONE_DELAY = 8; // seconds a far site waits for a kit port before a drone takes it
+export const KITPORT_RATE = 1; // kits per second a kit port puts out
+export const KIT_TRANSIT_TIMEOUT = 90; // a kit sent by belt that never arrives: after this a drone brings one
+export const KIT_PREFIX = 'kit:';
+export function isKit(id: string): boolean {
+  return id.startsWith(KIT_PREFIX);
+}
+export function kitOf(id: string): BuildingId | null {
+  return isKit(id) ? (id.slice(KIT_PREFIX.length) as BuildingId) : null;
+}
+export function kitId(type: BuildingId): ItemId {
+  return (KIT_PREFIX + type) as ItemId;
+}
 export const PICKER_RATE = 1; // items per second a grabber arm moves
 export const PICKER_REACH = [1, 2]; // tiles between the arm and its source / target
 export const ROBOT_SPEED = 3; // tiles per second on a road
@@ -342,6 +362,7 @@ export function crateId(item: ItemId): ItemId {
 }
 /** Fallback colour of an item (crates take their content's colour). */
 export function itemColor(id: string): string {
+  if (id.startsWith('kit:')) return '#38bdf8';
   return ITEMS[(crateOf(id) ?? id) as ItemId]?.color ?? '#b45309';
 }
 export function itemRgb(id: ItemId): number {

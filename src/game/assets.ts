@@ -27,7 +27,7 @@ export function terrainSprite(id: TerrainId): HTMLImageElement {
 }
 
 export function itemSprite(id: ItemId): HTMLImageElement {
-  const key = id.startsWith('crate:') ? 'crate' : id;
+  const key = id.startsWith('crate:') ? 'crate' : id.startsWith('kit:') ? 'kit' : id;
   return load(`i:${key}`, `${base}/assets/items/${key}.webp${V}`);
 }
 
@@ -36,7 +36,7 @@ export function terrainUrl(id: TerrainId): string {
 }
 
 export function itemUrl(id: ItemId): string {
-  return `${base}/assets/items/${id.startsWith('crate:') ? 'crate' : id}.webp${V}`;
+  return `${base}/assets/items/${id.startsWith('crate:') ? 'crate' : id.startsWith('kit:') ? 'kit' : id}.webp${V}`;
 }
 
 export function buildingUrl(id: BuildingId): string {

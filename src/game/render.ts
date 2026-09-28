@@ -4,7 +4,7 @@ import { BELT_SPACING, BUILDINGS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERR
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from './chip8';
 import { audioLevel } from './video';
 import { ARITH } from './sim';
-import { printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, crateOf, itemColor, DOCK_CAP, BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { CORE_REACH, kitOf, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, crateOf, itemColor, DOCK_CAP, BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -349,13 +349,17 @@ export class Renderer {
     for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel' && b.type !== 'road' && !b.site) this.drawBuilding(b);
     for (const b of visible) if (b.site) this.drawSite(b);
     this.drawRobots(x0, y0, x1, y1);
+    this.drawDrones();
 
     this.drawScanlines(visible);
     if (this.overlay) this.drawOverlay(visible, dt);
 
     this.drawParticles(dt);
 
-    if (this.ghost) this.drawGhost(this.ghost);
+    if (this.ghost) {
+      this.drawReach();
+      this.drawGhost(this.ghost);
+    }
     if (this.pasteGhost) this.drawPasteGhost(this.pasteGhost);
     if (this.beltPreview) this.drawBeltPreview(this.beltPreview);
     if (this.paintGhost) {
@@ -499,6 +503,49 @@ export class Renderer {
     }
   }
 
+  /** While building: the square the core builds in directly (farther sites need their kit delivered). */
+  private drawReach() {
+    const c = this.sim.core();
+    if (!c || this.sim.creative) return;
+    const { ctx } = this;
+    const n = BUILDINGS.core.size;
+    const x = (c.x - CORE_REACH) * TILE, y = (c.y - CORE_REACH) * TILE, w = (n + 2 * CORE_REACH) * TILE;
+    ctx.strokeStyle = 'rgba(34,211,238,0.5)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([10, 8]);
+    ctx.lineDashOffset = -this.time * 8;
+    ctx.strokeRect(x, y, w, w);
+    ctx.setLineDash([]);
+    ctx.fillStyle = 'rgba(34,211,238,0.035)';
+    ctx.fillRect(x, y, w, w);
+  }
+
+  /** Construction drones: body, four rotors, a kit hanging below, shadow on the ground. */
+  private drawDrones() {
+    const { ctx } = this;
+    const spr = buildingSprite('drone' as BuildingId);
+    for (const d of this.sim.drones()) {
+      if (d.state === 'idle') continue;
+      const px = d.x * TILE, py = d.y * TILE;
+      ctx.fillStyle = 'rgba(0,0,0,0.25)';
+      ctx.beginPath();
+      ctx.ellipse(px + 10, py + 16, 16, 7, 0, 0, Math.PI * 2);
+      ctx.fill();
+      if (d.carry) this.drawItem(('kit:' + d.carry) as ItemId, px, py + 8, TILE * 0.36);
+      if (ready(spr)) ctx.drawImage(spr, px - TILE * 0.4, py - TILE * 0.46, TILE * 0.8, TILE * 0.8);
+      if (!this.lowDetail) {
+        ctx.strokeStyle = 'rgba(226,232,240,0.35)';
+        ctx.lineWidth = 1;
+        const a = this.time * 30;
+        for (const [ox, oy] of [[-0.26, -0.32], [0.26, -0.32], [-0.26, 0.1], [0.26, 0.1]]) {
+          ctx.beginPath();
+          ctx.ellipse(px + ox * TILE, py + oy * TILE, TILE * 0.13, TILE * 0.04, a, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+    }
+  }
+
   /** A construction site: the building as a cyan hologram, with the print progress or its place in the queue. */
   private drawSite(b: Building) {
     const { ctx } = this;
@@ -524,7 +571,13 @@ export class Renderer {
     ctx.strokeRect(x0 + 2.5, y0 + 2.5, sz - 5, sz - 5);
     ctx.setLineDash([]);
     const info = this.sim.siteInfo(b);
-    if (info.pos === 0) {
+    if (b.deliver) {
+      // kit ready, far from the core: waiting for a drone or a belt
+      if (!this.lowDetail) {
+        this.drawItem(('kit:' + b.type) as ItemId, cx, cy, Math.min(sz * 0.5, TILE * 0.55), 0.55 + 0.45 * Math.abs(Math.sin(this.time * 3)));
+        this.drawTag(cx, y0 - 4, b.enroute === 'drone' ? '✈' : b.enroute === 'item' ? '⇢' : '⌖', '#f59e0b');
+      }
+    } else if (info.pos === 0) {
       // printing: bar at the foot and a print head sweeping over the site
       ctx.fillStyle = 'rgba(8,12,18,0.8)';
       ctx.fillRect(x0 + 6, y0 + sz - 10, sz - 12, 5);
@@ -914,6 +967,12 @@ export class Renderer {
         // a crate shows its content as a small icon on the lid
         const ii = itemSprite(inner);
         if (ready(ii)) ctx.drawImage(ii, px - size * 0.24, py - size * 0.36, size * 0.48, size * 0.48);
+      }
+      const kb = kitOf(id);
+      if (kb) {
+        // a kit shows the building it holds
+        const bi = buildingSprite(kb);
+        if (ready(bi)) ctx.drawImage(bi, px - size * 0.26, py - size * 0.3, size * 0.52, size * 0.52);
       }
     } else {
       ctx.fillStyle = itemColor(id);

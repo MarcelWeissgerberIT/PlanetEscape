@@ -149,11 +149,6 @@ export class Hud {
     this.renderTitle();
     this.renderBottom();
     this.renderTop();
-    const job = this.sim.printQueue()[0];
-    const fill = this.bottom.querySelector('#printfill') as HTMLElement | null;
-    if (fill && job) fill.style.width = `${Math.round((1 - job.left / job.total) * 100)}%`;
-    if (this.printerOpen) this.renderPrinter();
-    if (this.selected?.site) this.showInfo(this.selected);
     // tapping any item icon (outside buttons that use icons as labels) opens its production chain
     this.root.addEventListener('click', (e) => {
       if (this.panelJustOpened()) return;
@@ -1354,7 +1349,11 @@ export class Hud {
       const known = ITEM_ORDER.filter((id) => (st.inventory[id] ?? 0) > 0 || st.stats.produced[id] || RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id)) || TERRAIN_ITEM[st.terrain[0]] === id || ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'].includes(id));
       const picker = (label: string) => `<div class="lbl">${label}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('any_item')}</button>${known.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
       if (b.type === 'sorter') body = `${statusLine()}${dirPicker}${picker(t('sort_item'))}`;
-      else if (b.type === 'stacker') {
+      else if (b.type === 'kitport') {
+        const types = Array.from(new Set(this.sim.state.buildings.filter((x) => x.site && x.deliver).map((x) => x.type)));
+        body = `${statusLine(` · ${b.acc ?? 0} ${t('kitport_sent')}`)}<p class="save-hint">${t('kitport_hint')}</p>${dirPicker}
+          <div class="lbl">${t('kitport_only')}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-kitfilter="">${t('any_item')}</button>${[...new Set([...(b.recipe ? [b.recipe as BuildingId] : []), ...types])].map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-kitfilter="${k}"><img class="icon" src="${buildingUrl(k)}" alt=""><div class="r-name">${tBuilding(k)}</div></button>`).join('')}</div>`;
+      } else if (b.type === 'stacker') {
         const unpack = b.mode === 'unpack', n = b.bufL?.length ?? 0;
         body = `${statusLine(` · ${n}/${CRATE_SIZE}${b.bufL?.length ? ` ${itemImg(b.bufL[0], 'icon sm')}` : ''} · ${b.acc ?? 0} ${t('stacker_crates')}`)}
           <div class="dirs"><span class="lbl">${t('stacker_mode')}</span><button class="chip ${unpack ? '' : 'active'}" data-mode="pack">${t('stacker_pack')}</button><button class="chip ${unpack ? 'active' : ''}" data-mode="unpack">${t('stacker_unpack')}</button></div>
@@ -1618,7 +1617,8 @@ export class Hud {
 
   private siteLine(b: Building): string {
     const s = this.sim.siteInfo(b);
-    return `<div class="site-line">${icon('print', 'sm')} ${s.pos === 0 ? t('site_printing', { p: Math.round(s.progress * 100) }) : t('site_waiting', { n: s.pos + 1 })}</div>`;
+    const txt = b.deliver ? t(b.enroute === 'drone' ? 'site_drone' : b.enroute === 'item' ? 'site_item' : 'site_deliver') : s.pos === 0 ? t('site_printing', { p: Math.round(s.progress * 100) }) : t('site_waiting', { n: s.pos + 1 });
+    return `<div class="site-line">${icon('print', 'sm')} ${txt}</div>`;
   }
 
   /** Compact printer status at the end of the stock strip (the bar width is updated in refresh). */
@@ -1682,7 +1682,7 @@ export class Hud {
       return `<div class="kit-row"><img class="icon" src="${buildingUrl(id)}" alt=""><span class="kit-name">${tBuilding(id)}<small>${printSeconds(id)} s · ${costHtml(BUILDINGS[id].cost, inv)}</small></span><b class="kit-have ${have ? '' : 'none'}">×${have}</b><button class="chip" data-print="${id}" data-n="1" ${can ? '' : 'disabled'}>+1</button><button class="chip" data-print="${id}" data-n="5" ${can ? '' : 'disabled'}>+5</button></div>`;
     }).join('');
     return `<h2>${icon('print')} ${t('printer_title')}</h2>
-      <p class="save-hint">${t('printer_hint')}</p>
+      <p class="save-hint">${t('printer_hint')} ${t('printer_reach')}</p>
       <div class="dirs"><span class="lbl">${t('printer_auto')}</span><button class="chip ${auto ? 'active' : ''}" data-act="auto-on">${t('on')}</button><button class="chip ${auto ? '' : 'active'}" data-act="auto-off">${t('off')}</button></div>
       <h3>${t('printer_queue')}</h3><div class="pq">${queue}</div>
       <h3>${t('printer_kits')}</h3><div class="kit-list">${list}</div>
@@ -1742,6 +1742,12 @@ export class Hud {
       }
       if (target.dataset.act === 'printer') {
         this.openPrinter();
+        return;
+      }
+      if (target.dataset.kitfilter !== undefined) {
+        b.recipe = target.dataset.kitfilter || null;
+        sfx.select();
+        this.showInfo(b);
         return;
       }
       if (target.dataset.act === 'depot-add') {
@@ -2679,6 +2685,11 @@ export class Hud {
     this.tickHints();
     this.renderBottom();
     this.renderTop();
+    const job = this.sim.printQueue()[0];
+    const fill = this.bottom.querySelector('#printfill') as HTMLElement | null;
+    if (fill && job) fill.style.width = `${Math.round((1 - job.left / job.total) * 100)}%`;
+    if (this.printerOpen) this.renderPrinter();
+    if (this.selected?.site) this.showInfo(this.selected);
     if (this.renderer.selectedTile && !this.info.classList.contains('hidden') && this.sim.state.buildings.length && this.sim.at(this.renderer.selectedTile.x, this.renderer.selectedTile.y)) {
       // a building was placed on the selected tile: switch to its panel
       this.selectBuilding(this.sim.at(this.renderer.selectedTile.x, this.renderer.selectedTile.y));

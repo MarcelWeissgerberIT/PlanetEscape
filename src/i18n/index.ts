@@ -169,6 +169,14 @@ const dict = {
     chapter_next_hint: 'The next chapter starts on a new, larger map ({size}). Unlocks, upgrades and statistics carry over; the factory is rebuilt from a fresh stock of material.',
     chip_belt: 'drag a line, release to lay it, ✕ to stop',
     pipette: 'Pipette',
+    printer_reach: 'Within 14 tiles of the core it builds directly; farther sites need their kit delivered: by a kit port and belts, robots or grabber arms, or slowly by one of the two construction drones.',
+    site_deliver: 'Kit ready: waiting for delivery (kit port or drone)',
+    site_drone: 'A drone is bringing the kit',
+    site_item: 'The kit is on its way',
+    kitport_sent: 'kits sent',
+    kitport_hint: 'Puts the kit of every construction site outside the core\'s reach on the belt in front, one per second, oldest site first. Lead the belt (or robots, a grabber arm) to the sites: faster than the drones. Must stand within the core\'s reach.',
+    kitport_only: 'Only kits for',
+    kit_of: 'Kit · {b}',
     rate_row: '{item} per minute',
     rate_hold: 'Hold the rate',
     efficiency_line: 'Machines busy {p} % (3 stars need {need} %)',
@@ -547,6 +555,7 @@ const dict = {
       speaker: 'Speaker',
       keyboard: 'Keyboard',
       picker: 'Grabber arm',
+      kitport: 'Kit port',
       road: 'Road',
       dock: 'Loading dock',
       depot: 'Robot depot',
@@ -594,6 +603,7 @@ const dict = {
       screen: 'Streams a shared browser tab (YouTube!), the camera or a video file onto the LED matrices right of it, 64×32 to 1024×512 pixels, and puts colour samples of the picture on the belt to its left. It burns phosphor (delivered items), needs bus lanes and a clock for bandwidth and registers as frame buffer; only matrices wired to it light up. Tap it to pick the source.',
       speaker: 'Plays the sound of a video receiver it is wired to (touching or via bus traces), with a VU meter. Tab audio must be shared in the browser dialog.',
       keyboard: 'A keyboard for a terminal (touching it or wired via bus traces). Type on your real keyboard while it is selected, or tap the on-screen keys; programs read the characters with LD Vx, KB. Run KDOS on the terminal for a command line.',
+      kitport: 'Sends the kits of construction sites outside the core\'s reach out on a belt, so belts and robots can bring them to the site faster than the drones.',
       picker: 'Moves one item per second from the building or belt behind it into the one in front: pulls from depots and machine trays, taps a passing belt, feeds a machine with just one kind of item. Reach 1 or 2.',
       road: 'A tile transport robots drive on. Lay roads between docks and next to a depot; they can cross belts only via tunnels.',
       dock: 'Where robots load and unload. Pick-up: belts fill it, robots take the items. Drop-off: robots bring items, the dock pushes them out in the arrow direction.',
@@ -807,6 +817,14 @@ const dict = {
     chapter_next_hint: 'Das nächste Kapitel beginnt auf einer neuen, größeren Karte ({size}). Freischaltungen, Upgrades und Statistik werden mitgenommen, die Fabrik wird aus frischem Materialvorrat neu aufgebaut.',
     chip_belt: 'Linie ziehen, loslassen zum Verlegen, ✕ zum Beenden',
     pipette: 'Pipette',
+    printer_reach: 'Bis 14 Felder um den Kern baut er direkt; weiter entfernte Baustellen brauchen ihren Bausatz geliefert: über eine Bausatz-Ausgabe und Bänder, Roboter oder Greifarme, oder langsam mit einer der zwei Baudrohnen.',
+    site_deliver: 'Bausatz fertig: wartet auf Lieferung (Bausatz-Ausgabe oder Drohne)',
+    site_drone: 'Eine Drohne bringt den Bausatz',
+    site_item: 'Der Bausatz ist unterwegs',
+    kitport_sent: 'Bausätze ausgegeben',
+    kitport_hint: 'Legt den Bausatz jeder Baustelle außerhalb der Kern-Reichweite auf das Band davor, einen pro Sekunde, älteste Baustelle zuerst. Führe das Band (oder Roboter, einen Greifarm) zu den Baustellen: schneller als die Drohnen. Muss in der Reichweite des Kerns stehen.',
+    kitport_only: 'Nur Bausätze für',
+    kit_of: 'Bausatz · {b}',
     rate_row: '{item} pro Minute',
     rate_hold: 'Rate halten',
     efficiency_line: 'Maschinen ausgelastet {p} % (3 Sterne ab {need} %)',
@@ -1185,6 +1203,7 @@ const dict = {
       speaker: 'Lautsprecher',
       keyboard: 'Tastatur',
       picker: 'Greifarm',
+      kitport: 'Bausatz-Ausgabe',
       road: 'Straße',
       dock: 'Ladestation',
       depot: 'Roboterdepot',
@@ -1232,6 +1251,7 @@ const dict = {
       screen: 'Streamt einen geteilten Browser-Tab (YouTube!), die Kamera oder eine Videodatei auf die LED-Matrizen rechts daneben, 64×32 bis 1024×512 Pixel, und legt Farbproben des Bildes auf das Band links von ihm. Er verbraucht Leuchtstoff (gelieferte Teile), braucht Leiterbahnen und Takt als Bandbreite und Speicherzellen als Bildspeicher; nur verdrahtete Matrizen leuchten. Antippen und Quelle wählen.',
       speaker: 'Spielt den Ton eines Video-Empfängers, an dem er hängt (berührend oder über Leiterbahnen), mit Pegelanzeige. Tab-Audio muss im Browser-Dialog geteilt werden.',
       keyboard: 'Eine Tastatur für ein Terminal (berührend oder über Leiterbahnen verdrahtet). Tippe auf deiner echten Tastatur, solange sie ausgewählt ist, oder auf die Bildschirmtasten; Programme lesen die Zeichen mit LD Vx, KB. Starte KDOS auf dem Terminal für eine Kommandozeile.',
+      kitport: 'Schickt die Bausätze von Baustellen außerhalb der Kern-Reichweite auf ein Band, damit Bänder und Roboter sie schneller als die Drohnen zur Baustelle bringen.',
       picker: 'Bewegt jede Sekunde ein Teil aus dem Gebäude oder Band dahinter in das davor: zieht aus Lagern und Maschinenablagen, zapft ein vorbeilaufendes Band an, füttert eine Maschine mit nur einer Teilesorte. Reichweite 1 oder 2.',
       road: 'Ein Feld, auf dem Transportroboter fahren. Straßen zwischen Ladestationen und neben ein Depot legen; Bänder kreuzen sie nur per Tunnel.',
       dock: 'Hier laden Roboter. Abholung: Bänder füllen sie, Roboter nehmen die Teile mit. Anlieferung: Roboter bringen Teile, die Station schiebt sie in Pfeilrichtung heraus.',
@@ -1316,6 +1336,7 @@ export function t(key: FlatKey, vars?: Record<string, string | number>): string 
 
 export function tItem(id: string): string {
   if (id.startsWith('crate:')) return t('crate_of', { n: 8, item: tItem(id.slice(6)) });
+  if (id.startsWith('kit:')) return t('kit_of', { b: tBuilding(id.slice(4)) });
   return (dict[current].items as Record<string, string>)[id] ?? id;
 }
 
