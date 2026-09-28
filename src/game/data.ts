@@ -30,6 +30,7 @@ export const ITEMS: Record<ItemId, ItemDef> = {
 
 export const ITEM_ORDER: ItemId[] = Object.keys(ITEMS) as ItemId[];
 
+
 export const TERRAIN_ITEM: Record<TerrainId, ItemId | null> = {
   ground: null,
   rock: null,
@@ -109,6 +110,14 @@ export const MIXER_RATIOS: [number, number][] = [[1, 1], [1, 2], [2, 1], [1, 3],
 export const VALVE_THRESHOLDS = [10, 20, 50, 100, 200, 500];
 
 export const TUNNEL_RANGE = 4; // max tiles between entrance and exit
+
+/** Seconds the core needs to print a building kit: grows with the material in it. */
+export function printSeconds(id: BuildingId): number {
+  const cost = BUILDINGS[id].cost;
+  let n = 0;
+  for (const k in cost) n += cost[k as ItemId] ?? 0;
+  return Math.min(40, Math.round((0.2 + 0.12 * n) * 10) / 10);
+}
 
 export const BUILD_ORDER: BuildingId[] = [
   'conveyor',
@@ -204,8 +213,8 @@ export const SHIP_TOTAL = Object.values(SHIP_PARTS).reduce((a, c) => a + (c ?? 0
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
   { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
-  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'wind', 'splitter', 'tunnel', 'sorter', 'overflow', 'picker', 'lamp', 'matrix', 'screen', 'speaker', 'keyboard', 'switch', 'timer', 'sensor'], unlockRecipes: ['steel_frame', 'motor'] },
-  { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: ['road', 'dock', 'depot', 'battery', 'hall4', 'hall8'], unlockRecipes: ['circuit', 'glass', 'cell', 'robot'] },
+  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'wind', 'splitter', 'tunnel', 'sorter', 'overflow', 'picker', 'lamp', 'speaker', 'switch', 'sensor'], unlockRecipes: ['steel_frame', 'motor'] },
+  { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: ['road', 'dock', 'depot', 'battery', 'hall4', 'hall8', 'matrix', 'screen', 'keyboard', 'timer'], unlockRecipes: ['circuit', 'glass', 'cell', 'robot'] },
   { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'radio', 'stacker', 'hall12', 'hall16', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'reactor', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
   { id: 'm7', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
@@ -381,15 +390,16 @@ export interface LevelDef {
   storms: boolean;
   contracts: boolean;
   inventory: Partial<Record<ItemId, number>>;
+  kits?: Partial<Record<BuildingId, number>>; // building kits the chapter starts with
   par: number; // seconds for a three-star finish
 }
 
 export const LEVELS: LevelDef[] = [
   { seed: 1101, size: 36, basics: [{ type: 'iron_ore', dist: 5, r: 2.2 }], extraTypes: [], extra: 0, rocks: 0, storms: false, contracts: false, inventory: { iron_plate: 60, copper_plate: 10 }, par: 240 },
   { seed: 1202, size: 40, basics: [{ type: 'iron_ore', dist: 6, r: 2.4 }, { type: 'copper_ore', dist: 7, r: 2.2 }], extraTypes: [], extra: 0, rocks: 0, storms: false, contracts: false, inventory: { iron_plate: 90, copper_plate: 20 }, par: 420 },
-  { seed: 1303, size: 44, basics: [{ type: 'iron_ore', dist: 6, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.4 }, { type: 'iron_ore', dist: 12, r: 2.2 }], extraTypes: [], extra: 0, rocks: 3, storms: false, contracts: false, inventory: { iron_plate: 160, copper_plate: 70, machine_part: 8 }, par: 600 },
-  { seed: 1404, size: 52, basics: [{ type: 'iron_ore', dist: 7, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.0 }, { type: 'iron_ore', dist: 14, r: 2.4 }], extraTypes: ['copper_ore'], extra: 1, rocks: 6, storms: false, contracts: true, inventory: { iron_plate: 120, copper_plate: 50, machine_part: 24 }, par: 780 },
-  { seed: 1505, size: 60, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 11, r: 2.4 }, { type: 'iron_ore', dist: 15, r: 2.4 }, { type: 'copper_ore', dist: 17, r: 2.2 }], extraTypes: ['quartz', 'iron_ore'], extra: 2, rocks: 10, storms: false, contracts: true, inventory: { iron_plate: 150, copper_plate: 60, machine_part: 36, copper_wire: 30, steel_frame: 12 }, par: 960 },
-  { seed: 1606, size: 72, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.4 }, { type: 'ice', dist: 12, r: 2.4 }, { type: 'oil', dist: 15, r: 2.0 }, { type: 'iron_ore', dist: 18, r: 2.6 }], extraTypes: ['copper_ore', 'ice', 'quartz'], extra: 3, rocks: 16, storms: true, contracts: true, inventory: { iron_plate: 180, copper_plate: 70, machine_part: 48, copper_wire: 30, steel_frame: 24, circuit: 24, glass: 24 }, par: 1260 },
-  { seed: 1707, size: 96, basics: [{ type: 'iron_ore', dist: 7, r: 3.0 }, { type: 'copper_ore', dist: 9, r: 2.8 }, { type: 'quartz', dist: 12, r: 2.6 }, { type: 'ice', dist: 13, r: 2.6 }, { type: 'oil', dist: 15, r: 2.4 }, { type: 'iron_ore', dist: 19, r: 3.0 }, { type: 'copper_ore', dist: 21, r: 2.6 }], extraTypes: ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'], extra: 10, rocks: 30, storms: true, contracts: true, inventory: { iron_plate: 240, copper_plate: 90, machine_part: 70, copper_wire: 40, steel_frame: 40, circuit: 40, glass: 40, precision_part: 24 }, par: 1800 },
+  { seed: 1303, size: 44, basics: [{ type: 'iron_ore', dist: 6, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.4 }, { type: 'iron_ore', dist: 12, r: 2.2 }], extraTypes: [], extra: 0, rocks: 3, storms: false, contracts: false, inventory: { iron_plate: 160, copper_plate: 70 }, kits: { assembler: 1, conveyor: 30 }, par: 600 },
+  { seed: 1404, size: 52, basics: [{ type: 'iron_ore', dist: 7, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.0 }, { type: 'iron_ore', dist: 14, r: 2.4 }], extraTypes: ['copper_ore'], extra: 1, rocks: 6, storms: false, contracts: true, inventory: { iron_plate: 140, copper_plate: 60 }, kits: { assembler: 3, printer: 1, conveyor: 40 }, par: 780 },
+  { seed: 1505, size: 60, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 11, r: 2.4 }, { type: 'iron_ore', dist: 15, r: 2.4 }, { type: 'copper_ore', dist: 17, r: 2.2 }], extraTypes: ['quartz', 'iron_ore'], extra: 2, rocks: 10, storms: false, contracts: true, inventory: { iron_plate: 180, copper_plate: 70 }, kits: { assembler: 4, printer: 1, hall4: 1, conveyor: 50 }, par: 960 },
+  { seed: 1606, size: 72, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.4 }, { type: 'ice', dist: 12, r: 2.4 }, { type: 'oil', dist: 15, r: 2.0 }, { type: 'iron_ore', dist: 18, r: 2.6 }], extraTypes: ['copper_ore', 'ice', 'quartz'], extra: 3, rocks: 16, storms: true, contracts: true, inventory: { iron_plate: 260, copper_plate: 110 }, kits: { assembler: 6, printer: 2, refinery: 3, mixer: 1, miner: 4, smelter: 3, solar: 2, conveyor: 80 }, par: 1260 },
+  { seed: 1707, size: 96, basics: [{ type: 'iron_ore', dist: 7, r: 3.0 }, { type: 'copper_ore', dist: 9, r: 2.8 }, { type: 'quartz', dist: 12, r: 2.6 }, { type: 'ice', dist: 13, r: 2.6 }, { type: 'oil', dist: 15, r: 2.4 }, { type: 'iron_ore', dist: 19, r: 3.0 }, { type: 'copper_ore', dist: 21, r: 2.6 }], extraTypes: ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'], extra: 10, rocks: 30, storms: true, contracts: true, inventory: { iron_plate: 340, copper_plate: 140 }, kits: { assembler: 8, printer: 3, refinery: 4, fabricator: 4, generator: 1, mixer: 1, miner: 6, smelter: 4, solar: 4, conveyor: 120 }, par: 1800 },
 ];

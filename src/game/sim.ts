@@ -30,8 +30,9 @@ import {
   recipesFor,
   RECIPES,
   BUILD_ORDER,
+  printSeconds,
 } from './data';
-import type { Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
+import type { PrintJob, Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
 import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
@@ -171,6 +172,8 @@ export class Sim {
     this.grid = new Array(state.width * state.height).fill(null);
     this.rebuildGrid();
     this.creative = state.options.mode === 'playground'; // the playground is always free of cost and requirements
+    state.kits ??= {};
+    state.printQueue ??= [];
     this.syncUnlocks();
   }
 
@@ -234,6 +237,12 @@ export class Sim {
 
   // ---------- Building placement ----------
 
+  /** A kit in stock, or (with auto print on) the material to print one. */
+  canBuild(type: BuildingId): boolean {
+    if ((this.state.kits?.[type] ?? 0) > 0) return true;
+    return this.state.autoPrint !== false && this.canAfford(type);
+  }
+
   canAfford(type: BuildingId): boolean {
     const cost = BUILDINGS[type].cost;
     for (const k in cost) if ((this.state.inventory[k as ItemId] ?? 0) < cost[k as ItemId]!) return false;
@@ -257,7 +266,7 @@ export class Sim {
       }
     }
     if (def.placeOn === 'deposit' && !this.isDeposit(x, y)) return 'err_deposit';
-    if (!this.creative && !this.canAfford(type)) return 'err_cost';
+    if (!this.creative && !this.canBuild(type)) return this.state.autoPrint === false ? 'err_no_kit' : 'err_cost';
     return null;
   }
 
@@ -298,8 +307,20 @@ export class Sim {
   place(type: BuildingId, x: number, y: number, dir: Dir): Building | null {
     if (this.placementError(type, x, y)) return null;
     const def = BUILDINGS[type];
-    if (!this.creative) for (const k in def.cost) this.addInv(k as ItemId, -def.cost[k as ItemId]!);
+    // a kit from the stock builds at once; otherwise the material goes into a print job and the building waits as a site
+    let site = false;
+    if (!this.creative) {
+      const kits = (this.state.kits ??= {});
+      if ((kits[type] ?? 0) > 0) kits[type] = kits[type]! - 1;
+      else {
+        this.pay(type);
+        const t = printSeconds(type);
+        this.printQueue().push({ type, left: t, total: t, site: true });
+        site = true;
+      }
+    }
     const b: Building = { id: this.state.nextId++, type, x, y, dir: def.rotatable ? dir : 0 };
+    if (site) b.site = true;
     if (type === 'conveyor' || type === 'tunnel') b.items = [];
     if (def.kind === 'machine') {
       b.input = {};
@@ -447,8 +468,11 @@ export class Sim {
       this.state.robots = this.state.robots.filter((r) => r.depot !== b.id);
       if (!this.creative && b.value) this.addInv('robot', b.value); // the robots go back to the stock
     }
-    // full refund incl. buffered items (player friendly)
-    if (!this.creative) for (const k in def.cost) this.addInv(k as ItemId, def.cost[k as ItemId]!);
+    // a finished building goes back into the kit stock; a site cancels its print job (the material comes back)
+    if (!this.creative) {
+      if (b.site) this.cancelSiteJob(b.type);
+      else this.state.kits![b.type] = (this.state.kits![b.type] ?? 0) + 1;
+    }
     const dump = (rec?: Partial<Record<ItemId, number>>) => {
       if (!rec) return;
       for (const k in rec) this.addInv(k as ItemId, rec[k as ItemId] ?? 0);
@@ -483,6 +507,7 @@ export class Sim {
 
   /** Could building b ever take items arriving in direction `from`? (static check used for dead-end detection) */
   canReceiveFrom(b: Building, from: Dir): boolean {
+    // (a construction site answers like the finished building so belts can be planned to it; accept() still refuses items)
     switch (BUILDINGS[b.type].kind) {
       case 'core':
         return true;
@@ -516,6 +541,7 @@ export class Sim {
 
   /** Try to give an item to building b arriving from direction `from` (direction of travel). */
   accept(b: Building, item: ItemId, from: Dir, viaTunnel = false): boolean {
+    if (b.site) return false;
     const def = BUILDINGS[b.type];
     if (isCrate(item) && (def.kind === 'core' || def.kind === 'machine' || def.kind === 'power' || b.type === 'terminal' || b.type === 'oscillator')) return false; // crates must be unpacked first
     switch (def.kind) {
@@ -768,6 +794,7 @@ export class Sim {
     let supply = 0;
     let demand = 0;
     for (const b of st.buildings) {
+      if (b.site) continue;
       const p = BUILDINGS[b.type].power;
       if (p < 0) {
         const fuel = PLANT_FUEL[b.type];
@@ -790,7 +817,7 @@ export class Sim {
     // batteries: charge from surplus, deliver up to their rate when the grid falls short
     let surplus = supply - demand;
     for (const b of st.buildings) {
-      if (b.type !== 'battery') continue;
+      if (b.type !== 'battery' || b.site) continue;
       const charge = b.value ?? 0;
       if (surplus > 0 && charge < BATTERY_CAP) {
         const take = Math.min(surplus, BATTERY_RATE);
@@ -814,8 +841,10 @@ export class Sim {
     st.powerDemand = demand;
     const ratio = demand <= supply ? 1 : supply / demand;
     this.powerRatio = ratio;
+    this.tickPrint(dt, ratio);
 
     for (const b of st.buildings) {
+      if (b.site) continue;
       switch (b.type) {
         case 'conveyor':
           this.tickBelt(b, dt);
@@ -1037,7 +1066,7 @@ export class Sim {
         if (seen.has(ni)) continue;
         seen.add(ni);
         const p = this.at(nx, ny);
-        if (!p || !BOARD_PARTS.has(p.type)) continue;
+        if (!p || p.site || !BOARD_PARTS.has(p.type)) continue;
         tiles.add(ni);
         queue.push(ni);
         if (p.type === 'register') cells.push(p);
@@ -1127,6 +1156,95 @@ export class Sim {
     return [cpu.pc >> 8, cpu.pc & 0xff, op >> 8, op & 0xff, cpu.i >> 8, cpu.i & 0xff, ...Array.from(cpu.v)];
   }
 
+  // ---------- Kits and the core's printer ----------
+
+  printQueue(): PrintJob[] {
+    return (this.state.printQueue ??= []);
+  }
+
+  private pay(type: BuildingId, sign = -1) {
+    const cost = BUILDINGS[type].cost;
+    for (const k in cost) this.addInv(k as ItemId, sign * cost[k as ItemId]!);
+  }
+
+  /** Queue kits for the stock; stops when the material runs out. Returns how many were queued. */
+  queuePrint(type: BuildingId, n = 1): number {
+    let done = 0;
+    for (; done < n && this.canAfford(type); done++) {
+      this.pay(type);
+      const t = printSeconds(type);
+      this.printQueue().push({ type, left: t, total: t, site: false });
+    }
+    return done;
+  }
+
+  /** Cancel a stock job (site jobs go with their site). The material comes back. */
+  cancelPrint(index: number): boolean {
+    const q = this.printQueue();
+    const job = q[index];
+    if (!job || job.site) return false;
+    q.splice(index, 1);
+    this.pay(job.type, 1);
+    return true;
+  }
+
+  private cancelSiteJob(type: BuildingId) {
+    const q = this.printQueue();
+    for (let i = q.length - 1; i >= 0; i--) {
+      if (q[i].site && q[i].type === type) {
+        q.splice(i, 1);
+        this.pay(type, 1);
+        return;
+      }
+    }
+  }
+
+  private waitingSites(type: BuildingId): Building[] {
+    return this.state.buildings.filter((b) => b.site && b.type === type).sort((a, c) => a.id - c.id);
+  }
+
+  private finishSite(b: Building) {
+    delete b.site;
+    this.events.push({ type: 'craft', b, item: (Object.keys(BUILDINGS[b.type].cost)[0] as ItemId) ?? 'iron_plate' });
+  }
+
+  /** The core prints the first job; a finished kit completes the oldest waiting site or goes to the stock. */
+  private tickPrint(dt: number, ratio: number) {
+    const q = this.printQueue();
+    if (!q.length || this.creative) return;
+    const job = q[0];
+    job.left -= dt * Math.max(0.25, ratio); // a weak grid slows the printer down
+    if (job.left > 0) return;
+    q.shift();
+    const site = this.waitingSites(job.type)[0];
+    if (job.site && site) this.finishSite(site);
+    else {
+      const kits = this.state.kits!;
+      kits[job.type] = (kits[job.type] ?? 0) + 1;
+      // a kit for the stock while a site of that type still waits for its own (unstarted) job: use it right away
+      const waiting = this.waitingSites(job.type)[0];
+      const j = q.findIndex((x) => x.site && x.type === job.type && x.left >= x.total);
+      if (waiting && j >= 0) {
+        q.splice(j, 1);
+        this.pay(job.type, 1);
+        kits[job.type]! -= 1;
+        this.finishSite(waiting);
+      }
+    }
+  }
+
+  /** Where a construction site stands in the print queue: position (0 = printing now) and progress. */
+  siteInfo(b: Building): { pos: number; progress: number } {
+    const idx = this.waitingSites(b.type).indexOf(b);
+    const q = this.printQueue();
+    let k = 0;
+    for (let i = 0; i < q.length; i++) {
+      if (!q[i].site || q[i].type !== b.type) continue;
+      if (k++ === idx) return { pos: i, progress: i === 0 ? 1 - q[i].left / q[i].total : 0 };
+    }
+    return { pos: -1, progress: 0 };
+  }
+
   // ---------- Warehouses and power ----------
 
   hallSlots(b: Building): number {
@@ -1173,7 +1291,8 @@ export class Sim {
   }
 
   private isRoad(x: number, y: number): boolean {
-    return this.at(x, y)?.type === 'road';
+    const b = this.at(x, y);
+    return b?.type === 'road' && !b.site;
   }
 
   /** Road tiles touching a building's footprint. */
@@ -1241,7 +1360,7 @@ export class Sim {
     const search = this.roadSearch(sx, sy);
     let best: { dock: Building; tile: { x: number; y: number }; d: number } | null = null;
     for (const dock of this.state.buildings) {
-      if (dock.type !== 'dock') continue;
+      if (dock.type !== 'dock' || dock.site) continue;
       const mode = dock.mode === 'unload' ? 'unload' : 'load';
       if (mode !== kind) continue;
       if (kind === 'load' && !dock.bufL!.length) continue;

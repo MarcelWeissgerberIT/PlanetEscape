@@ -118,6 +118,7 @@ export interface BeltItem {
 }
 
 export interface Building {
+  site?: boolean; // placed, waiting for its kit to be printed by the core
   id: number;
   type: BuildingId;
   x: number; // top-left tile
@@ -253,6 +254,17 @@ export interface GameState {
   note?: { de?: string; en?: string; title?: string }; // shown once when a shared save is imported
   focus?: { x: number; y: number; zoom: number }; // camera position to show when the save is loaded
   robots?: Robot[]; // transport robots (depots)
+  kits?: Partial<Record<BuildingId, number>>; // printed building kits in stock
+  printQueue?: PrintJob[]; // the core's print jobs, first one is printing
+  autoPrint?: boolean; // placing without a kit queues one (default on)
+}
+
+/** A kit the core prints: for a construction site (site) or for the stock. */
+export interface PrintJob {
+  type: BuildingId;
+  left: number; // seconds of printing left
+  total: number;
+  site: boolean;
 }
 
 /** A transport robot: lives at a depot, drives on roads between loading docks. Positions are tile coordinates (centre = +0.5). */

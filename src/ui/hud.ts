@@ -1,6 +1,6 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -149,6 +149,11 @@ export class Hud {
     this.renderTitle();
     this.renderBottom();
     this.renderTop();
+    const job = this.sim.printQueue()[0];
+    const fill = this.bottom.querySelector('#printfill') as HTMLElement | null;
+    if (fill && job) fill.style.width = `${Math.round((1 - job.left / job.total) * 100)}%`;
+    if (this.printerOpen) this.renderPrinter();
+    if (this.selected?.site) this.showInfo(this.selected);
     // tapping any item icon (outside buttons that use icons as labels) opens its production chain
     this.root.addEventListener('click', (e) => {
       if (this.panelJustOpened()) return;
@@ -746,13 +751,15 @@ export class Hud {
     const buildHtml = BUILD_ORDER.filter((id) => !tabItems || tabItems.has(id)).map((id) => {
       const def = BUILDINGS[id];
       const unlocked = this.editor || st.unlockedBuildings.includes(id);
-      const affordable = this.editor || this.sim.canAfford(id);
+      const affordable = this.editor || this.sim.canBuild(id);
+      const kitN = this.editor || this.sim.creative ? 0 : st.kits?.[id] ?? 0;
       const active = this.tool.kind === 'build' && this.tool.type === id;
       return `<button class="build-btn ${active ? 'active' : ''} ${unlocked ? '' : 'locked'} ${affordable ? '' : 'poor'} ${hint === id ? 'hint' : ''}" data-build="${id}" ${unlocked ? '' : 'disabled'}>
           <img src="${buildingUrl(id)}" alt="" draggable="false">
           <span class="bname">${tBuilding(id)}</span>
           <span class="bcost">${unlocked ? costHtml(def.cost, inv) : '🔒'}</span>
           ${def.power ? `<span class="bpower ${def.power < 0 ? 'gen' : ''}">⚡${Math.abs(def.power)}</span>` : ''}
+          ${kitN ? `<span class="bkit" title="${t('printer_kits')}">×${kitN}</span>` : ''}
         </button>`;
     }).join('');
     const delActive = this.tool.kind === 'delete';
@@ -772,7 +779,7 @@ export class Hud {
       : '';
     const bottomHtml = `
       ${editorBar}
-      <div class="inv-strip">${this.editor ? `<span class="inv-empty">∞ ${t('ed_free')}</span>` : invHtml || `<span class="inv-empty">${t('inventory')}</span>`}</div>
+      <div class="inv-strip">${this.editor ? `<span class="inv-empty">∞ ${t('ed_free')}</span>` : invHtml || `<span class="inv-empty">${t('inventory')}</span>`}${this.printStripHtml()}</div>
       ${this.editor && this.editorTab === 'terrain' ? '' : tabsHtml}
       <div class="build-row">
         <div class="build-bar">${this.editor && this.editorTab === 'terrain' ? paletteHtml : buildHtml}</div>
@@ -816,6 +823,10 @@ export class Hud {
       }
       if (target.dataset.act === 'edplay') {
         this.setEditor(false);
+        return;
+      }
+      if (target.dataset.act === 'printer') {
+        this.openPrinter();
         return;
       }
       if (target.dataset.btab) {
@@ -1287,7 +1298,7 @@ export class Hud {
       const p = Math.round(this.sim.shipProgress() * 100);
       body = st.options.mode === 'playground'
         ? `<p class="save-hint">${t('core_playground')}</p>`
-        : `<div class="lbl">${t('ship_progress')} ${p}%</div><div class="pbar big"><div class="pfill" style="width:${p}%"></div></div><div class="mrows">${parts}</div>`;
+        : `<div class="term-btns"><button class="btn small primary" data-act="printer">${icon('print', 'sm')} ${t('printer_title')}</button></div><div class="lbl">${t('ship_progress')} ${p}%</div><div class="pbar big"><div class="pfill" style="width:${p}%"></div></div><div class="mrows">${parts}</div>`;
     } else if (b.type === 'terminal') {
       const cpu = this.sim.cpu(b);
       const errs = this.sim.cpuErrorsOf(b);
@@ -1598,6 +1609,79 @@ export class Hud {
     );
   }
 
+  private siteLine(b: Building): string {
+    const s = this.sim.siteInfo(b);
+    return `<div class="site-line">${icon('print', 'sm')} ${s.pos === 0 ? t('site_printing', { p: Math.round(s.progress * 100) }) : t('site_waiting', { n: s.pos + 1 })}</div>`;
+  }
+
+  /** Compact printer status at the end of the stock strip (the bar width is updated in refresh). */
+  private printStripHtml(): string {
+    if (this.editor || this.sim.creative || this.sim.coreHidden) return '';
+    const q = this.sim.printQueue();
+    const kits = Object.values(this.sim.state.kits ?? {}).reduce((a, c) => a + (c ?? 0), 0);
+    const job = q[0];
+    return `<button class="print-strip" data-act="printer" title="${t('printer_title')}">${icon('print', 'sm')}${job
+      ? `<img class="icon sm" src="${buildingUrl(job.type)}" alt=""><span class="pbar"><span class="pfill" id="printfill"></span></span>${q.length > 1 ? `<b>+${q.length - 1}</b>` : ''}`
+      : `<span>${t('printer_ready')}</span>`}<small>${t('kits_total', { n: kits })}</small></button>`;
+  }
+
+  private printerOpen = false;
+
+  openPrinter() {
+    this.printerOpen = true;
+    this.openModal(this.printerHtml(), (target) => {
+      const act = target.dataset.act;
+      if (act === 'auto-on' || act === 'auto-off') this.sim.state.autoPrint = act === 'auto-on';
+      else if (target.dataset.print) {
+        const n = this.sim.queuePrint(target.dataset.print as BuildingId, Number(target.dataset.n ?? 1));
+        if (!n) this.toast(t('err_cost'), 1500, 'error');
+      } else if (target.dataset.cancel !== undefined) this.sim.cancelPrint(Number(target.dataset.cancel));
+      else return;
+      sfx.select();
+      this.renderPrinter();
+      this.renderBottom();
+    });
+    const obs = new MutationObserver(() => {
+      if (this.modal.classList.contains('hidden')) {
+        this.printerOpen = false;
+        obs.disconnect();
+      }
+    });
+    obs.observe(this.modal, { attributes: true, attributeFilter: ['class'] });
+  }
+
+  private renderPrinter() {
+    if (!this.printerOpen) return;
+    const card = this.modal.querySelector('.modal-card');
+    if (!card) return;
+    const scroll = card.querySelector('.kit-list')?.scrollTop ?? 0;
+    card.innerHTML = this.printerHtml();
+    const list = card.querySelector('.kit-list');
+    if (list) list.scrollTop = scroll;
+  }
+
+  private printerHtml(): string {
+    const st = this.sim.state;
+    const q = this.sim.printQueue();
+    const auto = st.autoPrint !== false;
+    const inv = st.inventory;
+    const queue = q.length
+      ? q.map((j, i) => `<div class="pq-row ${i === 0 ? 'now' : ''}"><img class="icon" src="${buildingUrl(j.type)}" alt=""><span class="pq-name">${tBuilding(j.type)}<small>${j.site ? t('print_site') : t('print_stock')}</small></span>${i === 0 ? `<span class="pbar"><span class="pfill" style="width:${Math.round((1 - j.left / j.total) * 100)}%"></span></span>` : `<span class="pq-time">${j.left.toFixed(1)} s</span>`}${j.site ? '' : `<button class="iconbtn" data-cancel="${i}" title="${t('cancel')}">${icon('close', 'sm')}</button>`}</div>`).join('')
+      : `<p class="save-hint">${t('printer_empty')}</p>`;
+    const ids = BUILD_GROUPS.flatMap((g) => g.items).filter((id) => st.unlockedBuildings.includes(id));
+    const list = ids.map((id) => {
+      const have = st.kits?.[id] ?? 0;
+      const can = this.sim.canAfford(id);
+      return `<div class="kit-row"><img class="icon" src="${buildingUrl(id)}" alt=""><span class="kit-name">${tBuilding(id)}<small>${printSeconds(id)} s · ${costHtml(BUILDINGS[id].cost, inv)}</small></span><b class="kit-have ${have ? '' : 'none'}">×${have}</b><button class="chip" data-print="${id}" data-n="1" ${can ? '' : 'disabled'}>+1</button><button class="chip" data-print="${id}" data-n="5" ${can ? '' : 'disabled'}>+5</button></div>`;
+    }).join('');
+    return `<h2>${icon('print')} ${t('printer_title')}</h2>
+      <p class="save-hint">${t('printer_hint')}</p>
+      <div class="dirs"><span class="lbl">${t('printer_auto')}</span><button class="chip ${auto ? 'active' : ''}" data-act="auto-on">${t('on')}</button><button class="chip ${auto ? '' : 'active'}" data-act="auto-off">${t('off')}</button></div>
+      <h3>${t('printer_queue')}</h3><div class="pq">${queue}</div>
+      <h3>${t('printer_kits')}</h3><div class="kit-list">${list}</div>
+      <button class="btn primary" data-act="close">${t('close')}</button>`;
+  }
+
   showInfo(b: Building) {
     const def = BUILDINGS[b.type];
     this.info.innerHTML = `
@@ -1606,7 +1690,7 @@ export class Hud {
         <div class="info-title"><b>${tBuilding(b.type)}</b><small>${tBuildingDesc(b.type)}</small></div>
         <button class="iconbtn" data-act="close">${icon('close')}</button>
       </div>
-      <div class="info-body">${this.infoBody(b)}</div>
+      <div class="info-body">${b.site ? this.siteLine(b) : ''}${this.infoBody(b)}</div>
       ${b.type !== 'core' ? `<div class="info-actions">
         ${def.rotatable ? `<button class="btn small" data-act="rotate">${icon('rotate', 'sm')} ${t('rotate')}</button>` : ''}
         ${this.sim.state.unlockedBuildings.includes(b.type) ? `<button class="btn small" data-act="pick" title="Q">${icon('pipette', 'sm')} ${t('pipette')}</button>` : ''}
@@ -1647,6 +1731,10 @@ export class Hud {
         b.rr = 0;
         sfx.select();
         this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'printer') {
+        this.openPrinter();
         return;
       }
       if (target.dataset.act === 'depot-add') {

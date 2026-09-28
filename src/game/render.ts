@@ -4,7 +4,7 @@ import { BELT_SPACING, BUILDINGS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERR
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from './chip8';
 import { audioLevel } from './video';
 import { ARITH } from './sim';
-import { HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, crateOf, itemColor, DOCK_CAP, BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, crateOf, itemColor, DOCK_CAP, BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -343,10 +343,11 @@ export class Renderer {
       visible.push(b);
     }
     this.drawBoards(x0, y0, x1, y1);
-    for (const b of visible) if (b.type === 'road') this.drawRoad(b);
-    for (const b of visible) if (b.type === 'conveyor' || b.type === 'tunnel') this.drawBelt(b);
-    if (!this.lowDetail) for (const b of visible) if (b.type === 'conveyor' || (b.type === 'tunnel' && b.exit)) this.drawBeltItems(b);
-    for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel' && b.type !== 'road') this.drawBuilding(b);
+    for (const b of visible) if (b.type === 'road' && !b.site) this.drawRoad(b);
+    for (const b of visible) if ((b.type === 'conveyor' || b.type === 'tunnel') && !b.site) this.drawBelt(b);
+    if (!this.lowDetail) for (const b of visible) if ((b.type === 'conveyor' || (b.type === 'tunnel' && b.exit)) && !b.site) this.drawBeltItems(b);
+    for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel' && b.type !== 'road' && !b.site) this.drawBuilding(b);
+    for (const b of visible) if (b.site) this.drawSite(b);
     this.drawRobots(x0, y0, x1, y1);
 
     this.drawScanlines(visible);
@@ -496,6 +497,53 @@ export class Renderer {
       ctx.arc(cx, cy, 3, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  /** A construction site: the building as a cyan hologram, with the print progress or its place in the queue. */
+  private drawSite(b: Building) {
+    const { ctx } = this;
+    const sz = BUILDINGS[b.type].size * TILE, x0 = b.x * TILE, y0 = b.y * TILE, cx = x0 + sz / 2, cy = y0 + sz / 2;
+    const img = buildingSprite((isHall(b.type) ? 'hall' : b.type) as BuildingId);
+    ctx.save();
+    ctx.globalAlpha = 0.3;
+    ctx.translate(cx, cy);
+    ctx.rotate((b.dir * Math.PI) / 2);
+    if (ready(img)) ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
+    ctx.restore();
+    ctx.fillStyle = 'rgba(34,211,238,0.1)';
+    ctx.fillRect(x0 + 2, y0 + 2, sz - 4, sz - 4);
+    if (!this.lowDetail) {
+      ctx.fillStyle = 'rgba(34,211,238,0.14)';
+      const off = (this.time * 12) % 6;
+      for (let y = y0 + 2 + off; y < y0 + sz - 2; y += 6) ctx.fillRect(x0 + 2, y, sz - 4, 1);
+    }
+    ctx.strokeStyle = 'rgba(34,211,238,0.8)';
+    ctx.lineWidth = 1.5;
+    ctx.setLineDash([6, 4]);
+    ctx.lineDashOffset = -this.time * 10;
+    ctx.strokeRect(x0 + 2.5, y0 + 2.5, sz - 5, sz - 5);
+    ctx.setLineDash([]);
+    const info = this.sim.siteInfo(b);
+    if (info.pos === 0) {
+      // printing: bar at the foot and a print head sweeping over the site
+      ctx.fillStyle = 'rgba(8,12,18,0.8)';
+      ctx.fillRect(x0 + 6, y0 + sz - 10, sz - 12, 5);
+      ctx.fillStyle = '#22d3ee';
+      ctx.fillRect(x0 + 6, y0 + sz - 10, (sz - 12) * info.progress, 5);
+      const hx = x0 + 6 + (sz - 12) * (0.5 + 0.5 * Math.sin(this.time * 6));
+      ctx.fillStyle = 'rgba(165,243,252,0.9)';
+      ctx.fillRect(hx - 1, y0 + 4, 2, sz * info.progress - 6 > 0 ? sz - 14 : 4);
+    } else if (!this.lowDetail) {
+      ctx.fillStyle = 'rgba(8,12,18,0.75)';
+      roundRect(ctx, cx - 16, cy - 9, 32, 18, 4);
+      ctx.fill();
+      ctx.fillStyle = '#a5f3fc';
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.textAlign = 'center';
+      ctx.textBaseline = 'middle';
+      ctx.fillText(info.pos > 0 ? `#${info.pos + 1}` : '…', cx, cy);
+    }
+    void printSeconds;
   }
 
   /** Warehouse: steel frame, one shelf slot per tile with the item, its count and a fill bar; the output edge glows when it is switched on. */

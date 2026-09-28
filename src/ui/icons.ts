@@ -10,6 +10,7 @@ const P: Record<string, string> = {
   center: '<circle cx="12" cy="12" r="5"/><path d="M12 2.5v4M12 17.5v4M2.5 12h4M17.5 12h4"/><circle cx="12" cy="12" r="1" fill="currentColor" stroke="none"/>',
   menu: '<path d="M4.5 7h15M4.5 12h15M4.5 17h15"/>',
   check: '<path d="M5 12.5l4.5 4.5L19 7.5"/>',
+  print: '<path d="M7 9V4h10v5"/><rect x="3.5" y="9" width="17" height="8" rx="1.5"/><path d="M7 14h10v6H7z"/><path d="M17.5 12h.01"/>',
   warn: '<path d="M12 4 2.8 19.5h18.4z"/><path d="M12 9.5v4.5"/><circle cx="12" cy="16.8" r="0.9" fill="currentColor" stroke="none"/>',
   rotate: '<path d="M19 12a7 7 0 1 1-2.6-5.4"/><path d="M19 4v4.5h-4.5"/>',
   close: '<path d="M6 6l12 12M18 6 6 18"/>',

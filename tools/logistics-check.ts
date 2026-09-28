@@ -140,6 +140,7 @@ function world() {
   const sim = new Sim(st);
   if (sim.creative) throw new Error('free play must not be creative');
   st.inventory = { iron_plate: 200, steel_frame: 20, circuit: 20, copper_wire: 40, copper_plate: 40, glass: 20, machine_part: 20, motor: 4 };
+  st.kits = { road: 11, depot: 1, assembler: 1, storage: 1, conveyor: 2, solar: 3 }; // kits in stock: everything builds at once
   const place = (type: Building['type'], x: number, y: number, dir: Dir = 0): Building => {
     const b = sim.place(type, x, y, dir);
     if (!b) throw new Error(`cannot place ${type} at ${x},${y}: ${sim.placementError(type, x, y)}`);

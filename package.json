@@ -18,6 +18,7 @@
     "examples:check": "esbuild tools/examples-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/examples-check.mjs --log-level=warning && node mcp/dist/examples-check.mjs",
     "trailer:check": "esbuild tools/trailer-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/trailer-check.mjs --log-level=warning && node mcp/dist/trailer-check.mjs",
     "blockshd:check": "esbuild tools/blockshd-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/blockshd-check.mjs --log-level=warning && node mcp/dist/blockshd-check.mjs",
+    "kits:check": "esbuild tools/kits-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/kits-check.mjs --log-level=warning && node mcp/dist/kits-check.mjs",
     "storage:check": "esbuild tools/storage-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/storage-check.mjs --log-level=warning && node mcp/dist/storage-check.mjs",
     "logistics:check": "esbuild tools/logistics-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/logistics-check.mjs --log-level=warning && node mcp/dist/logistics-check.mjs",
     "parts:check": "esbuild tools/parts-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/parts-check.mjs --log-level=warning && node mcp/dist/parts-check.mjs",
