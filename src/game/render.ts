@@ -1,10 +1,10 @@
 import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
-import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
+import { BELT_SPACING, BUILDINGS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from './chip8';
 import { audioLevel } from './video';
 import { ARITH } from './sim';
-import { BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { CRATE_SIZE, crateOf, itemColor, DOCK_CAP, BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -185,7 +185,7 @@ export class Renderer {
         if (ready(img)) cc.drawImage(img, x * P, y * P, P, P);
         else {
           complete = false;
-          cc.fillStyle = ITEMS[TERRAIN_ITEM[t]!].color;
+          cc.fillStyle = itemColor(TERRAIN_ITEM[t]!);
           cc.fillRect(x * P + 2, y * P + 2, P - 4, P - 4);
         }
         cc.globalAlpha = 1;
@@ -313,7 +313,7 @@ export class Renderer {
         ctx.globalAlpha = 0.4 + 0.6 * frac;
         if (ready(img)) ctx.drawImage(img, x * TILE, y * TILE, TILE, TILE);
         else {
-          ctx.fillStyle = ITEMS[TERRAIN_ITEM[t]!].color;
+          ctx.fillStyle = itemColor(TERRAIN_ITEM[t]!);
           ctx.fillRect(x * TILE + 8, y * TILE + 8, TILE - 16, TILE - 16);
         }
         ctx.globalAlpha = 1;
@@ -342,9 +342,11 @@ export class Renderer {
       visible.push(b);
     }
     this.drawBoards(x0, y0, x1, y1);
+    for (const b of visible) if (b.type === 'road') this.drawRoad(b);
     for (const b of visible) if (b.type === 'conveyor' || b.type === 'tunnel') this.drawBelt(b);
     if (!this.lowDetail) for (const b of visible) if (b.type === 'conveyor' || (b.type === 'tunnel' && b.exit)) this.drawBeltItems(b);
-    for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel') this.drawBuilding(b);
+    for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel' && b.type !== 'road') this.drawBuilding(b);
+    this.drawRobots(x0, y0, x1, y1);
 
     this.drawScanlines(visible);
     if (this.overlay) this.drawOverlay(visible, dt);
@@ -442,6 +444,72 @@ export class Renderer {
 
   private beltSpeedPx() {
     return 1.6 * this.sim.factor('belt') * TILE;
+  }
+
+  /** A road tile: asphalt with a dashed centre line towards every neighbouring road, dock or depot. */
+  private drawRoad(b: Building) {
+    const { ctx } = this;
+    const px = b.x * TILE, py = b.y * TILE, cx = px + TILE / 2, cy = py + TILE / 2;
+    ctx.fillStyle = '#272c35';
+    ctx.fillRect(px, py, TILE, TILE);
+    if (this.lowDetail) return;
+    ctx.strokeStyle = 'rgba(255,255,255,0.06)';
+    ctx.lineWidth = 1;
+    ctx.strokeRect(px + 0.5, py + 0.5, TILE - 1, TILE - 1);
+    ctx.strokeStyle = '#d6b44a';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([6, 5]);
+    let links = 0;
+    for (let d = 0; d < 4; d++) {
+      const n = this.sim.at(b.x + DX[d], b.y + DY[d]);
+      if (!n || (n.type !== 'road' && n.type !== 'dock' && n.type !== 'depot')) continue;
+      links++;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + DX[d] * TILE / 2, cy + DY[d] * TILE / 2);
+      ctx.stroke();
+    }
+    ctx.setLineDash([]);
+    if (!links) {
+      ctx.fillStyle = '#d6b44a';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 3, 0, Math.PI * 2);
+      ctx.fill();
+    }
+  }
+
+  /** Transport robots: a small rounded vehicle with a headlight, carrying its first item on top. */
+  private drawRobots(x0: number, y0: number, x1: number, y1: number) {
+    const { ctx } = this;
+    for (const r of this.sim.robots()) {
+      if (r.x < x0 || r.x > x1 + 1 || r.y < y0 || r.y > y1 + 1) continue;
+      const px = r.x * TILE, py = r.y * TILE;
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate((r.dir * Math.PI) / 2);
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 4;
+      ctx.shadowOffsetY = 2;
+      ctx.fillStyle = '#3b4656';
+      roundRect(ctx, -TILE * 0.22, -TILE * 0.3, TILE * 0.44, TILE * 0.6, 5);
+      ctx.fill();
+      ctx.shadowColor = 'transparent';
+      ctx.shadowBlur = 0;
+      ctx.shadowOffsetY = 0;
+      ctx.fillStyle = '#1f2937';
+      roundRect(ctx, -TILE * 0.16, -TILE * 0.22, TILE * 0.32, TILE * 0.2, 3);
+      ctx.fill();
+      ctx.fillStyle = r.state === 'go' ? '#22d3ee' : '#f59e0b';
+      ctx.beginPath();
+      ctx.arc(-TILE * 0.12, -TILE * 0.27, 2.5, 0, Math.PI * 2);
+      ctx.arc(TILE * 0.12, -TILE * 0.27, 2.5, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+      if (r.items.length && !this.lowDetail) {
+        this.drawItem(r.items[0], px, py + 2, TILE * 0.3);
+        if (r.items.length > 1) this.drawBadge(px + TILE * 0.22, py - TILE * 0.22, String(r.items.length), '#f59e0b');
+      }
+    }
   }
 
   private drawBelt(b: Building) {
@@ -614,9 +682,16 @@ export class Renderer {
     ctx.shadowColor = 'rgba(0,0,0,0.55)';
     ctx.shadowBlur = 4;
     ctx.shadowOffsetY = 2;
-    if (ready(img)) ctx.drawImage(img, px - size / 2, py - size / 2, size, size);
-    else {
-      ctx.fillStyle = ITEMS[id].color;
+    if (ready(img)) {
+      ctx.drawImage(img, px - size / 2, py - size / 2, size, size);
+      const inner = crateOf(id);
+      if (inner) {
+        // a crate shows its content as a small icon on the lid
+        const ii = itemSprite(inner);
+        if (ready(ii)) ctx.drawImage(ii, px - size * 0.24, py - size * 0.36, size * 0.48, size * 0.48);
+      }
+    } else {
+      ctx.fillStyle = itemColor(id);
       ctx.beginPath();
       ctx.arc(px, py, size / 2.6, 0, Math.PI * 2);
       ctx.fill();
@@ -707,7 +782,7 @@ export class Renderer {
         const img = c2.createImageData(W, H);
         const own = (b.recipe as ItemId) ?? 'copper_wire';
         const rgb = (item: ItemId) => {
-          const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(ITEMS[item].color);
+          const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(itemColor(item));
           return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [34, 211, 238];
         };
         const pal = CHIP8_PALETTE.map((it, k) => (k ? rgb(it ?? own) : [4, 20, 26]));
@@ -793,6 +868,62 @@ export class Renderer {
           this.drawTag(r.x * TILE + (tw * TILE) / 2, r.y * TILE + th * TILE + 14, `lanes×clock ${(stt.capPx / 1e6).toFixed(1)}/${(stt.needPx / 1e6).toFixed(1)} M px/s · +${Math.max(1, need)} lanes or a faster clock`, '#f59e0b');
         }
       }
+      return;
+    }
+    if (b.type === 'stacker') {
+      const n = b.bufL?.length ?? 0, unpack = b.mode === 'unpack';
+      this.drawArrow(b, b.dir, n ? '#22d3ee' : 'rgba(34,211,238,0.35)');
+      if (!this.lowDetail) {
+        this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, unpack ? String(n) : `${n}`, unpack ? '#f59e0b' : n >= CRATE_SIZE ? '#34d399' : '#22d3ee');
+        if (n) this.drawItem(b.bufL![0], b.x * TILE + 13, b.y * TILE + sz - 13, 16);
+        this.drawTag(cx, b.y * TILE - 4, unpack ? 'UNPACK' : `PACK ${n}/${CRATE_SIZE}`, unpack ? '#f59e0b' : '#22d3ee');
+      }
+      return;
+    }
+    if (b.type === 'dock') {
+      const n = b.bufL?.length ?? 0;
+      if (b.mode === 'unload') this.drawArrow(b, b.dir, n ? '#22d3ee' : 'rgba(34,211,238,0.35)');
+      if (!this.lowDetail) {
+        this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, String(n), n >= DOCK_CAP ? '#f59e0b' : b.mode === 'unload' ? '#22d3ee' : '#34d399');
+        if (b.recipe) this.drawItem(b.recipe as ItemId, b.x * TILE + 11, b.y * TILE + 11, 14);
+        if (b.status === 'dead_end') this.drawBadge(cx, b.y * TILE + sz - 12, '⊘', '#ef4444');
+      }
+      return;
+    }
+    if (b.type === 'depot') {
+      const mine = this.sim.robots().filter((r) => r.depot === b.id).length;
+      if (!this.lowDetail) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, String(mine), '#22d3ee');
+      if (b.status === 'dead_end') this.drawBadge(cx, cy, '⊘', '#ef4444');
+      return;
+    }
+    if (b.type === 'picker') {
+      // the arm swings from the source (behind) to the target (front); the item rides on its tip
+      const reach = b.threshold === 2 ? 2 : 1;
+      const held = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+      const f = Math.min(1, b.rateT ?? 0);
+      const ang = ((b.dir * Math.PI) / 2) + (held ? -Math.PI + Math.PI * f : Math.PI * f); // swing: back -> front while holding, front -> back when empty
+      const len = sz * (0.32 + 0.28 * (reach - 1));
+      const tx = cx + Math.sin(ang) * len, ty = cy - Math.cos(ang) * len;
+      ctx.strokeStyle = '#94a3b8';
+      ctx.lineWidth = 5;
+      ctx.lineCap = 'round';
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(tx, ty);
+      ctx.stroke();
+      ctx.fillStyle = '#e2e8f0';
+      ctx.beginPath();
+      ctx.arc(cx, cy, 5, 0, Math.PI * 2);
+      ctx.fill();
+      if (held && !this.lowDetail) this.drawItem(held, tx, ty, TILE * 0.36);
+      else {
+        ctx.fillStyle = b.status === 'blocked' ? '#ef4444' : '#22d3ee';
+        ctx.beginPath();
+        ctx.arc(tx, ty, 4, 0, Math.PI * 2);
+        ctx.fill();
+      }
+      if (b.recipe && !this.lowDetail) this.drawItem(b.recipe as ItemId, b.x * TILE + 11, b.y * TILE + 11, 14);
+      if (reach === 2 && !this.lowDetail) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, '2', '#22d3ee');
       return;
     }
     if (b.type === 'timer') {
@@ -904,7 +1035,7 @@ export class Renderer {
       // pixel: glow in the colour of the item it holds
       const item = this.sim.lampItem(b);
       if (item) {
-        const col = ITEMS[item].color;
+        const col = itemColor(item);
         const g = ctx.createRadialGradient(cx, cy, 2, cx, cy, sz * 0.62);
         g.addColorStop(0, col);
         g.addColorStop(0.45, col);
@@ -1340,7 +1471,7 @@ export class Renderer {
     for (const f of this.flows) {
       if (!f.path.length) continue;
       const item = f.from.type === 'miner' ? f.from.mineItem! : f.from.recipe ? RECIPE_BY_ID[f.from.recipe]?.output : null;
-      ctx.strokeStyle = f.target ? (item ? ITEMS[item].color : '#22d3ee') : '#ef4444';
+      ctx.strokeStyle = f.target ? (item ? itemColor(item) : '#22d3ee') : '#ef4444';
       ctx.globalAlpha = 0.8;
       ctx.beginPath();
       const s0 = BUILDINGS[f.from.type].size;
@@ -1410,7 +1541,7 @@ export class Renderer {
       ctx.globalAlpha = 0.16 + util * 0.2;
       ctx.fillRect(b.x * TILE + 4, b.y * TILE + 4, TILE - 8, TILE - 8);
       ctx.globalAlpha = 0.9;
-      ctx.fillStyle = ITEMS[b.items![n - 1].item].color;
+      ctx.fillStyle = itemColor(b.items![n - 1].item);
       ctx.fillRect(b.x * TILE + 4, b.y * TILE + TILE - 8, TILE - 8, 4);
       ctx.globalAlpha = 1;
     }
@@ -1496,7 +1627,7 @@ export class Renderer {
         let c = [55, 61, 69];
         if (t === 'rock') c = [30, 32, 38];
         else if (t !== 'ground') {
-          const col = ITEMS[TERRAIN_ITEM[t]!].color;
+          const col = itemColor(TERRAIN_ITEM[t]!);
           c = [parseInt(col.slice(1, 3), 16), parseInt(col.slice(3, 5), 16), parseInt(col.slice(5, 7), 16)];
         }
         img.data[i * 4] = c[0]; img.data[i * 4 + 1] = c[1]; img.data[i * 4 + 2] = c[2]; img.data[i * 4 + 3] = 255;

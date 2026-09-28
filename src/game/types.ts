@@ -53,6 +53,11 @@ export type BuildingId =
   | 'screen'
   | 'speaker'
   | 'keyboard'
+  | 'picker'
+  | 'road'
+  | 'dock'
+  | 'depot'
+  | 'stacker'
   | 'timer'
   | 'sensor'
   | 'radio'
@@ -67,7 +72,7 @@ export type BuildingId =
   | 'multiplier'
   | 'divider';
 
-export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter' | 'tunnel' | 'logic';
+export type MachineKind = 'core' | 'conveyor' | 'miner' | 'machine' | 'power' | 'storage' | 'splitter' | 'tunnel' | 'logic' | 'road';
 
 export type Status = 'ok' | 'idle' | 'no_recipe' | 'starved' | 'blocked' | 'low_power' | 'no_fuel' | 'jammed' | 'dead_end' | 'unpaired' | 'depleted' | 'closed' | 'waiting';
 
@@ -131,7 +136,7 @@ export interface Building {
   bufL?: ItemId[];
   bufR?: ItemId[];
   threshold?: number;
-  mode?: 'hold' | 'pass' | 'pulse' | 'off' | 'avg' | 'centre' | 'scan' | 'tx' | 'rx'; // lamp: hold keeps the item lit, pass forwards it; switch: pulse closes itself after one item; screen: sample output
+  mode?: 'hold' | 'pass' | 'pulse' | 'off' | 'avg' | 'centre' | 'scan' | 'tx' | 'rx' | 'load' | 'unload' | 'pack' | 'unpack'; // lamp: hold keeps the item lit, pass forwards it; switch: pulse closes itself after one item; screen: sample output
   ratio?: number;
   open?: boolean;
   // terminal: program source and run flag (the CPU itself lives in the Sim and is rebuilt on load)
@@ -238,6 +243,22 @@ export interface GameState {
   eventsSeen?: number;
   note?: { de?: string; en?: string; title?: string }; // shown once when a shared save is imported
   focus?: { x: number; y: number; zoom: number }; // camera position to show when the save is loaded
+  robots?: Robot[]; // transport robots (depots)
+}
+
+/** A transport robot: lives at a depot, drives on roads between loading docks. Positions are tile coordinates (centre = +0.5). */
+export interface Robot {
+  id: number;
+  depot: number; // depot building id
+  x: number;
+  y: number;
+  dir: Dir;
+  items: ItemId[];
+  path: { x: number; y: number }[]; // remaining waypoints (tile centres)
+  state: 'idle' | 'go' | 'load' | 'unload' | 'pack' | 'unpack';
+  target: number | null; // dock building id
+  wait: number; // seconds before the next planning attempt
+  t: number; // transfer accumulator
 }
 
 export interface BlueprintItem {
@@ -248,7 +269,7 @@ export interface BlueprintItem {
   recipe?: string | null;
   threshold?: number;
   ratio?: number;
-  mode?: 'hold' | 'pass' | 'pulse' | 'off' | 'avg' | 'centre' | 'scan' | 'tx' | 'rx';
+  mode?: 'hold' | 'pass' | 'pulse' | 'off' | 'avg' | 'centre' | 'scan' | 'tx' | 'rx' | 'load' | 'unload' | 'pack' | 'unpack';
   open?: boolean;
   value?: number;
 }

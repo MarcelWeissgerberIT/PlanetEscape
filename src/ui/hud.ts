@@ -1,6 +1,6 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { BATTERY_CAP, BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEMS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -1326,6 +1326,32 @@ export class Hud {
       const known = ITEM_ORDER.filter((id) => (st.inventory[id] ?? 0) > 0 || st.stats.produced[id] || RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id)) || TERRAIN_ITEM[st.terrain[0]] === id || ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'].includes(id));
       const picker = (label: string) => `<div class="lbl">${label}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('any_item')}</button>${known.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
       if (b.type === 'sorter') body = `${statusLine()}${dirPicker}${picker(t('sort_item'))}`;
+      else if (b.type === 'stacker') {
+        const unpack = b.mode === 'unpack', n = b.bufL?.length ?? 0;
+        body = `${statusLine(` · ${n}/${CRATE_SIZE}${b.bufL?.length ? ` ${itemImg(b.bufL[0], 'icon sm')}` : ''} · ${b.acc ?? 0} ${t('stacker_crates')}`)}
+          <div class="dirs"><span class="lbl">${t('stacker_mode')}</span><button class="chip ${unpack ? '' : 'active'}" data-mode="pack">${t('stacker_pack')}</button><button class="chip ${unpack ? 'active' : ''}" data-mode="unpack">${t('stacker_unpack')}</button></div>
+          <p class="save-hint">${t(unpack ? 'stacker_hint_unpack' : 'stacker_hint_pack')}</p>${dirPicker}`;
+      } else if (b.type === 'dock') {
+        const unload = b.mode === 'unload', buf = b.bufL ?? [];
+        const counts: Partial<Record<string, number>> = {};
+        for (const it of buf) counts[it] = (counts[it] ?? 0) + 1;
+        body = `${statusLine(` · ${buf.length}/${DOCK_CAP}`)}
+          <div class="dirs"><span class="lbl">${t('dock_mode')}</span><button class="chip ${unload ? '' : 'active'}" data-mode="load">${t('dock_load')}</button><button class="chip ${unload ? 'active' : ''}" data-mode="unload">${t('dock_unload')}</button></div>
+          <div class="bufs"><span class="lbl">${t('dock_buffer')}</span>${Object.entries(counts).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('') || '–'}</div>
+          <p class="save-hint">${t(unload ? 'dock_hint_unload' : 'dock_hint_load')}</p>${unload ? dirPicker : ''}${picker(t('dock_filter'))}`;
+      } else if (b.type === 'depot') {
+        const mine = this.sim.robots().filter((r) => r.depot === b.id);
+        const want = b.threshold ?? 2;
+        body = `${statusLine(` · ${mine.length} ${t('depot_robots')}`)}
+          <div class="dirs"><span class="lbl">${t('depot_fleet')}</span>${Array.from({ length: DEPOT_ROBOTS_MAX }, (_, i) => i + 1).map((n) => `<button class="chip ${want === n ? 'active' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>
+          <div class="bufs">${mine.map((r) => `<span class="buf">${r.items.length ? itemImg(r.items[0], 'icon sm') : '🤖'} ${t(`robot_${r.state}` as 'robot_idle')}${r.items.length ? ` ×${r.items.length}` : ''}</span>`).join('') || '–'}</div>
+          <p class="save-hint">${t('depot_hint')}</p>`;
+      } else if (b.type === 'picker') {
+        const reach = b.threshold === 2 ? 2 : 1;
+        body = `${statusLine(` · ${b.acc ?? 0} ${t('picker_moved')}`)}
+          <div class="dirs"><span class="lbl">${t('picker_reach')}</span><button class="chip ${reach === 1 ? 'active' : ''}" data-threshold="1">1</button><button class="chip ${reach === 2 ? 'active' : ''}" data-threshold="2">2</button></div>
+          <p class="save-hint">${t('picker_hint')}</p>${dirPicker}${picker(t('picker_filter'))}`;
+      }
       else if (b.type === 'lamp') {
         const item = this.sim.lampItem(b);
         body = `<div class="lbl">${t('lamp_state')}</div><div class="bufs">${item ? `${itemImg(item, 'icon')} <b>${tItem(item)}</b> <button class="btn small" data-act="clear">${t('lamp_clear')}</button>` : `<span class="dim">${t('lamp_off')}</span>`}</div>
@@ -1452,7 +1478,7 @@ export class Hud {
     const c2 = canvas.getContext('2d')!;
     c2.fillStyle = '#04141a';
     c2.fillRect(0, 0, canvas.width, canvas.height);
-    const own = ITEMS[(b.recipe as ItemId) ?? 'copper_wire'].color;
+    const own = itemColor((b.recipe as ItemId) ?? 'copper_wire');
     const W = cpu.hires ? HIRES_W : CHIP8_W, Hh = cpu.hires ? HIRES_H : CHIP8_H, buf = cpu.hires ? cpu.fb : cpu.display;
     const px = canvas.width / W, py = canvas.height / Hh;
     for (let y = 0; y < Hh; y++)
@@ -1460,7 +1486,7 @@ export class Hud {
         const v = buf[y * W + x] & 15;
         if (!v) continue;
         const it = CHIP8_PALETTE[v];
-        c2.fillStyle = it ? ITEMS[it].color : own;
+        c2.fillStyle = it ? itemColor(it) : own;
         c2.fillRect(x * px, y * py, px - 0.5, py - 0.5);
       }
   }

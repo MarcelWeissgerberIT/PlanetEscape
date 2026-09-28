@@ -38,6 +38,7 @@ export function load(): GameState | null {
     if (!raw) return null;
     const st = JSON.parse(raw) as GameState;
     if (!Array.isArray(st.buildings)) return null;
+    st.robots ??= [];
     if (st.version === 1) {
       st.ship = {};
       st.version = 2;

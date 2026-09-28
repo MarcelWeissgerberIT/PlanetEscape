@@ -524,6 +524,48 @@ export function buildRunningLight(): GameState {
 
 // ---------- Adder: two registers, an adder, a sum register with a binary lamp readout ----------
 
+/** Logistics showcase: a pick-up dock fed by a depot, a road with three robots, a drop-off dock, stacker and unstacker, and a grabber arm. */
+export function buildLogistics(): GameState {
+  const c = ctx(90090, 80, 60);
+  const { core, place, belt } = c;
+  const x0 = core.x - 14, y0 = core.y - 10;
+  // source: iron plates run over a belt into the pick-up dock
+  const src = place('storage', x0, y0, 1);
+  src.store = { iron_plate: 400 };
+  belt(x0 + 1, y0, 1);
+  belt(x0 + 2, y0, 1);
+  place('dock', x0 + 3, y0, 1); // pick-up (default mode)
+  // the road: one long street under the docks, the depot hangs below it
+  for (let x = x0 + 3; x <= x0 + 25; x++) place('road', x, y0 + 1);
+  const depot = place('depot', x0 + 12, y0 + 2);
+  depot.threshold = 3;
+  // two solar panels cover the depot, docks, stackers and the arm
+  place('solar', x0 + 15, y0 + 2);
+  place('solar', x0 + 16, y0 + 2);
+  // drop-off dock at the far end pushes north into a stacker, then an unstacker, then a depot
+  const drop = place('dock', x0 + 25, y0, 0);
+  drop.mode = 'unload';
+  belt(x0 + 25, y0 - 1, 0);
+  place('stacker', x0 + 25, y0 - 2, 0);
+  belt(x0 + 25, y0 - 3, 0);
+  belt(x0 + 25, y0 - 4, 0);
+  const un = place('stacker', x0 + 25, y0 - 5, 0);
+  un.mode = 'unpack';
+  belt(x0 + 25, y0 - 6, 0);
+  const sink = place('storage', x0 + 25, y0 - 7, 0);
+  sink.store = {};
+  // grabber arm: lifts copper wire out of a depot into the same sink without any belt
+  const wire = place('storage', x0 + 27, y0 - 7, 3);
+  wire.store = { copper_wire: 60 };
+  place('picker', x0 + 26, y0 - 7, 3);
+  c.tick(2);
+  return finish(c, {
+    title: 'Roboter, Kisten, Greifarm · Robots, crates, grabber',
+    de: 'Links füllt ein Lager die Abholstation. Drei Roboter aus dem Depot fahren die Teile über die Straße zur Anlieferstation rechts. Dort packt ein Stapler je acht Platten in eine Kiste, der nächste entpackt sie wieder. Der Greifarm oben rechts hebt Kupferdraht ohne Band aus einem Lager ins Ziel.',
+    en: 'On the left a depot fills the pick-up dock. Three robots from the depot drive the items along the road to the drop-off dock on the right. A stacker packs eight plates into a crate, the next one unpacks them again. The grabber arm at the top right lifts copper wire from a depot into the target without any belt.',
+  }, { x: x0 + 13, y: y0 - 2, zoom: 0.55 });
+}
+
 export function buildAdder(): GameState {
   const c = ctx(80085, 80, 60);
   const { core, place, belt } = c;
@@ -577,6 +619,7 @@ export function buildAdder(): GameState {
 }
 
 export const EXAMPLES: Example[] = [
+  { id: 'logistics', title: 'Roboter & Kisten · Robots & crates', icon: 'depot', de: 'Straße, Roboterdepot, Ladestationen, Stapler und Greifarm in einer Kette.', en: 'Road, robot depot, docks, stacker and grabber arm in one chain.', build: buildLogistics },
   { id: 'pong', title: 'KORA Terminal · PONG', icon: 'terminal', de: 'CPU aus Bauteilen, RAM aus Speicherzellen, Bausteinspieler drücken die Tasten.', en: 'CPU from parts, RAM from registers, block players press the keys.', build: buildPongBoard },
   { id: 'pongmini', title: 'PONG · LED-Matrix', icon: 'matrix', de: 'Dasselbe Spiel auf 32 LED-Matrizen statt 2048 Lampen.', en: 'The same game on 32 LED matrices instead of 2048 lamps.', build: buildPongMatrix },
   { id: 'kdos', title: 'KDOS · Mini-PC', icon: 'keyboard', de: 'Kommandozeile mit Tastatur: HELP, DIR, RUN PONG … alles in Assembler.', en: 'A command line with keyboard: HELP, DIR, RUN PONG … all in assembly.', build: buildKdos },

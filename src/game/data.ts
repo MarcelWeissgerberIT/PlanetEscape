@@ -66,6 +66,14 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   keyboard: { id: 'keyboard', kind: 'logic', size: 2, cost: { iron_plate: 6, copper_wire: 8, circuit: 2 }, power: 1, rotatable: false },
   // circuit helpers: a timer opens every n seconds, a sensor pulses its sides when an item runs through,
   // a radio carries items over any distance on a channel (tx -> rx), a battery stores surplus power
+  // a grabber arm: takes one item at a time from the building or belt behind it and puts it into the one in front (reach 1 or 2)
+  picker: { id: 'picker', kind: 'logic', size: 1, cost: { iron_plate: 3, machine_part: 1 }, power: 1, rotatable: true },
+  // roads and robots: a depot sends its robots over road tiles between loading docks
+  road: { id: 'road', kind: 'road', size: 1, cost: { iron_plate: 1 }, power: 0, rotatable: false },
+  dock: { id: 'dock', kind: 'logic', size: 1, cost: { iron_plate: 4, machine_part: 1 }, power: 1, rotatable: true },
+  depot: { id: 'depot', kind: 'logic', size: 2, cost: { iron_plate: 10, machine_part: 4, circuit: 2 }, power: 4, rotatable: false },
+  // a stacker packs eight equal items into one crate (an item of its own on the belt); in unpack mode it opens crates again
+  stacker: { id: 'stacker', kind: 'logic', size: 1, cost: { iron_plate: 6, machine_part: 2 }, power: 2, rotatable: true },
   timer: { id: 'timer', kind: 'logic', size: 1, cost: { iron_plate: 4, copper_wire: 2, circuit: 1 }, power: 1, rotatable: true },
   sensor: { id: 'sensor', kind: 'logic', size: 1, cost: { iron_plate: 3, copper_wire: 2 }, power: 0, rotatable: true },
   radio: { id: 'radio', kind: 'logic', size: 1, cost: { circuit: 2, copper_wire: 6 }, power: 3, rotatable: true },
@@ -104,6 +112,11 @@ export const BUILD_ORDER: BuildingId[] = [
   'overflow',
   'mixer',
   'valve',
+  'picker',
+  'road',
+  'dock',
+  'depot',
+  'stacker',
   'lamp',
   'matrix',
   'screen',
@@ -170,9 +183,9 @@ export const SHIP_TOTAL = Object.values(SHIP_PARTS).reduce((a, c) => a + (c ?? 0
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
   { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
-  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'matrix', 'screen', 'speaker', 'keyboard', 'switch', 'timer', 'sensor', 'battery'], unlockRecipes: ['steel_frame'] },
-  { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: [], unlockRecipes: ['circuit', 'glass'] },
-  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'radio', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
+  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'picker', 'lamp', 'matrix', 'screen', 'speaker', 'keyboard', 'switch', 'timer', 'sensor', 'battery'], unlockRecipes: ['steel_frame'] },
+  { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: ['road', 'dock', 'depot'], unlockRecipes: ['circuit', 'glass'] },
+  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'radio', 'stacker', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
   { id: 'm7', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
 ];
@@ -238,12 +251,19 @@ export const SCREEN_TINT = 0.35; // how much the delivered item's colour tints t
 export const SCREEN_SAMPLE_RATE = 4;
 /** Build menu tabs. */
 export const BUILD_GROUPS: { id: 'logistics' | 'production' | 'energy' | 'circuit' | 'computer'; items: BuildingId[] }[] = [
-  { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'sorter', 'overflow', 'mixer', 'valve', 'storage', 'radio'] },
+  { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'sorter', 'overflow', 'mixer', 'valve', 'picker', 'storage', 'road', 'dock', 'depot', 'stacker', 'radio'] },
   { id: 'production', items: ['miner', 'smelter', 'assembler', 'printer', 'refinery', 'fabricator'] },
   { id: 'energy', items: ['solar', 'generator', 'battery'] },
   { id: 'circuit', items: ['lamp', 'matrix', 'switch', 'timer', 'sensor', 'bus', 'register', 'adder', 'subtractor', 'multiplier', 'divider'] },
   { id: 'computer', items: ['terminal', 'oscillator', 'keyboard', 'screen', 'speaker'] },
 ];
+export const PICKER_RATE = 1; // items per second a grabber arm moves
+export const PICKER_REACH = [1, 2]; // tiles between the arm and its source / target
+export const ROBOT_SPEED = 3; // tiles per second on a road
+export const ROBOT_CAP = 8; // items one robot carries
+export const ROBOT_RATE = 4; // items per second loaded / unloaded at a dock
+export const DOCK_CAP = 8; // items a dock buffers
+export const DEPOT_ROBOTS_MAX = 4;
 export const TIMER_PERIODS = [1, 2, 3, 5, 10, 30]; // seconds between two openings
 export const TIMER_OPEN = 0.5; // seconds the timer stays open
 export const RADIO_CHANNELS = 8;
@@ -260,8 +280,24 @@ export function matrixSize(b: { value?: number }): number {
 }
 export const SCREEN_REGION = { dx: 2, w: 8, h: 4 }; // receiver display: 8x4 matrices (64x32 px) per scale step, right of the receiver
 /** Item colour as a packed 0xRRGGBB number (LED matrix pixels). */
+/** Crates: eight equal items packed by a stacker travel as one belt item whose id is `crate:<item>`. */
+export const CRATE_SIZE = 8;
+export const CRATE_PREFIX = 'crate:';
+export function isCrate(id: string): boolean {
+  return id.startsWith(CRATE_PREFIX);
+}
+export function crateOf(id: string): ItemId | null {
+  return isCrate(id) ? (id.slice(CRATE_PREFIX.length) as ItemId) : null;
+}
+export function crateId(item: ItemId): ItemId {
+  return (CRATE_PREFIX + item) as ItemId;
+}
+/** Fallback colour of an item (crates take their content's colour). */
+export function itemColor(id: string): string {
+  return ITEMS[(crateOf(id) ?? id) as ItemId]?.color ?? '#b45309';
+}
 export function itemRgb(id: ItemId): number {
-  return parseInt(ITEMS[id].color.replace('#', ''), 16) || 0x22d3ee;
+  return parseInt(itemColor(id).replace('#', ''), 16) || 0x22d3ee;
 }
 /** Display colours: pixel value (plane bitmask 1..15) -> item whose colour the lamp shows; 1 = the terminal's own colour item. */
 export const CHIP8_PALETTE: (ItemId | null)[] = [null, null, 'iron_ore', 'iron_plate', 'fuel', 'copper_ore', 'circuit', 'water', 'hull_plate', 'engine', 'quartz', 'ice', 'precision_part', 'fuel_cell', 'nav_computer', 'oil'];

@@ -29,9 +29,9 @@ import {
   MIXER_RATIOS,
   recipesFor,
 } from './data';
-import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
+import type { Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -317,6 +317,15 @@ export class Sim {
       }
       if (type === 'lamp') b.mode = 'hold';
       if (type === 'switch') b.open = true;
+      if (type === 'dock') {
+        b.bufL = [];
+        b.mode = 'load';
+      }
+      if (type === 'depot') b.threshold = 2;
+      if (type === 'stacker') {
+        b.bufL = [];
+        b.mode = 'pack';
+      }
       if (type === 'terminal') {
         b.run = false;
         b.recipe = 'copper_wire';
@@ -408,6 +417,10 @@ export class Sim {
         if (b.clock) this.addInv('glass', b.clock);
       }
     }
+    if (b.type === 'depot' && this.state.robots) {
+      for (const r of this.state.robots) if (r.depot === b.id) for (const it of r.items) this.addInv(it, 1);
+      this.state.robots = this.state.robots.filter((r) => r.depot !== b.id);
+    }
     // full refund incl. buffered items (player friendly)
     if (!this.creative) for (const k in def.cost) this.addInv(k as ItemId, def.cost[k as ItemId]!);
     const dump = (rec?: Partial<Record<ItemId, number>>) => {
@@ -447,6 +460,8 @@ export class Sim {
     switch (BUILDINGS[b.type].kind) {
       case 'core':
         return true;
+      case 'road':
+        return false;
       case 'conveyor':
         return ((from + 2) & 3) !== b.dir;
       case 'tunnel':
@@ -466,6 +481,9 @@ export class Sim {
         if (ARITH.has(b.type)) return from === b.dir || from === ((b.dir + 1) & 3) || from === ((b.dir + 3) & 3); // back = main input, sides = second operand / signal
         if (b.type === 'switch' || b.type === 'timer') return from !== ((b.dir + 2) & 3); // behind = items to gate, sides = control pulses
         if (b.type === 'sensor') return from !== ((b.dir + 2) & 3); // takes the belt from behind or from a side, like a corner
+        if (b.type === 'picker') return false; // the arm fetches its items itself
+        if (b.type === 'dock') return b.mode !== 'unload'; // a loading dock is filled from any side
+        if (b.type === 'depot') return false;
         return from === b.dir;
     }
   }
@@ -473,6 +491,7 @@ export class Sim {
   /** Try to give an item to building b arriving from direction `from` (direction of travel). */
   accept(b: Building, item: ItemId, from: Dir, viaTunnel = false): boolean {
     const def = BUILDINGS[b.type];
+    if (isCrate(item) && (def.kind === 'core' || def.kind === 'machine' || def.kind === 'power' || b.type === 'terminal' || b.type === 'oscillator')) return false; // crates must be unpacked first
     switch (def.kind) {
       case 'core': {
         const need = SHIP_PARTS[item];
@@ -538,6 +557,8 @@ export class Sim {
         b.output = { [item]: 1 };
         return true;
       }
+      case 'road':
+        return false;
       case 'logic': {
         if (b.type === 'mixer') {
           const fromLeft = from === ((b.dir + 1) & 3); // travelling clockwise-next = came from the left side
@@ -594,6 +615,27 @@ export class Sim {
             b.timer = (b.timer ?? 0) + SWITCH_PULSE_SECONDS;
             b.open = true;
           } else b.open = b.open === false;
+          return true;
+        }
+        if (b.type === 'picker' || b.type === 'depot') return false;
+        if (b.type === 'stacker') {
+          if (from !== b.dir) return false;
+          const buf = b.bufL!;
+          if (b.mode === 'unpack') {
+            const inner = crateOf(item);
+            if (!inner || buf.length) return false;
+            for (let k = 0; k < CRATE_SIZE; k++) buf.push(inner);
+            b.acc = (b.acc ?? 0) + 1;
+            return true;
+          }
+          if (isCrate(item) || buf.length >= CRATE_SIZE || (buf.length && buf[0] !== item)) return false;
+          buf.push(item);
+          return true;
+        }
+        if (b.type === 'dock') {
+          if (b.mode === 'unload' || b.bufL!.length >= DOCK_CAP) return false;
+          if (b.recipe && b.recipe !== item) return false;
+          b.bufL!.push(item);
           return true;
         }
         if (b.type === 'timer' && from !== b.dir && from !== ((b.dir + 2) & 3)) {
@@ -761,6 +803,20 @@ export class Sim {
         case 'timer':
           this.tickTimer(b, dt);
           break;
+        case 'picker':
+          this.tickPicker(b, dt);
+          break;
+        case 'road':
+          break;
+        case 'dock':
+          this.tickDock(b);
+          break;
+        case 'depot':
+          this.tickDepot(b);
+          break;
+        case 'stacker':
+          this.tickStacker(b);
+          break;
         case 'sensor':
           this.tickSensor(b, dt);
           break;
@@ -820,6 +876,7 @@ export class Sim {
 
   private tickWorld(_dt: number) {
     const st = this.state;
+    this.tickRobots(_dt);
     // dust storms (only once solar power matters)
     if (st.storm > 0) {
       st.storm -= _dt;
@@ -1016,6 +1073,314 @@ export class Sim {
   traceBytes(cpu: Chip8): number[] {
     const op = (cpu.mem[cpu.pc] << 8) | cpu.mem[cpu.pc + 1];
     return [cpu.pc >> 8, cpu.pc & 0xff, op >> 8, op & 0xff, cpu.i >> 8, cpu.i & 0xff, ...Array.from(cpu.v)];
+  }
+
+  // ---------- Roads, docks, robots ----------
+
+  robots(): Robot[] {
+    return (this.state.robots ??= []);
+  }
+
+  private isRoad(x: number, y: number): boolean {
+    return this.at(x, y)?.type === 'road';
+  }
+
+  /** Road tiles touching a building's footprint. */
+  roadsAround(b: Building): { x: number; y: number }[] {
+    const s = BUILDINGS[b.type].size, out: { x: number; y: number }[] = [];
+    for (let i = 0; i < s; i++) {
+      for (const [x, y] of [[b.x + i, b.y - 1], [b.x + i, b.y + s], [b.x - 1, b.y + i], [b.x + s, b.y + i]]) if (this.isRoad(x, y)) out.push({ x, y });
+    }
+    return out;
+  }
+
+  /** Breadth-first search over road tiles from (sx, sy): distance map and parents for path reconstruction. */
+  private roadSearch(sx: number, sy: number): { dist: Map<number, number>; parent: Map<number, number> } {
+    const w = this.state.width, key = (x: number, y: number) => y * w + x;
+    const dist = new Map<number, number>(), parent = new Map<number, number>();
+    const q: number[] = [key(sx, sy)];
+    dist.set(q[0], 0);
+    for (let i = 0; i < q.length; i++) {
+      const k = q[i], x = k % w, y = Math.floor(k / w), d = dist.get(k)!;
+      for (let dir = 0; dir < 4; dir++) {
+        const nx = x + DX[dir], ny = y + DY[dir], nk = key(nx, ny);
+        if (dist.has(nk) || !this.isRoad(nx, ny)) continue;
+        dist.set(nk, d + 1);
+        parent.set(nk, k);
+        q.push(nk);
+      }
+    }
+    return { dist, parent };
+  }
+
+  private pathTo(search: { parent: Map<number, number> }, sx: number, sy: number, gx: number, gy: number): { x: number; y: number }[] {
+    const w = this.state.width;
+    const out: { x: number; y: number }[] = [];
+    let k = gy * w + gx;
+    const start = sy * w + sx;
+    while (k !== start) {
+      out.push({ x: k % w, y: Math.floor(k / w) });
+      const p = search.parent.get(k);
+      if (p === undefined) return [];
+      k = p;
+    }
+    return out.reverse();
+  }
+
+  /** Nearest dock (by road distance) the robot can serve: a loading dock with items, or an unloading dock with room for what it carries. */
+  private planRobot(r: Robot, kind: 'load' | 'unload'): boolean {
+    const sx = Math.floor(r.x), sy = Math.floor(r.y);
+    const search = this.roadSearch(sx, sy);
+    let best: { dock: Building; tile: { x: number; y: number }; d: number } | null = null;
+    for (const dock of this.state.buildings) {
+      if (dock.type !== 'dock') continue;
+      const mode = dock.mode === 'unload' ? 'unload' : 'load';
+      if (mode !== kind) continue;
+      if (kind === 'load' && !dock.bufL!.length) continue;
+      if (kind === 'unload' && (dock.bufL!.length >= DOCK_CAP || (dock.recipe && !r.items.includes(dock.recipe as ItemId)))) continue;
+      for (const tile of this.roadsAround(dock)) {
+        const d = search.dist.get(tile.y * this.state.width + tile.x);
+        if (d === undefined) continue;
+        // spread the fleet: a dock another robot is already heading for counts as farther away
+        const busy = this.robots().filter((o) => o !== r && o.target === dock.id).length;
+        const score = d + busy * 6;
+        if (!best || score < best.d) best = { dock, tile, d: score };
+      }
+    }
+    if (!best) return false;
+    r.path = this.pathTo(search, sx, sy, best.tile.x, best.tile.y);
+    r.target = best.dock.id;
+    r.state = 'go';
+    return true;
+  }
+
+  private tickRobots(dt: number) {
+    const robots = this.robots();
+    for (let i = robots.length - 1; i >= 0; i--) {
+      const r = robots[i];
+      const depot = this.byId(r.depot);
+      if (!depot || depot.type !== 'depot') {
+        robots.splice(i, 1);
+        continue;
+      }
+      if (r.state === 'idle') {
+        r.wait -= dt;
+        if (r.wait > 0) continue;
+        r.wait = 1;
+        if (r.items.length) {
+          if (!this.planRobot(r, 'unload')) this.planRobot(r, 'load'); // nowhere to unload: keep collecting
+        } else this.planRobot(r, 'load');
+        continue;
+      }
+      if (r.state === 'go') {
+        let budget = ROBOT_SPEED * dt;
+        while (budget > 0 && r.path.length) {
+          const wp = r.path[0], tx = wp.x + 0.5, ty = wp.y + 0.5;
+          const dx = tx - r.x, dy = ty - r.y, d = Math.hypot(dx, dy);
+          if (Math.abs(dx) > Math.abs(dy)) r.dir = dx > 0 ? 1 : 3;
+          else if (d > 0.001) r.dir = dy > 0 ? 2 : 0;
+          if (d <= budget) {
+            r.x = tx;
+            r.y = ty;
+            budget -= d;
+            r.path.shift();
+            if (!this.isRoad(wp.x, wp.y)) {
+              // the road was removed under the route: stop and re-plan
+              r.path = [];
+              r.state = 'idle';
+              r.wait = 0.5;
+              break;
+            }
+          } else {
+            r.x += (dx / d) * budget;
+            r.y += (dy / d) * budget;
+            budget = 0;
+          }
+        }
+        if (!r.path.length && r.state === 'go') {
+          const dock = this.byId(r.target);
+          if (!dock || dock.type !== 'dock') {
+            r.state = 'idle';
+            r.wait = 0.5;
+            continue;
+          }
+          r.state = dock.mode === 'unload' ? 'unload' : 'load';
+          r.t = 0;
+          r.dir = (dock.x > r.x ? 1 : dock.x < r.x - 0.6 ? 3 : dock.y > r.y ? 2 : 0) as Dir;
+        }
+        continue;
+      }
+      const dock = this.byId(r.target);
+      if (!dock || dock.type !== 'dock') {
+        r.state = 'idle';
+        r.wait = 0.5;
+        continue;
+      }
+      r.t += dt * ROBOT_RATE;
+      if (r.state === 'load') {
+        if (dock.mode === 'unload' || !dock.bufL!.length || r.items.length >= ROBOT_CAP) {
+          r.state = 'idle';
+          r.wait = 0;
+          continue;
+        }
+        while (r.t >= 1 && dock.bufL!.length && r.items.length < ROBOT_CAP) {
+          r.items.push(dock.bufL!.shift()!);
+          r.t -= 1;
+        }
+      } else {
+        const idx = r.items.findIndex((it) => !dock.recipe || dock.recipe === it);
+        if (dock.mode !== 'unload' || idx < 0 || dock.bufL!.length >= DOCK_CAP) {
+          r.state = 'idle';
+          r.wait = 0;
+          continue;
+        }
+        while (r.t >= 1 && dock.bufL!.length < DOCK_CAP) {
+          const j = r.items.findIndex((it) => !dock.recipe || dock.recipe === it);
+          if (j < 0) break;
+          dock.bufL!.push(r.items.splice(j, 1)[0]);
+          r.t -= 1;
+        }
+      }
+    }
+  }
+
+  /** An unloading dock pushes its buffer into the building in front; a loading dock just waits for robots. */
+  private tickDock(b: Building) {
+    const buf = b.bufL ?? (b.bufL = []);
+    if (b.mode === 'unload') {
+      b.working = buf.length > 0;
+      if (buf.length && this.pushDir(b, buf[0], b.dir)) buf.shift();
+      b.status = buf.length >= DOCK_CAP ? 'blocked' : buf.length ? 'ok' : 'idle';
+    } else {
+      b.working = buf.length > 0;
+      b.status = buf.length >= DOCK_CAP ? 'waiting' : buf.length ? 'ok' : 'idle';
+    }
+    if (!this.roadsAround(b).length) b.status = 'dead_end';
+  }
+
+  /** Keeps the depot's fleet at the chosen size; robots appear on a road next to the depot. */
+  private tickDepot(b: Building) {
+    const want = Math.max(1, Math.min(DEPOT_ROBOTS_MAX, b.threshold ?? 2));
+    b.threshold = want;
+    const robots = this.robots();
+    const mine = robots.filter((r) => r.depot === b.id);
+    const roads = this.roadsAround(b);
+    if (!roads.length) {
+      b.status = 'dead_end';
+      b.working = false;
+      return;
+    }
+    while (mine.length > want) {
+      const r = mine.pop()!;
+      for (const it of r.items) this.addInv(it, 1);
+      robots.splice(robots.indexOf(r), 1);
+    }
+    while (mine.length < want) {
+      const tile = roads[mine.length % roads.length];
+      const r: Robot = { id: this.state.nextId++, depot: b.id, x: tile.x + 0.5, y: tile.y + 0.5, dir: 0, items: [], path: [], state: 'idle', target: null, wait: 0, t: 0 };
+      robots.push(r);
+      mine.push(r);
+    }
+    b.working = mine.some((r) => r.state !== 'idle');
+    b.status = 'ok';
+  }
+
+  /** Pack: eight equal items become one crate. Unpack: a crate becomes eight items again. */
+  private tickStacker(b: Building) {
+    const buf = b.bufL ?? (b.bufL = []);
+    if (b.mode === 'unpack') {
+      b.working = buf.length > 0;
+      if (buf.length && this.pushDir(b, buf[0], b.dir)) buf.shift();
+      b.status = buf.length ? 'ok' : 'idle';
+      return;
+    }
+    b.working = buf.length > 0;
+    if (buf.length >= CRATE_SIZE) {
+      if (this.pushDir(b, crateId(buf[0]), b.dir)) {
+        b.bufL = [];
+        b.acc = (b.acc ?? 0) + 1;
+        b.status = 'ok';
+      } else b.status = 'blocked';
+    } else b.status = buf.length ? 'ok' : 'idle';
+  }
+
+  // ---------- Grabber arm ----------
+
+  /** Takes one item out of a building: a depot's store, a belt, a machine's output tray or a register's queue. */
+  takeFrom(src: Building, filter: ItemId | null): ItemId | null {
+    if (src.type === 'core' || src.type === 'picker') return null;
+    if (src.store) {
+      const keys = (filter ? [filter] : Object.keys(src.store)) as ItemId[];
+      for (const k of keys) {
+        const n = src.store[k] ?? 0;
+        if (n <= 0) continue;
+        if (n - 1 <= 0) delete src.store[k];
+        else src.store[k] = n - 1;
+        return k;
+      }
+      return null;
+    }
+    if (src.items) {
+      // belts: the item furthest along (closest to the arm)
+      for (let i = src.items.length - 1; i >= 0; i--) {
+        if (filter && src.items[i].item !== filter) continue;
+        return src.items.splice(i, 1)[0].item;
+      }
+      return null;
+    }
+    if (src.bufL && ARITH.has(src.type)) {
+      const i = filter ? src.bufL.indexOf(filter) : 0;
+      if (i < 0 || !src.bufL.length) return null;
+      return src.bufL.splice(i, 1)[0];
+    }
+    if (src.output) {
+      const keys = (filter ? [filter] : Object.keys(src.output)) as ItemId[];
+      for (const k of keys) {
+        const n = src.output[k] ?? 0;
+        if (n <= 0) continue;
+        if (n - 1 <= 0) delete src.output[k];
+        else src.output[k] = n - 1;
+        return k;
+      }
+    }
+    return null;
+  }
+
+  /** Grabber arm: once a second it lifts an item from `reach` tiles behind and drops it `reach` tiles in front. */
+  private tickPicker(b: Building, dt: number) {
+    const reach = b.threshold === 2 ? 2 : 1;
+    b.threshold = reach;
+    const held = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+    b.rateT = Math.min(1, (b.rateT ?? 0) + dt * PICKER_RATE);
+    if (held) {
+      // swing over, then drop it into the target
+      if (b.rateT < 1) {
+        b.status = 'ok';
+        b.working = true;
+        return;
+      }
+      const t = this.at(b.x + DX[b.dir] * reach, b.y + DY[b.dir] * reach);
+      if (t && t !== b && this.accept(t, held, b.dir)) {
+        b.output = {};
+        b.rateT = 0;
+        b.acc = (b.acc ?? 0) + 1;
+        b.status = 'ok';
+      } else b.status = 'blocked';
+      b.working = true;
+      return;
+    }
+    const back = ((b.dir + 2) & 3) as Dir;
+    const src = this.at(b.x + DX[back] * reach, b.y + DY[back] * reach);
+    const item = src && src !== b ? this.takeFrom(src, (b.recipe as ItemId | null) ?? null) : null;
+    if (item) {
+      b.output = { [item]: 1 };
+      b.rateT = 0;
+      b.status = 'ok';
+      b.working = true;
+    } else {
+      b.status = src ? 'idle' : 'dead_end';
+      b.working = false;
+    }
   }
 
   // ---------- Timer, sensor, radio ----------
@@ -1595,7 +1960,7 @@ export class Sim {
     // sample output: a few items per second in the colour of the picture, onto the belt to the left
     const mode = b.mode ?? 'scan';
     const f = this.frames.get(b.id);
-    if (!b.working || !f || mode === 'off' || mode === 'hold' || mode === 'pass' || mode === 'pulse' || mode === 'tx' || mode === 'rx') return;
+    if (!b.working || !f || mode === 'off' || mode === 'hold' || mode === 'pass' || mode === 'pulse' || mode === 'tx' || mode === 'rx' || mode === 'load' || mode === 'unload' || mode === 'pack' || mode === 'unpack') return;
     b.rateT = Math.min(2, (b.rateT ?? 0) + dt * SCREEN_SAMPLE_RATE);
     if (b.rateT < 1) return;
     const item = this.sampleOf(b, f, mode);
