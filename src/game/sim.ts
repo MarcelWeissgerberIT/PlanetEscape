@@ -464,7 +464,8 @@ export class Sim {
         if (b.type === 'lamp') return ((from + 2) & 3) !== b.dir; // a pixel takes input from every side except its front
         if (b.type === 'terminal') return true; // parts are installed from any side
         if (ARITH.has(b.type)) return from === b.dir || from === ((b.dir + 1) & 3) || from === ((b.dir + 3) & 3); // back = main input, sides = second operand / signal
-        if (b.type === 'switch') return from !== ((b.dir + 2) & 3); // behind = items to gate, sides = control pulses
+        if (b.type === 'switch' || b.type === 'timer') return from !== ((b.dir + 2) & 3); // behind = items to gate, sides = control pulses
+        if (b.type === 'sensor') return from !== ((b.dir + 2) & 3); // takes the belt from behind or from a side, like a corner
         return from === b.dir;
     }
   }
@@ -595,6 +596,11 @@ export class Sim {
           } else b.open = b.open === false;
           return true;
         }
+        if (b.type === 'timer' && from !== b.dir && from !== ((b.dir + 2) & 3)) {
+          // control pulse from a side: restarts the cycle and opens the timer (the pulse item is consumed)
+          this.signal(b, from);
+          return true;
+        }
         if (b.type === 'radio') {
           if (b.mode === 'rx' || from !== b.dir) return false;
           const q = this.radioQueue(b.threshold ?? 1);
@@ -608,6 +614,8 @@ export class Sim {
         if (b.type === 'lamp') {
           if (((from + 2) & 3) === b.dir) return false;
           if (b.recipe && b.recipe !== item) return false; // optional colour filter
+        } else if (b.type === 'sensor') {
+          if (((from + 2) & 3) === b.dir) return false; // anything but head-on
         } else if (from !== b.dir) return false;
         if ((b.type === 'switch' || b.type === 'timer') && b.open === false) return false;
         if (b.output && Object.keys(b.output).length) return false;

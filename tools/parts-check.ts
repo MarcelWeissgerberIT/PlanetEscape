@@ -68,6 +68,21 @@ function world() {
   if (reg.value !== 0 || w.count(regSink) !== 3) throw new Error('sensor did not release the register');
 }
 
+// sensor fed from the side: belt runs east into a sensor that points south
+{
+  const w = world();
+  const src = w.place('storage', 20, 10, 1);
+  src.store = { quartz: 50 };
+  w.place('conveyor', 21, 10, 1);
+  w.place('conveyor', 22, 10, 1);
+  const sensor = w.place('sensor', 23, 10, 2);
+  w.place('conveyor', 23, 11, 2);
+  const sink = w.place('storage', 23, 12, 2);
+  w.tick(6);
+  console.log('sensor (side feed): passed', sensor.acc, 'sink', w.count(sink));
+  if ((sensor.acc ?? 0) < 5 || w.count(sink) < 3) throw new Error('sensor does not take a belt from the side');
+}
+
 // radio: transmitter in one corner, receiver in the other, same channel; a second channel stays silent
 {
   const w = world();
