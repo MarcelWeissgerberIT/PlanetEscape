@@ -134,6 +134,27 @@ function world() {
   if (w.count(sink) < 200) throw new Error('charging stalls the deliveries');
 }
 
+// collect from: a loading dock set to 8 waits for a full load before robots come
+{
+  const w = world();
+  const src = w.place('storage', 10, 8, 2);
+  src.store = { circuit: 5 };
+  const pick = w.place('dock', 10, 9, 2);
+  pick.threshold = 8;
+  for (let x = 10; x <= 20; x++) w.place('road', x, 10);
+  w.place('depot', 14, 11);
+  const drop = w.place('dock', 20, 9, 0);
+  drop.mode = 'unload';
+  const sink = w.place('storage', 20, 8, 0);
+  w.tick(15);
+  console.log('collect from 8: with 5 waiting, delivered', w.count(sink), 'robots', w.sim.robots().map((r) => `${r.state}/${r.items.length}`));
+  if (w.count(sink) !== 0) throw new Error('robots collected below the dock threshold');
+  src.store = { circuit: 3 };
+  w.tick(20);
+  console.log('collect from 8: with 8 waiting, delivered', w.count(sink));
+  if (w.count(sink) !== 8) throw new Error('robots did not collect the full load');
+}
+
 // free play (not the playground): robots have to be produced and delivered
 {
   const st: GameState = newGame(13, { mode: 'free', mapSize: 'medium', infiniteOre: true, allUnlocked: true, storms: false }, { w: 48, h: 48, blank: true });

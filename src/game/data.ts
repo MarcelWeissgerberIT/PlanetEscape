@@ -329,7 +329,7 @@ CHALLENGES.push(
     // 50 iron is more than one smelter (30/min): two iron lines, each with its own loading dock, a printed third smelter
     rate: { iron_plate: 50, copper_plate: 25 },
     rateHold: 60,
-    medals: [540, 720, 1020],
+    medals: [300, 480, 780],
   },
   {
     id: 'c_radio', icon: 'radio', seed: 2606, size: 56, rocks: 4,

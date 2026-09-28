@@ -1589,7 +1589,8 @@ export class Sim {
       if (dock.type !== 'dock' || dock.site) continue;
       const mode = dock.mode === 'unload' ? 'unload' : 'load';
       if (mode !== kind) continue;
-      if (kind === 'load' && !dock.bufL!.length) continue;
+      // a loading dock can ask to be collected only once it holds a batch (threshold 1..DOCK_CAP)
+      if (kind === 'load' && (!dock.bufL!.length || dock.bufL!.length < Math.min(DOCK_CAP, dock.threshold ?? 1))) continue;
       if (kind === 'unload' && (dock.bufL!.length >= DOCK_CAP || (dock.recipe && !r.items.includes(dock.recipe as ItemId)))) continue;
       for (const tile of this.roadsAround(dock)) {
         const d = search.dist.get(tile.y * this.state.width + tile.x);

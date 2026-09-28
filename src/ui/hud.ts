@@ -1515,7 +1515,8 @@ export class Hud {
         body = `${statusLine(` · ${buf.length}/${DOCK_CAP}`)}
           <div class="dirs"><span class="lbl">${t('dock_mode')}</span><button class="chip ${unload ? '' : 'active'}" data-mode="load">${t('dock_load')}</button><button class="chip ${unload ? 'active' : ''}" data-mode="unload">${t('dock_unload')}</button></div>
           <div class="bufs"><span class="lbl">${t('dock_buffer')}</span>${Object.entries(counts).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('') || '–'}</div>
-          <p class="save-hint">${t(unload ? 'dock_hint_unload' : 'dock_hint_load')}</p>${unload ? dirPicker : ''}${picker(t('dock_filter'))}`;
+          ${unload ? '' : `<div class="dirs"><span class="lbl">${t('dock_min')}</span>${[1, 2, 4, 6, 8].map((n) => `<button class="chip ${(b.threshold ?? 1) === n ? 'active' : ''}" data-dockmin="${n}">${n}</button>`).join('')}</div>`}
+          <p class="save-hint">${t(unload ? 'dock_hint_unload' : 'dock_hint_load')}${unload ? '' : ` ${t('dock_min_hint')}`}</p>${unload ? dirPicker : ''}${picker(t('dock_filter'))}`;
       } else if (b.type === 'depot') {
         const mine = this.sim.robots().filter((r) => r.depot === b.id);
         const want = b.threshold ?? 2, owned = this.sim.depotRobots(b), stock = st.inventory.robot ?? 0;
@@ -1922,6 +1923,12 @@ export class Hud {
         if (this.sim.depotAddFromStock(b)) sfx.select();
         this.showInfo(b);
         this.renderBottom();
+        return;
+      }
+      if (target.dataset.dockmin !== undefined) {
+        b.threshold = Number(target.dataset.dockmin);
+        sfx.select();
+        this.showInfo(b);
         return;
       }
       if (target.dataset.mode !== undefined) {

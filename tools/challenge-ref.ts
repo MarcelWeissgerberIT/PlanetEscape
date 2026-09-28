@@ -88,7 +88,8 @@ const around = (x: number, y: number) => [0, 1, 2, 3].map((d) => ({ x: x + DX[d]
     place('miner', e.x, e.y, e.dir);
     place('smelter', e.x + DX[e.dir], e.y + DY[e.dir], e.dir);
     const dx = e.x + DX[e.dir] * 2, dy = e.y + DY[e.dir] * 2;
-    place('dock', dx, dy, e.dir);
+    const load = place('dock', dx, dy, e.dir);
+    load.threshold = Number(process.env.PE_DOCKMIN) || 6; // robots collect full loads
     const path = bfs(sim, around(dx, dy), roads.flatMap((r) => around(r.x, r.y)));
     if (!path) throw new Error('c_robots: no road path');
     for (const p of path) if (!sim.at(p.x, p.y)) place('road', p.x, p.y);
