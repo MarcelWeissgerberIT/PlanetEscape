@@ -550,6 +550,7 @@ export class Sim {
         if (need && (this.state.ship[item] ?? 0) < need) this.state.ship[item] = (this.state.ship[item] ?? 0) + 1; // installed on the ship
         else this.addInv(item, 1);
         this.state.delivered[item] = (this.state.delivered[item] ?? 0) + 1;
+        if (this.currentMission()?.rate?.[item]) ((this.state.rateLog ??= {})[item] ??= []).push(this.state.time);
         this.bump(this.state.stats.delivered, item, 1);
         for (const c of this.state.contracts) if (c.accepted && c.item === item && c.delivered < c.amount) c.delivered++;
         this.events.push({ type: 'delivered', item, count: 1 });
@@ -948,7 +949,8 @@ export class Sim {
       }
     }
     this.tickWorld(dt);
-    this.checkMission();
+    this.sampleEfficiency(dt);
+    this.checkMission(dt);
   }
 
   private bump(rec: Partial<Record<ItemId, number>>, item: ItemId, n: number) {
@@ -3029,18 +3031,67 @@ export class Sim {
     return MISSIONS[this.state.missionIndex] ?? null;
   }
 
-  private checkMission() {
+  /** Items per minute of `item` that reached the core during the last minute (the current mission's goal items only). */
+  deliveryRate(item: ItemId): number {
+    const log = this.state.rateLog?.[item];
+    if (!log) return 0;
+    const t = this.state.time;
+    while (log.length && log[0] < t - 60) log.shift();
+    return log.length;
+  }
+
+  /** Throughput goal of the current mission: met right now, and seconds held so far. */
+  rateStatus(): { met: boolean; held: number; hold: number } | null {
+    const m = this.currentMission();
+    if (!m?.rate) return null;
+    let met = true;
+    for (const k in m.rate) if (this.deliveryRate(k as ItemId) < m.rate[k as ItemId]!) met = false;
+    return { met, held: this.state.rateHeld ?? 0, hold: m.rateHold ?? 45 };
+  }
+
+  /** Once a second: share of machines and miners that are working (for the efficiency star). */
+  private effT = 0;
+  private sampleEfficiency(dt: number) {
+    this.effT += dt;
+    if (this.effT < 1) return;
+    this.effT = 0;
+    let n = 0, working = 0;
+    for (const b of this.state.buildings) {
+      const kind = BUILDINGS[b.type].kind;
+      if (b.site || (kind !== 'machine' && kind !== 'miner') || b.status === 'depleted') continue;
+      n++;
+      if (b.working) working++;
+    }
+    if (!n) return;
+    const e = (this.state.eff ??= { sum: 0, n: 0 });
+    e.sum += working / n;
+    e.n++;
+  }
+
+  /** Average machine utilisation of the current chapter (0..1). */
+  efficiency(): number {
+    const e = this.state.eff;
+    return e && e.n ? e.sum / e.n : 0;
+  }
+
+  private checkMission(dt = 0) {
     const m = this.currentMission();
     if (!m || this.state.launched) return;
+    // the throughput clock runs on its own: it counts while every rate goal is met and restarts when one drops
+    const rs = this.rateStatus();
+    if (rs) this.state.rateHeld = rs.met ? (this.state.rateHeld ?? 0) + dt : 0;
     for (const k in m.deliver) {
       const have = Math.max(this.state.delivered[k as ItemId] ?? 0, this.state.ship[k as ItemId] ?? 0);
       if (have < m.deliver[k as ItemId]!) return;
     }
+    if (rs && (this.state.rateHeld ?? 0) < rs.hold) return;
     if (m.build) for (const k in m.build) if (this.countBuildings(k as BuildingId) < m.build[k as BuildingId]!) return;
     for (const u of m.unlocks) if (!this.state.unlockedBuildings.includes(u)) this.state.unlockedBuildings.push(u);
     for (const r of m.unlockRecipes) if (!this.state.unlockedRecipes.includes(r)) this.state.unlockedRecipes.push(r);
     if (m.reward) for (const k in m.reward) this.addInv(k as ItemId, m.reward[k as ItemId]!);
     this.state.delivered = {};
+    this.state.rateLog = {};
+    this.state.rateHeld = 0;
     this.state.missionIndex++;
     this.events.push({ type: 'mission', index: this.state.missionIndex - 1 });
     if (this.state.missionIndex >= MISSIONS.length) {

@@ -670,3 +670,6 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 .kit-row .chip { margin: 0; }
 .kit-row .chip[disabled] { opacity: 0.4; }
 .site-line { font-size: 12px; font-weight: 700; color: var(--accent); margin-bottom: 6px; display: flex; align-items: center; gap: 6px; }
+
+.mrow.rate .mname { color: var(--accent); }
+.mrow.rate.done .mname { color: var(--ok); }

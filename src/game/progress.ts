@@ -1,5 +1,5 @@
 // Persistent player progress across games: chapter stars, best times and best scores.
-import { LEVELS } from './data';
+import { STAR_EFFICIENCY, LEVELS } from './data';
 
 export interface Progress {
   stars: Record<number, number>; // chapter index (0-based) -> 1..3
@@ -31,15 +31,17 @@ function store(p: Progress) {
   }
 }
 
-/** Stars for finishing chapter `index` in `seconds`: 3 within par, 2 within 1.75× par, else 1. */
-export function starsFor(index: number, seconds: number): number {
+/** Stars for finishing chapter `index` in `seconds`: 3 within par, 2 within 1.75× par, else 1.
+ *  The third star also needs the machines to have been busy (utilisation at least STAR_EFFICIENCY). */
+export function starsFor(index: number, seconds: number, efficiency = 1): number {
   const par = LEVELS[Math.min(index, LEVELS.length - 1)].par;
-  return seconds <= par ? 3 : seconds <= par * 1.75 ? 2 : 1;
+  const byTime = seconds <= par ? 3 : seconds <= par * 1.75 ? 2 : 1;
+  return efficiency < STAR_EFFICIENCY ? Math.min(2, byTime) : byTime;
 }
 
-export function recordChapter(index: number, seconds: number): { stars: number; best: number; improved: boolean } {
+export function recordChapter(index: number, seconds: number, efficiency = 1): { stars: number; best: number; improved: boolean } {
   const p = loadProgress();
-  const stars = starsFor(index, seconds);
+  const stars = starsFor(index, seconds, efficiency);
   const prevBest = p.best[index];
   const improved = prevBest === undefined || seconds < prevBest;
   p.stars[index] = Math.max(p.stars[index] ?? 0, stars);

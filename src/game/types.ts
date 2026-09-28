@@ -192,6 +192,8 @@ export interface MissionDef {
   unlocks: BuildingId[];
   unlockRecipes: string[];
   reward?: Partial<Record<ItemId, number>>; // items KORA hands over on completion (bootstraps the next chain)
+  rate?: Partial<Record<ItemId, number>>; // throughput goal: items per minute arriving at the core ...
+  rateHold?: number; // ... held for this many seconds (default 45)
 }
 
 export type GameMode = 'story' | 'free' | 'playground'; // playground: build anything for free, no orders
@@ -247,6 +249,9 @@ export interface GameState {
   powerSupply: number;
   powerDemand: number;
   chapterStart?: number; // game time when the current story chapter began (for the star rating)
+  rateLog?: Partial<Record<ItemId, number[]>>; // delivery times of items with a throughput goal (last minute)
+  rateHeld?: number; // seconds the throughput goal has been met without a break
+  eff?: { sum: number; n: number }; // machine utilisation samples of the current chapter / mission
   event?: GameEvent | null;
   nextEventAt?: number;
   boostUntil?: number; // overclocked power until this game time
