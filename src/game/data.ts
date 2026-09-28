@@ -222,10 +222,10 @@ export const STAR_EFFICIENCY = 0.45;
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
   { id: 'm2', rate: { iron_plate: 10 }, rateHold: 45, deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage', 'kitport'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
-  { id: 'm3', rate: { machine_part: 4 }, rateHold: 45, deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'wind', 'splitter', 'tunnel', 'sorter', 'overflow', 'picker', 'lamp', 'speaker', 'switch', 'sensor'], unlockRecipes: ['steel_frame', 'motor'] },
-  { id: 'm4', rate: { copper_wire: 8, steel_frame: 3 }, rateHold: 45, deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: ['road', 'dock', 'depot', 'battery', 'hall4', 'hall8', 'matrix', 'screen', 'keyboard', 'timer'], unlockRecipes: ['circuit', 'glass', 'cell', 'robot'] },
-  { id: 'm5', rate: { circuit: 4 }, rateHold: 45, deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'radio', 'mast', 'stacker', 'hall12', 'hall16', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
-  { id: 'm6', rate: { precision_part: 2 }, rateHold: 45, deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'reactor', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
+  { id: 'm3', rate: { machine_part: 4 }, rateHold: 45, deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'switch'], unlockRecipes: ['steel_frame', 'motor'] },
+  { id: 'm4', rate: { copper_wire: 8, steel_frame: 3 }, rateHold: 45, deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: ['hall4', 'timer'], unlockRecipes: ['circuit', 'glass', 'cell', 'robot'] },
+  { id: 'm5', rate: { circuit: 4 }, rateHold: 45, deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'register'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
+  { id: 'm6', rate: { precision_part: 2 }, rateHold: 45, deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
   { id: 'm7', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
 ];
 
@@ -272,6 +272,31 @@ export const UPGRADES: UpgradeDef[] = [
   { id: 'buffer', maxLevel: 2, cost: (l) => ({ steel_frame: 6 * l, machine_part: 6 * l }), factor: (l) => 1 + 0.5 * l, requires: { id: 'machine', level: 1 } },
   { id: 'printer', maxLevel: 2, cost: (l) => ({ precision_part: 6 * l, circuit: 8 * l }), factor: (l) => 1 + 0.3 * l, requires: { id: 'machine', level: 2 } },
 ];
+// ---------- Research projects: small packs of extra parts, paid with printed parts ----------
+export interface ProjectDef {
+  id: string;
+  after: number; // missions finished before the project opens
+  unlocks: BuildingId[];
+  cost: Partial<Record<ItemId, number>>;
+  requires?: string[]; // other projects first
+}
+export const PROJECTS: ProjectDef[] = [
+  { id: 'p_sensor', after: 3, unlocks: ['sensor', 'speaker'], cost: { copper_wire: 12, machine_part: 4 } },
+  { id: 'p_wind', after: 3, unlocks: ['wind'], cost: { steel_frame: 4, motor: 2 } },
+  { id: 'p_picker', after: 3, unlocks: ['picker'], cost: { machine_part: 6, motor: 2 } },
+  { id: 'p_robots', after: 4, unlocks: ['road', 'dock', 'depot'], cost: { circuit: 6, motor: 4, steel_frame: 4 } },
+  { id: 'p_power', after: 4, unlocks: ['battery', 'hall8'], cost: { steel_frame: 8, cell: 2 } },
+  { id: 'p_display', after: 4, unlocks: ['matrix', 'screen', 'keyboard'], cost: { circuit: 8, glass: 6 }, requires: ['p_sensor'] },
+  { id: 'p_math', after: 5, unlocks: ['adder', 'subtractor', 'bus'], cost: { circuit: 10, copper_wire: 20 } },
+  { id: 'p_math2', after: 5, unlocks: ['multiplier', 'divider', 'oscillator'], cost: { circuit: 12, precision_part: 2 }, requires: ['p_math'] },
+  { id: 'p_terminal', after: 5, unlocks: ['terminal'], cost: { circuit: 16, glass: 8 }, requires: ['p_display', 'p_math'] },
+  { id: 'p_radio', after: 5, unlocks: ['radio', 'mast'], cost: { circuit: 8, cell: 3 } },
+  { id: 'p_stacker', after: 5, unlocks: ['stacker', 'hall12'], cost: { motor: 4, steel_frame: 10 }, requires: ['p_robots'] },
+  { id: 'p_hall16', after: 5, unlocks: ['hall16'], cost: { steel_frame: 20, circuit: 6 }, requires: ['p_stacker'] },
+  { id: 'p_reactor', after: 6, unlocks: ['reactor'], cost: { precision_part: 8, circuit: 12, steel_frame: 10 } },
+];
+export const PROJECT_BY_ID: Record<string, ProjectDef> = Object.fromEntries(PROJECTS.map((p) => [p.id, p]));
+
 export const UPGRADE_DEFAULTS = (): Record<UpgradeId, number> => Object.fromEntries(UPGRADES.map((u) => [u.id, 0])) as Record<UpgradeId, number>;
 
 // ---------- Events: KORA reports a situation, the player decides ----------

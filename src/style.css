@@ -716,3 +716,6 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 .bp-warn { color: #fbbf24; font-size: 11px; margin-top: 3px; }
 
 .auto-tag { font-size: 10px; font-weight: 800; letter-spacing: 0.08em; color: #03141a; background: var(--accent-2); padding: 1px 5px; margin-right: 4px; clip-path: polygon(3px 0, 100% 0, 100% calc(100% - 3px), calc(100% - 3px) 100%, 0 100%, 0 3px); }
+
+.upgrade.project.done { opacity: 0.55; }
+.upgrade.project .uname small img { vertical-align: middle; cursor: pointer; }

@@ -14,6 +14,8 @@ import {
   TERRAIN_ITEM,
   TUNNEL_RANGE,
   CONTRACT_INTERVAL,
+  PROJECTS,
+  PROJECT_BY_ID,
   AUTOMATION_MIN_MISSION,
   AUTOMATION_SHARE,
   BOOST_FACTOR,
@@ -122,6 +124,37 @@ export class Sim {
     return true;
   }
 
+  /** Research project state: done, open (can be paid), waiting for a mission or another project. */
+  projectState(id: string): 'done' | 'open' | 'mission' | 'requires' {
+    const st = this.state;
+    const p = PROJECT_BY_ID[id];
+    if (st.projects?.includes(id) || p.unlocks.every((u) => st.unlockedBuildings.includes(u))) return 'done';
+    if (!st.options.allUnlocked && st.options.mode !== 'playground' && st.missionIndex < p.after) return 'mission';
+    if (p.requires?.some((r) => this.projectState(r) !== 'done')) return 'requires';
+    return 'open';
+  }
+
+  canResearch(id: string): boolean {
+    if (this.projectState(id) !== 'open') return false;
+    const cost = PROJECT_BY_ID[id].cost;
+    for (const k in cost) if ((this.state.inventory[k as ItemId] ?? 0) < cost[k as ItemId]!) return false;
+    return true;
+  }
+
+  research(id: string): boolean {
+    if (!this.canResearch(id)) return false;
+    const p = PROJECT_BY_ID[id];
+    for (const k in p.cost) this.addInv(k as ItemId, -p.cost[k as ItemId]!);
+    (this.state.projects ??= []).push(id);
+    for (const u of p.unlocks) if (!this.state.unlockedBuildings.includes(u)) this.state.unlockedBuildings.push(u);
+    return true;
+  }
+
+  /** Projects a mission opens (for the mission-complete note). */
+  projectsOpenedBy(missionIndex: number): string[] {
+    return PROJECTS.filter((p) => p.after === missionIndex + 1).map((p) => p.id);
+  }
+
   buyUpgrade(id: UpgradeId): boolean {
     if (!this.canUpgrade(id)) return false;
     const cost = this.upgradeCost(id)!;
@@ -195,6 +228,7 @@ export class Sim {
       add(st.unlockedBuildings, MISSIONS[i].unlocks);
       add(st.unlockedRecipes, MISSIONS[i].unlockRecipes);
     }
+    for (const id of st.projects ?? []) if (PROJECT_BY_ID[id]) add(st.unlockedBuildings, PROJECT_BY_ID[id].unlocks);
   }
 
   /** The playground has no ship to build: the core stays in the save as the base power source but takes no tiles. */

@@ -1,6 +1,6 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { STAR_EFFICIENCY, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -2278,6 +2278,8 @@ export class Hud {
     const have = kind === 'recipe' ? st.unlockedRecipes.includes(id) : st.unlockedBuildings.includes(id as BuildingId);
     if (have) return '';
     const idx = MISSIONS.findIndex((m) => (kind === 'recipe' ? m.unlockRecipes.includes(id) : m.unlocks.includes(id as BuildingId)));
+    const proj = kind === 'building' ? PROJECTS.find((p) => p.unlocks.includes(id as BuildingId)) : undefined;
+    if (proj) return `<span class="bp-lock">🔒 ${t('bp_unlock_project', { p: t(`proj_${proj.id}` as 'proj_p_sensor'), n: proj.after })}</span>`;
     return idx >= 0 ? `<span class="bp-lock">🔒 ${t('bp_unlock_after', { n: idx + 1 })}</span>` : `<span class="bp-lock">🔒</span>`;
   }
 
@@ -2453,7 +2455,29 @@ export class Hud {
     };
     const base = UPGRADES.filter((u) => !u.requires).map(row).join('');
     const tier2 = UPGRADES.filter((u) => u.requires).map(row).join('');
-    this.openModal(`<h2>${t('research')}</h2><div class="upgrade-list">${base}</div><h3>${t('upgrades')} II</h3><div class="upgrade-list">${tier2}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
+    const projects = PROJECTS.map((p) => {
+      const state = this.sim.projectState(p.id);
+      const can = this.sim.canResearch(p.id);
+      const parts = p.unlocks.map((u) => `<img class="icon xs" src="${buildingUrl(u)}" alt="" data-bp-building="${u}" title="${tBuilding(u)}"> ${tBuilding(u)}`).join(' · ');
+      const why = state === 'mission' ? `🔒 ${t('bp_unlock_after', { n: p.after })}` : state === 'requires' ? `🔒 ${t('proj_requires', { p: (p.requires ?? []).map((r) => t(`proj_${r}` as 'proj_p_sensor')).join(', ') })}` : '';
+      return `<div class="upgrade project ${state === 'open' ? '' : 'locked'} ${state === 'done' ? 'done' : ''}">
+        <div class="uname"><b>${t(`proj_${p.id}` as 'proj_p_sensor')}</b><small>${parts}${why ? `<br>${why}` : ''}</small></div>
+        ${state === 'done' ? `<span class="umax">✓ ${t('proj_done')}</span>` : `<div class="ucost">${costHtml(p.cost, st.inventory)}</div><button class="btn small ${can ? 'primary' : ''}" data-proj="${p.id}" ${can ? '' : 'disabled'}>${t('proj_start')}</button>`}
+      </div>`;
+    });
+    // open projects first, then the waiting ones, finished ones last
+    const order = { open: 0, requires: 1, mission: 2, done: 3 };
+    const sorted = PROJECTS.map((p, i) => ({ html: projects[i], o: order[this.sim.projectState(p.id)] })).sort((a, b) => a.o - b.o).map((x) => x.html).join('');
+    this.openModal(`<h2>${t('research')}</h2><h3>${t('proj_title')}</h3><p class="save-hint">${t('proj_intro')}</p><div class="upgrade-list">${sorted}</div><h3>${t('upgrades')}</h3><div class="upgrade-list">${base}</div><h3>${t('upgrades')} II</h3><div class="upgrade-list">${tier2}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
+      const pid = target.dataset.proj;
+      if (pid && this.sim.research(pid)) {
+        sfx.mission();
+        this.renderer.fxUpgrade();
+        this.toast(`✓ ${t('proj_done')}: <b>${t(`proj_${pid}` as 'proj_p_sensor')}</b><br><small>${t('unlocked')}: ${PROJECT_BY_ID[pid].unlocks.map((u) => tBuilding(u)).join(', ')}</small>`, 5000, 'success');
+        this.showUpgrades();
+        this.refresh?.();
+        return;
+      }
       const id = target.dataset.up as UpgradeId | undefined;
       if (id && this.sim.buyUpgrade(id)) {
         sfx.mission();
@@ -2706,7 +2730,8 @@ export class Hud {
       };
       return;
     }
-    this.toast(`✓ ${t('mission_done')} <b>${mt.title}</b>${unlocks.length ? `<br><small>${t('unlocked')}: ${unlocks.join(', ')}</small>` : ''}`, 5000, 'success');
+    const newProj = this.sim.projectsOpenedBy(index);
+    this.toast(`✓ ${t('mission_done')} <b>${mt.title}</b>${unlocks.length ? `<br><small>${t('unlocked')}: ${unlocks.join(', ')}</small>` : ''}${newProj.length ? `<br><small>${t('proj_new', { n: newProj.length })}</small>` : ''}`, 5000, 'success');
     const next = MISSIONS[index + 1];
     const chapter = this.sim.state.options.mode === 'story' ? tChapter(index) : '';
     if (chapter) this.koraSay(chapter, 14);

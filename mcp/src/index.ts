@@ -113,8 +113,9 @@ function summary() {
     unlockedRecipes: st.unlockedRecipes,
     buildings: counts,
     problems: sim.analyze().length,
-    contracts: st.contracts.map((c) => ({ id: c.id, item: c.item, amount: c.amount, delivered: c.delivered, accepted: c.accepted, secondsLeft: Math.round(c.deadline - st.time), reward: c.reward })),
+    contracts: st.contracts.map((c) => ({ id: c.id, item: c.item, amount: c.amount, delivered: c.delivered, accepted: c.accepted, secondsLeft: Math.round(c.deadline - st.time), reward: c.reward, kind: c.kind ?? 'amount', ...(c.kind && c.kind !== 'amount' ? { lo: c.lo, hi: c.hi, hold: c.hold, held: c.held, n: c.n, window: c.window, rounds: c.rounds, done: c.done } : {}) })),
     upgrades: st.upgrades,
+    projects: st.projects ?? [],
   };
 }
 

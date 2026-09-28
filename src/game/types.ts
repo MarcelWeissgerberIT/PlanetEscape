@@ -253,6 +253,7 @@ export interface GameState {
   ship: Partial<Record<ItemId, number>>; // ship parts installed so far
   ore: number[]; // remaining units per deposit tile (0 for ground)
   upgrades: Record<UpgradeId, number>; // level per upgrade
+  projects?: string[]; // finished research projects (small packs of extra parts)
   contracts: Contract[];
   contractsDone: number;
   nextContractAt: number; // game time

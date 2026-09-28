@@ -191,6 +191,7 @@ export function levelState(prev: GameState | null, level: number, options: GameO
     ship: {},
     ore,
     upgrades: { ...UPGRADE_DEFAULTS(), ...(prev?.upgrades ?? {}) },
+    projects: [...(prev?.projects ?? [])],
     contracts: [],
     contractsDone: prev?.contractsDone ?? 0,
     nextContractAt: def.contracts ? 240 : 1e12,
