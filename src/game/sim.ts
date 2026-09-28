@@ -32,7 +32,7 @@ import {
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
 import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_BASE_HZ, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
-import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_W } from './chip8';
+import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
 export type SimEvent =
@@ -1455,10 +1455,10 @@ export class Sim {
         const m = this.at(r.x + mx, r.y + my);
         if (m?.type !== 'matrix') continue;
         const s = matrixSize(m);
-        if (mx * s >= r.w || my * s >= r.h) continue;
+        const hi = cpu.hires && s === 16; // a 16x16 matrix shows the hi-res picture (8x4 tiles = 128x64)
+        if (mx * s >= (hi ? HIRES_W : r.w) || my * s >= (hi ? HIRES_H : r.h)) continue;
         const px = m.px && m.px.length === s * s ? m.px : new Array<number>(s * s).fill(0);
         let changed = px !== m.px;
-        const hi = cpu.hires && s === 16; // a 16x16 matrix shows the hi-res picture (8x4 tiles = 128x64)
         for (let yy = 0; yy < s; yy++)
           for (let xx = 0; xx < s; xx++) {
             const rgb = this.displayRgb(b, hi ? cpu.fb[(my * s + yy) * HIRES_W + mx * s + xx] : cpu.display[(my * s + yy) * CHIP8_W + mx * s + xx]);
