@@ -26,7 +26,10 @@ export type ItemId =
   | 'engine'
   | 'nav_computer'
   | 'fuel_cell'
-  | 'life_support';
+  | 'life_support'
+  | 'motor'
+  | 'cell'
+  | 'robot';
 
 export type TerrainId = 'ground' | 'rock' | 'iron_ore' | 'copper_ore' | 'quartz' | 'ice' | 'oil';
 

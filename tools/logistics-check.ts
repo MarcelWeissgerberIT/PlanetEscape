@@ -106,4 +106,43 @@ function world() {
   console.log('example: sink', sink?.store, 'robots', sim.robots().map((r) => `${r.state}/${r.items.length}`));
   if (!sink || (sink.store!.iron_plate ?? 0) < 16 || (sink.store!.copper_wire ?? 0) < 10) throw new Error('example chain does not deliver');
 }
+// free play (not the playground): robots have to be produced and delivered
+{
+  const st: GameState = newGame(13, { mode: 'free', mapSize: 'medium', infiniteOre: true, allUnlocked: true, storms: false }, { w: 48, h: 48, blank: true });
+  const sim = new Sim(st);
+  if (sim.creative) throw new Error('free play must not be creative');
+  st.inventory = { iron_plate: 200, steel_frame: 20, circuit: 20, copper_wire: 40, copper_plate: 40, glass: 20, machine_part: 20, motor: 4 };
+  const place = (type: Building['type'], x: number, y: number, dir: Dir = 0): Building => {
+    const b = sim.place(type, x, y, dir);
+    if (!b) throw new Error(`cannot place ${type} at ${x},${y}: ${sim.placementError(type, x, y)}`);
+    return b;
+  };
+  const tick = (s: number) => { for (let i = 0; i < Math.round(s * 30); i++) sim.tick(1 / 30); };
+  for (let x = 10; x <= 20; x++) place('road', x, 10);
+  const depot = place('depot', 14, 11);
+  tick(3);
+  console.log('free play depot without robots:', sim.robots().length, 'status', depot.status);
+  if (sim.robots().length !== 0 || depot.status !== 'starved') throw new Error('a depot spawned robots for free');
+  // an assembler builds a robot from 2 motors, 1 cell, 1 circuit; a belt brings it to the depot
+  const asm = place('assembler', 14, 14, 0);
+  asm.recipe = 'robot';
+  const feed = place('storage', 14, 17, 0);
+  feed.store = { motor: 4, cell: 2, circuit: 2 };
+  place('conveyor', 14, 16, 0);
+  place('conveyor', 14, 13, 0); // assembler output (north) -> belt -> depot
+  st.powerSupply = 0;
+  place('solar', 20, 20); place('solar', 21, 20); place('solar', 22, 20);
+  tick(40);
+  console.log('assembler made robots, depot holds', depot.value, 'fleet', sim.robots().length);
+  if ((depot.value ?? 0) < 1 || sim.robots().length < 1) throw new Error('delivered robots did not join the depot');
+  // add one from stock, then remove the depot: the robots go back to the stock
+  st.inventory.robot = 1;
+  const before = depot.value ?? 0;
+  if (!sim.depotAddFromStock(depot) || depot.value !== before + 1) throw new Error('adding from stock failed');
+  sim.remove(depot);
+  console.log('after removing the depot: stock robots', st.inventory.robot, 'fleet', sim.robots().length);
+  if ((st.inventory.robot ?? 0) !== before + 1 || sim.robots().length) throw new Error('robots not refunded');
+  // the new components are recipes of the assembler
+  for (const r of ['motor', 'cell', 'robot']) if (!st.unlockedRecipes.includes(r)) throw new Error(`recipe ${r} not unlocked in an all-unlocked game`);
+}
 console.log('logistics check ok');

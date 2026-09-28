@@ -28,6 +28,8 @@ import {
   UPGRADE_BY_ID,
   MIXER_RATIOS,
   recipesFor,
+  RECIPES,
+  BUILD_ORDER,
 } from './data';
 import type { Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
@@ -169,6 +171,25 @@ export class Sim {
     this.grid = new Array(state.width * state.height).fill(null);
     this.rebuildGrid();
     this.creative = state.options.mode === 'playground'; // the playground is always free of cost and requirements
+    this.syncUnlocks();
+  }
+
+  /** Older saves: grant what the finished missions (or an all-unlocked game) unlock today, e.g. recipes added later. */
+  private syncUnlocks() {
+    const st = this.state;
+    if (!st.unlockedBuildings || !st.unlockedRecipes) return;
+    const add = (list: string[], ids: string[]) => {
+      for (const id of ids) if (!list.includes(id)) list.push(id);
+    };
+    if (st.options.allUnlocked || st.options.mode === 'playground') {
+      add(st.unlockedRecipes, RECIPES.map((r) => r.id));
+      add(st.unlockedBuildings, BUILD_ORDER);
+      return;
+    }
+    for (let i = 0; i < Math.min(st.missionIndex ?? 0, MISSIONS.length); i++) {
+      add(st.unlockedBuildings, MISSIONS[i].unlocks);
+      add(st.unlockedRecipes, MISSIONS[i].unlockRecipes);
+    }
   }
 
   /** The playground has no ship to build: the core stays in the save as the base power source but takes no tiles. */
@@ -322,7 +343,10 @@ export class Sim {
         b.bufL = [];
         b.mode = 'load';
       }
-      if (type === 'depot') b.threshold = 2;
+      if (type === 'depot') {
+        b.threshold = 2;
+        b.value = 0; // robots in the depot (delivered)
+      }
       if (type === 'stacker') {
         b.bufL = [];
         b.mode = 'pack';
@@ -421,6 +445,7 @@ export class Sim {
     if (b.type === 'depot' && this.state.robots) {
       for (const r of this.state.robots) if (r.depot === b.id) for (const it of r.items) this.addInv(it, 1);
       this.state.robots = this.state.robots.filter((r) => r.depot !== b.id);
+      if (!this.creative && b.value) this.addInv('robot', b.value); // the robots go back to the stock
     }
     // full refund incl. buffered items (player friendly)
     if (!this.creative) for (const k in def.cost) this.addInv(k as ItemId, def.cost[k as ItemId]!);
@@ -484,7 +509,7 @@ export class Sim {
         if (b.type === 'sensor') return from !== ((b.dir + 2) & 3); // takes the belt from behind or from a side, like a corner
         if (b.type === 'picker') return false; // the arm fetches its items itself
         if (b.type === 'dock') return b.mode !== 'unload'; // a loading dock is filled from any side
-        if (b.type === 'depot') return false;
+        if (b.type === 'depot') return true; // robots are delivered from any side
         return from === b.dir;
     }
   }
@@ -628,7 +653,13 @@ export class Sim {
           } else b.open = b.open === false;
           return true;
         }
-        if (b.type === 'picker' || b.type === 'depot') return false;
+        if (b.type === 'picker') return false;
+        if (b.type === 'depot') {
+          // the fleet is built elsewhere: every delivered robot joins the depot
+          if (item !== 'robot' || (b.value ?? 0) >= DEPOT_ROBOTS_MAX) return false;
+          b.value = (b.value ?? 0) + 1;
+          return true;
+        }
         if (b.type === 'stacker') {
           if (from !== b.dir) return false;
           const buf = b.bufL!;
@@ -1319,9 +1350,22 @@ export class Sim {
   }
 
   /** Keeps the depot's fleet at the chosen size; robots appear on a road next to the depot. */
+  /** Robots a depot owns: delivered robot items (the playground gives every depot a full fleet). */
+  depotRobots(b: Building): number {
+    return this.creative ? DEPOT_ROBOTS_MAX : Math.min(DEPOT_ROBOTS_MAX, b.value ?? 0);
+  }
+
+  /** Puts one robot from the stock into the depot. */
+  depotAddFromStock(b: Building): boolean {
+    if (this.creative || (b.value ?? 0) >= DEPOT_ROBOTS_MAX || (this.state.inventory.robot ?? 0) <= 0) return false;
+    this.addInv('robot', -1);
+    b.value = (b.value ?? 0) + 1;
+    return true;
+  }
+
   private tickDepot(b: Building) {
-    const want = Math.max(1, Math.min(DEPOT_ROBOTS_MAX, b.threshold ?? 2));
-    b.threshold = want;
+    b.threshold = Math.max(1, Math.min(DEPOT_ROBOTS_MAX, b.threshold ?? 2));
+    const want = Math.min(b.threshold, this.depotRobots(b));
     const robots = this.robots();
     const mine = robots.filter((r) => r.depot === b.id);
     const roads = this.roadsAround(b);
@@ -1342,7 +1386,7 @@ export class Sim {
       mine.push(r);
     }
     b.working = mine.some((r) => r.state !== 'idle');
-    b.status = 'ok';
+    b.status = want ? 'ok' : 'starved';
   }
 
   /** Pack: eight equal items become one crate. Unpack: a crate becomes eight items again. */

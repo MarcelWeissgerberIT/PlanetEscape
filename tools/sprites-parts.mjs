@@ -334,6 +334,18 @@ S.lamp = `${housing()}
   ${chevron(128, 38, 10, 'rgba(34,211,238,0.6)')}`;
 
 const ITEMS = {
+  motor: `<g filter="url(#shadow)"><rect x="40" y="70" width="150" height="116" rx="20" fill="url(#steel)" stroke="#12161b" stroke-width="6"/>
+    ${Array.from({ length: 7 }, (_, k) => `<rect x="${52 + k * 19}" y="74" width="9" height="108" rx="3" fill="#2d333c"/>`).join('')}
+    <rect x="186" y="104" width="40" height="48" rx="8" fill="url(#chromeV)" stroke="#12161b" stroke-width="5"/>
+    <rect x="222" y="118" width="22" height="20" rx="5" fill="#cbd5e1" stroke="#12161b" stroke-width="4"/>
+    <rect x="16" y="96" width="30" height="64" rx="8" fill="${AMBER}" stroke="#7c2d12" stroke-width="5"/>
+    <path d="M60 52h40l-10-14" fill="none" stroke="${AMBER}" stroke-width="8" stroke-linecap="round"/></g>`,
+  cell: `<g filter="url(#shadow)"><rect x="78" y="44" width="100" height="186" rx="26" fill="#0f1319" stroke="#12161b" stroke-width="6"/>
+    <rect x="86" y="52" width="84" height="170" rx="20" fill="url(#chrome)" opacity="0.6"/>
+    <rect x="94" y="96" width="68" height="118" rx="14" fill="url(#cell)" filter="url(#glow)"/>
+    <rect x="106" y="24" width="44" height="26" rx="6" fill="url(#chrome)" stroke="#12161b" stroke-width="4"/>
+    <path d="M136 112l-20 38h16l-10 34 30-46h-16l10-26z" fill="#fde047" stroke="#713f12" stroke-width="3"/></g>`,
+  robot: S.robot,
   crate: `<g filter="url(#shadow)"><rect x="30" y="30" width="196" height="196" rx="16" fill="url(#crate)" stroke="#5a2a0a" stroke-width="8"/>
     <rect x="30" y="30" width="196" height="196" rx="16" fill="#000" filter="url(#grain)"/>
     <rect x="48" y="48" width="160" height="160" rx="8" fill="none" stroke="#7c3a10" stroke-width="6"/>

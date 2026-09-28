@@ -1062,8 +1062,9 @@ export class Renderer {
       return;
     }
     if (b.type === 'depot') {
-      const mine = this.sim.robots().filter((r) => r.depot === b.id).length;
-      if (!this.lowDetail) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, String(mine), '#22d3ee');
+      const owned = this.sim.depotRobots(b);
+      if (!this.lowDetail) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, String(owned), owned ? '#22d3ee' : '#f59e0b');
+      if (!owned && !this.lowDetail) this.drawTag(cx, b.y * TILE - 4, t('depot_empty_tag'), '#f59e0b');
       if (b.status === 'dead_end') this.drawBadge(cx, cy, '⊘', '#ef4444');
       return;
     }

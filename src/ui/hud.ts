@@ -1351,8 +1351,11 @@ export class Hud {
           <p class="save-hint">${t(unload ? 'dock_hint_unload' : 'dock_hint_load')}</p>${unload ? dirPicker : ''}${picker(t('dock_filter'))}`;
       } else if (b.type === 'depot') {
         const mine = this.sim.robots().filter((r) => r.depot === b.id);
-        const want = b.threshold ?? 2;
-        body = `${statusLine(` · ${mine.length} ${t('depot_robots')}`)}
+        const want = b.threshold ?? 2, owned = this.sim.depotRobots(b), stock = st.inventory.robot ?? 0;
+        const ownedLine = this.sim.creative ? '' : `<div class="lbl">${t('depot_owned', { n: owned, max: DEPOT_ROBOTS_MAX })}</div>
+          ${owned < DEPOT_ROBOTS_MAX ? `<div class="term-btns"><button class="btn small ${stock ? 'primary' : ''}" data-act="depot-add" ${stock ? '' : 'disabled'}>${itemImg('robot', 'icon sm')} ${t('depot_add', { n: stock })}</button></div>` : ''}
+          ${owned ? '' : `<p class="save-hint">${t('depot_none')}</p>`}`;
+        body = `${statusLine(` · ${mine.length} ${t('depot_robots')}`)}${ownedLine}
           <div class="dirs"><span class="lbl">${t('depot_fleet')}</span>${Array.from({ length: DEPOT_ROBOTS_MAX }, (_, i) => i + 1).map((n) => `<button class="chip ${want === n ? 'active' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>
           <div class="bufs">${mine.map((r) => `<span class="buf">${r.items.length ? itemImg(r.items[0], 'icon sm') : '🤖'} ${t(`robot_${r.state}` as 'robot_idle')}${r.items.length ? ` ×${r.items.length}` : ''}</span>`).join('') || '–'}</div>
           <p class="save-hint">${t('depot_hint')}</p>`;
@@ -1644,6 +1647,12 @@ export class Hud {
         b.rr = 0;
         sfx.select();
         this.showInfo(b);
+        return;
+      }
+      if (target.dataset.act === 'depot-add') {
+        if (this.sim.depotAddFromStock(b)) sfx.select();
+        this.showInfo(b);
+        this.renderBottom();
         return;
       }
       if (target.dataset.mode !== undefined) {
