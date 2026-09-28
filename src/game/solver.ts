@@ -1,6 +1,6 @@
 // Automatic planner: routes belts and builds whole production chains.
 // DOM-free so it can run in the game, in tests and in the MCP server.
-import { TUNNEL_RANGE, BUILDINGS, MINE_SECONDS, PLANT_FUEL, RECIPES, TERRAIN_ITEM } from './data';
+import { ITEMS, TUNNEL_RANGE, BUILDINGS, MINE_SECONDS, PLANT_FUEL, RECIPES, TERRAIN_ITEM } from './data';
 import type { Sim } from './sim';
 import type { Building, BuildingId, Dir, ItemId, TerrainId } from './types';
 import { DX, DY } from './types';
@@ -580,6 +580,8 @@ export function hasSupply(sim: Sim, item: ItemId, target: Building): boolean {
   for (const b of sim.state.buildings) {
     const out = b.type === 'miner' ? b.mineItem : b.recipe && RECIPES.find((r) => r.id === b.recipe)?.output;
     if (out !== item) continue;
+    // a line whose drill ran dry (or a machine that has been starving with nothing made) supplies nothing any more
+    if (b.type === 'miner' ? b.status === 'depleted' : b.status === 'starved' && !b.working && !(b.rate ?? 0)) continue;
     if (sim.traceFlow(b).target === target) return true;
   }
   return false;
@@ -642,6 +644,21 @@ export function solveOrder(sim: Sim, perMin = 10): SolverLog {
     }
   }
   const failed: string[] = [];
+  // drills on worked-out tiles go back into the kit stock, so their line gets rebuilt on a fresh edge
+  for (const b of [...sim.state.buildings]) if (b.type === 'miner' && b.status === 'depleted') sim.remove(b);
+  // building material first for the big ship orders: a plate line into the core, built before the chains wall the
+  // core in, keeps belts, drills and solar panels affordable for the whole chapter
+  const bigOrder = Object.keys(m.deliver).some((k) => (ITEMS[k as ItemId]?.tier ?? 0) >= 3);
+  for (const mat of ['iron_plate', 'copper_plate'] as ItemId[]) {
+    if (!bigOrder || m.deliver[mat] || hasSupply(sim, mat, core)) continue;
+    const r = RECIPES.find((rc) => rc.output === mat);
+    if (!r || !sim.state.unlockedRecipes.includes(r.id) || !sim.state.unlockedBuildings.includes(r.machine)) continue;
+    const l2: SolverLog = { ok: true, steps: [], placed: [] };
+    if (buildChain(sim, mat, core, 30, l2)) {
+      log.steps.push(...l2.steps, `${mat} flows into the core (building material)`);
+      log.placed.push(...l2.placed);
+    }
+  }
   for (const k in m.deliver) {
     const item = k as ItemId;
     if (hasSupply(sim, item, core)) {
