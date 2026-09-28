@@ -1,4 +1,4 @@
-// Draws the sprites of the newer parts in the style of the original buildings: chamfered steel housings with
+// Draws the sprites of the newer parts and the logic / computer parts in the style of the original buildings: chamfered steel housings with
 // bevels, bolts, panel seams, glowing cyan strips and orange accents. Run from the project root:
 //   node tools/sprites-parts.mjs            (writes public/assets/buildings/*.webp and items/crate.webp)
 //   node tools/sprites-parts.mjs sheet.png  (also writes a contact sheet for a quick look)
@@ -217,6 +217,121 @@ S.robot = `<g filter="url(#shadow)">
   <rect x="76" y="40" width="104" height="36" rx="10" fill="#1f2937" stroke="#12161b" stroke-width="3"/>
   ${strip(84, 34, 88, 8)}
   </g>${led(92, 58, CYAN, 5)}${led(164, 58, CYAN, 5)}`;
+
+// ---------- logic and computer parts (were flat icons) ----------
+
+/** Side ports (inputs) on the west, east and south edges, output chevron north. */
+function ports(sides = ['w', 'e', 's'], color = '#c084fc') {
+  const p = {
+    w: `<rect x="20" y="112" width="20" height="32" rx="4" fill="url(#chrome)" stroke="#12161b" stroke-width="2"/><rect x="24" y="120" width="8" height="16" rx="2" fill="${color}" filter="url(#glow)"/>`,
+    e: `<rect x="216" y="112" width="20" height="32" rx="4" fill="url(#chrome)" stroke="#12161b" stroke-width="2"/><rect x="224" y="120" width="8" height="16" rx="2" fill="${color}" filter="url(#glow)"/>`,
+    s: `<rect x="112" y="216" width="32" height="20" rx="4" fill="url(#chrome)" stroke="#12161b" stroke-width="2"/><rect x="120" y="224" width="16" height="8" rx="2" fill="${CYAN}" filter="url(#glow)"/>`,
+  };
+  return sides.map((k) => p[k]).join('');
+}
+/** A module chip in the middle with a glowing symbol. */
+function chip(symbol, color) {
+  const legs = Array.from({ length: 6 }, (_, k) => `<rect x="${78 + k * 18}" y="68" width="8" height="12" fill="url(#chromeV)"/><rect x="${78 + k * 18}" y="176" width="8" height="12" fill="url(#chromeV)"/><rect x="68" y="${78 + k * 18}" width="12" height="8" fill="url(#chrome)"/><rect x="176" y="${78 + k * 18}" width="12" height="8" fill="url(#chrome)"/>`).join('');
+  return `${legs}<g filter="url(#shadow)"><rect x="78" y="78" width="100" height="100" rx="10" fill="url(#dark)" stroke="#12161b" stroke-width="3"/></g>
+    <rect x="84" y="84" width="88" height="88" rx="7" fill="none" stroke="${color}" stroke-opacity="0.55" stroke-width="2"/>
+    <circle cx="92" cy="92" r="3" fill="#94a3b8"/>
+    ${symbol}`;
+}
+const glowPath = (d, color, w = 12) => `<path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" filter="url(#glow)"/><path d="${d}" fill="none" stroke="#fff" stroke-opacity="0.55" stroke-width="${w * 0.3}" stroke-linecap="round"/>`;
+
+S.adder = `${housing()}${ports(['w', 'e', 's'], GREEN)}${chip(glowPath('M128 104V152M104 128H152', GREEN), GREEN)}${chevron(128, 44, 12)}`;
+S.subtractor = `${housing()}${ports(['w', 'e', 's'], AMBER)}${chip(glowPath('M100 128H156', AMBER, 16), AMBER)}${chevron(128, 44, 12)}`;
+S.multiplier = `${housing()}${ports(['e', 's'], '#c084fc')}${chip(glowPath('M108 108L148 148M148 108L108 148', '#c084fc'), '#c084fc')}${chevron(128, 44, 12)}`;
+S.divider = `${housing()}${ports(['e', 's'], '#f472b6')}${chip(`${glowPath('M104 128H152', '#f472b6')}<circle cx="128" cy="108" r="7" fill="#f472b6" filter="url(#glow)"/><circle cx="128" cy="148" r="7" fill="#f472b6" filter="url(#glow)"/>`, '#f472b6')}${chevron(128, 44, 12)}`;
+S.register = `${housing()}${ports(['e', 's'], AMBER)}${chip(`${Array.from({ length: 4 }, (_, r) => Array.from({ length: 4 }, (_, c) => `<rect x="${94 + c * 18}" y="${94 + r * 18}" width="14" height="14" rx="2" fill="${(r * 4 + c) % 3 ? '#0e7490' : CYAN}" ${(r * 4 + c) % 3 ? '' : 'filter="url(#glow)"'}/>`).join('')).join('')}`, CYAN)}${chevron(128, 44, 12)}`;
+
+S.oscillator = `${housing()}
+  ${[98, 158].map((x) => `<rect x="${x - 4}" y="150" width="8" height="46" fill="url(#chromeV)" stroke="#12161b" stroke-width="1.5"/>`).join('')}
+  <g filter="url(#shadow)"><rect x="66" y="64" width="124" height="94" rx="46" fill="url(#chrome)" stroke="#12161b" stroke-width="4"/></g>
+  <rect x="80" y="76" width="96" height="70" rx="34" fill="url(#steelV)" stroke="#94a3b8" stroke-width="2"/>
+  <path d="M128 80l18 16v26l-18 18-18-18V96z" fill="#67e8f9" opacity="0.9" stroke="#0e7490" stroke-width="3" filter="url(#glow)"/>
+  <path d="M128 80l18 16-18 10-18-10z" fill="#e0fdff" opacity="0.8"/>
+  ${glowPath('M52 214q12-20 24 0t24 0 24 0 24 0 24 0 24 0', CYAN, 5)}
+  ${led(200, 46, CYAN, 5)}`;
+
+S.bus = `<g filter="url(#shadow)"><rect x="14" y="14" width="228" height="228" rx="18" fill="#0f3d2e" stroke="#0a2a20" stroke-width="4"/></g>
+  <rect x="14" y="14" width="228" height="228" rx="18" fill="#000" filter="url(#grain)"/>
+  ${Array.from({ length: 6 }, (_, k) => `<path d="M${30 + k * 36} 24v24M${30 + k * 36} 208v24" stroke="#14553f" stroke-width="4"/>`).join('')}
+  ${['M128 14V242', 'M14 128H242'].map((d) => `<path d="${d}" stroke="#7c2d12" stroke-width="30"/><path d="${d}" stroke="#d97706" stroke-width="22"/><path d="${d}" stroke="#fbbf24" stroke-width="6" opacity="0.7"/>`).join('')}
+  <circle cx="128" cy="128" r="26" fill="#b45309" stroke="#7c2d12" stroke-width="4"/><circle cx="128" cy="128" r="18" fill="#fcd34d"/><circle cx="128" cy="128" r="8" fill="#1c1917"/>
+  ${[[56, 56], [200, 56], [56, 200], [200, 200]].map(([x, y]) => `<rect x="${x - 16}" y="${y - 10}" width="32" height="20" rx="3" fill="#1f2937" stroke="#94a3b8" stroke-width="2"/><rect x="${x - 16}" y="${y - 10}" width="7" height="20" fill="#cbd5e1"/><rect x="${x + 9}" y="${y - 10}" width="7" height="20" fill="#cbd5e1"/>`).join('')}`;
+
+S.terminal = `${housing(8, 8, 240, 240, 26)}
+  <rect x="28" y="28" width="200" height="124" rx="10" fill="url(#chrome)" stroke="#12161b" stroke-width="3"/>
+  <rect x="34" y="34" width="188" height="112" rx="6" fill="#041014" stroke="#0b0e12" stroke-width="2"/>
+  <rect x="34" y="34" width="188" height="112" rx="6" fill="${CYAN}" opacity="0.06"/>
+  <path d="M44 60h40M44 76h70M44 92h30" stroke="${CYAN}" stroke-width="5" stroke-linecap="round" opacity="0.7" filter="url(#glow)"/>
+  <rect x="34" y="34" width="188" height="30" fill="#fff" opacity="0.04"/>
+  <rect x="30" y="160" width="190" height="58" rx="8" fill="url(#dark)" stroke="#12161b" stroke-width="2"/>
+  ${Array.from({ length: 3 }, (_, r) => Array.from({ length: 8 }, (_, c) => `<rect x="${36 + c * 22 + (r % 2) * 6}" y="${166 + r * 17}" width="18" height="13" rx="3" fill="${r === 2 && c === 7 ? ORANGE : 'url(#steelV)'}" stroke="#0b0e12" stroke-width="1.5"/>`).join('')).join('')}
+  <rect x="30" y="224" width="130" height="14" rx="4" fill="#0c0f13"/>
+  <rect x="224" y="156" width="16" height="56" rx="4" fill="#0c0f13"/>`;
+
+S.keyboard = `${housing(8, 40, 240, 176, 22)}
+  <rect x="24" y="58" width="208" height="140" rx="10" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  ${Array.from({ length: 4 }, (_, r) => Array.from({ length: 10 - (r === 3 ? 4 : 0) }, (_, c) => {
+    const x = 32 + c * 19.5 + r * 5, y = 66 + r * 28;
+    return `<rect x="${x}" y="${y + 3}" width="16" height="22" rx="3" fill="#0b0e12"/><rect x="${x}" y="${y}" width="16" height="20" rx="3" fill="url(#steelV)" stroke="#0b0e12" stroke-width="1.2"/><rect x="${x + 2}" y="${y + 2}" width="12" height="4" rx="2" fill="#cbd5e1" opacity="0.35"/>`;
+  }).join('')).join('')}
+  <rect x="112" y="150" width="88" height="23" rx="3" fill="#0b0e12"/><rect x="112" y="148" width="88" height="21" rx="3" fill="url(#steelV)" stroke="#0b0e12" stroke-width="1.2"/>
+  <rect x="202" y="150" width="24" height="20" rx="3" fill="${CYAN}" filter="url(#glow)"/>
+  <rect x="84" y="20" width="88" height="24" rx="6" fill="#0c0f13" stroke="#475569" stroke-width="2"/>
+  <text x="128" y="38" text-anchor="middle" font-family="DejaVu Sans Mono, monospace" font-weight="bold" font-size="16" fill="${CYAN}">KDOS</text>
+  ${led(212, 32, GREEN, 5)}`;
+
+S.screen = `${housing()}
+  <rect x="38" y="62" width="180" height="128" rx="12" fill="url(#chrome)" stroke="#12161b" stroke-width="3"/>
+  <rect x="46" y="70" width="164" height="112" rx="8" fill="#061a2e" stroke="#0b0e12" stroke-width="2"/>
+  <rect x="46" y="70" width="164" height="112" rx="8" fill="url(#glowC)" opacity="0.25"/>
+  <path d="M112 100v52l42-26z" fill="#e0f2fe" filter="url(#glow)"/>
+  ${Array.from({ length: 14 }, (_, k) => `<rect x="46" y="${72 + k * 8}" width="164" height="2" fill="#000" opacity="0.25"/>`).join('')}
+  <path d="M96 30l32 26 32-26" fill="none" stroke="url(#chrome)" stroke-width="6" stroke-linecap="round"/>
+  <circle cx="96" cy="30" r="6" fill="${RED}" filter="url(#glow)"/><circle cx="160" cy="30" r="6" fill="#94a3b8"/>
+  <rect x="46" y="196" width="164" height="12" rx="4" fill="#0c0f13"/>`;
+
+S.speaker = `${housing()}
+  <circle cx="128" cy="122" r="80" fill="#0c0f13"/>
+  <circle cx="128" cy="122" r="76" fill="url(#chrome)" stroke="#12161b" stroke-width="3"/>
+  ${Array.from({ length: 8 }, (_, k) => { const a = (k / 8) * Math.PI * 2; return bolt(128 + Math.cos(a) * 68, 122 + Math.sin(a) * 68, 3.5); }).join('')}
+  <circle cx="128" cy="122" r="58" fill="#15191f" stroke="#0b0e12" stroke-width="3"/>
+  ${[50, 40, 30].map((r, k) => `<circle cx="128" cy="122" r="${r}" fill="none" stroke="#2b323c" stroke-width="${5 - k}"/>`).join('')}
+  <circle cx="128" cy="122" r="22" fill="url(#steel)" stroke="#0b0e12" stroke-width="3"/>
+  <circle cx="122" cy="116" r="8" fill="#cbd5e1" opacity="0.35"/>
+  <g fill="none" stroke="${GREEN}" stroke-width="5" stroke-linecap="round" filter="url(#glow)"><path d="M204 96a40 40 0 0 1 0 52"/></g>
+  <rect x="36" y="202" width="184" height="14" rx="4" fill="#0c0f13"/>`;
+
+S.matrix = `${housing()}
+  <rect x="40" y="40" width="176" height="176" rx="8" fill="#05070a" stroke="#12161b" stroke-width="3"/>
+  ${Array.from({ length: 8 }, (_, r) => Array.from({ length: 8 }, (_, c) => {
+    const cols = ['#22d3ee', '#f43f5e', '#a3e635', '#f59e0b', '#c084fc', '#60a5fa', '#f472b6', '#fde047'];
+    const on = (r * 7 + c * 3 + ((r * c) % 5)) % 3 !== 0;
+    const col = cols[(r + c * 2) % 8];
+    return on ? `<rect x="${48 + c * 20.5}" y="${48 + r * 20.5}" width="16" height="16" rx="3" fill="${col}" filter="url(#glow)"/><rect x="${50 + c * 20.5}" y="${50 + r * 20.5}" width="6" height="4" rx="2" fill="#fff" opacity="0.5"/>` : `<rect x="${48 + c * 20.5}" y="${48 + r * 20.5}" width="16" height="16" rx="3" fill="#161b22"/>`;
+  }).join('')).join('')}`;
+
+S.switch = `${housing()}
+  <rect x="100" y="58" width="56" height="136" rx="28" fill="#0c0f13" stroke="#12161b" stroke-width="3"/>
+  <rect x="106" y="64" width="44" height="124" rx="22" fill="url(#dark)" stroke="#475569" stroke-width="2"/>
+  <g filter="url(#shadow)"><rect x="110" y="70" width="36" height="60" rx="14" fill="url(#chrome)" stroke="#12161b" stroke-width="3"/></g>
+  <rect x="116" y="84" width="24" height="5" rx="2.5" fill="#475569"/><rect x="116" y="96" width="24" height="5" rx="2.5" fill="#475569"/><rect x="116" y="108" width="24" height="5" rx="2.5" fill="#475569"/>
+  ${strip(56, 118, 32, 6)}${strip(168, 118, 32, 6)}
+  ${chevron(128, 44, 12)}
+  ${led(128, 168, GREEN, 6)}`;
+
+S.lamp = `${housing()}
+  <circle cx="128" cy="128" r="70" fill="#0c0f13"/>
+  <circle cx="128" cy="128" r="66" fill="url(#chrome)" stroke="#12161b" stroke-width="3"/>
+  ${Array.from({ length: 6 }, (_, k) => { const a = (k / 6) * Math.PI * 2 + 0.5; return bolt(128 + Math.cos(a) * 58, 128 + Math.sin(a) * 58, 3.5); }).join('')}
+  <circle cx="128" cy="128" r="48" fill="#11161d" stroke="#0b0e12" stroke-width="3"/>
+  <circle cx="128" cy="128" r="40" fill="url(#dial)"/>
+  <circle cx="128" cy="128" r="40" fill="none" stroke="#e2e8f0" stroke-opacity="0.15" stroke-width="2"/>
+  <ellipse cx="114" cy="112" rx="14" ry="9" fill="#fff" opacity="0.18" transform="rotate(-35 114 112)"/>
+  ${chevron(128, 38, 10, 'rgba(34,211,238,0.6)')}`;
 
 const ITEMS = {
   crate: `<g filter="url(#shadow)"><rect x="30" y="30" width="196" height="196" rx="16" fill="url(#crate)" stroke="#5a2a0a" stroke-width="8"/>
