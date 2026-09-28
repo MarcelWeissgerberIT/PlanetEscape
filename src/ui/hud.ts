@@ -1357,7 +1357,7 @@ export class Hud {
           ${owned ? '' : `<p class="save-hint">${t('depot_none')}</p>`}`;
         body = `${statusLine(` · ${mine.length} ${t('depot_robots')}`)}${ownedLine}
           <div class="dirs"><span class="lbl">${t('depot_fleet')}</span>${Array.from({ length: DEPOT_ROBOTS_MAX }, (_, i) => i + 1).map((n) => `<button class="chip ${want === n ? 'active' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>
-          <div class="bufs">${mine.map((r) => `<span class="buf">${r.items.length ? itemImg(r.items[0], 'icon sm') : '🤖'} ${t(`robot_${r.state}` as 'robot_idle')}${r.items.length ? ` ×${r.items.length}` : ''}</span>`).join('') || '–'}</div>
+          <div class="bufs">${mine.map((r) => `<span class="buf">${r.items.length ? itemImg(r.items[0], 'icon sm') : '🤖'} ${t(`robot_${r.state}` as 'robot_idle')}${r.items.length ? ` ×${r.items.length}` : ''} · 🔋${Math.round((r.charge ?? 1) * 100)}%</span>`).join('') || '–'}</div>
           <p class="save-hint">${t('depot_hint')}</p>`;
       } else if (b.type === 'picker') {
         const reach = b.threshold === 2 ? 2 : 1;

@@ -264,7 +264,9 @@ export interface Robot {
   dir: Dir;
   items: ItemId[];
   path: { x: number; y: number }[]; // remaining waypoints (tile centres)
-  state: 'idle' | 'go' | 'load' | 'unload' | 'pack' | 'unpack';
+  state: 'idle' | 'go' | 'load' | 'unload' | 'charge';
+  charge?: number; // battery 0..1 (missing = full)
+  home?: boolean; // driving back to its depot to charge
   target: number | null; // dock building id
   wait: number; // seconds before the next planning attempt
   t: number; // transfer accumulator

@@ -33,7 +33,7 @@ import {
 } from './data';
 import type { Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -1218,6 +1218,23 @@ export class Sim {
     return out.reverse();
   }
 
+  /** Route a robot back to a road tile next to its depot to charge. */
+  private planHome(r: Robot, depot: Building): boolean {
+    const sx = Math.floor(r.x), sy = Math.floor(r.y);
+    const search = this.roadSearch(sx, sy);
+    let best: { x: number; y: number; d: number } | null = null;
+    for (const t of this.roadsAround(depot)) {
+      const d = search.dist.get(t.y * this.state.width + t.x);
+      if (d !== undefined && (!best || d < best.d)) best = { ...t, d };
+    }
+    if (!best) return false;
+    r.path = this.pathTo(search, sx, sy, best.x, best.y);
+    r.target = depot.id;
+    r.home = true;
+    r.state = r.path.length ? 'go' : 'charge';
+    return true;
+  }
+
   /** Nearest dock (by road distance) the robot can serve: a loading dock with items, or an unloading dock with room for what it carries. */
   private planRobot(r: Robot, kind: 'load' | 'unload'): boolean {
     const sx = Math.floor(r.x), sy = Math.floor(r.y);
@@ -1254,17 +1271,45 @@ export class Sim {
         robots.splice(i, 1);
         continue;
       }
+      const charge = r.charge ?? 1;
+      if (r.state === 'charge') {
+        // parked in a bay: the battery fills up, then back to work
+        r.charge = Math.min(1, charge + ROBOT_CHARGE_RATE * dt);
+        if (r.charge >= 1) {
+          r.state = 'idle';
+          r.wait = 0;
+          r.home = false;
+          const tile = this.roadsAround(depot)[0];
+          if (tile) {
+            r.x = tile.x + 0.5;
+            r.y = tile.y + 0.5;
+          }
+        }
+        continue;
+      }
       if (r.state === 'idle') {
         r.wait -= dt;
         if (r.wait > 0) continue;
         r.wait = 1;
+        // a weak battery sends the robot home first (cargo stays on board)
+        if (charge < ROBOT_LOW && this.planHome(r, depot)) continue;
         if (r.items.length) {
           if (!this.planRobot(r, 'unload')) this.planRobot(r, 'load'); // nowhere to unload: keep collecting
         } else this.planRobot(r, 'load');
+        // range check: the trip, the way back to the depot and the handling must fit into the battery
+        if ((r.state as Robot['state']) === 'go' && !r.home) {
+          const dock = this.byId(r.target);
+          const back = dock ? Math.abs(dock.x - depot.x) + Math.abs(dock.y - depot.y) : 0;
+          if (charge < (r.path.length + back) * ROBOT_DRAIN + 2 * ROBOT_CAP * ROBOT_DRAIN_WORK + 0.03) {
+            r.target = null;
+            this.planHome(r, depot);
+          }
+        }
         continue;
       }
       if (r.state === 'go') {
-        let budget = ROBOT_SPEED * dt;
+        let budget = ROBOT_SPEED * dt * (charge > 0 ? 1 : ROBOT_LIMP);
+        const before = budget;
         while (budget > 0 && r.path.length) {
           const wp = r.path[0], tx = wp.x + 0.5, ty = wp.y + 0.5;
           const dx = tx - r.x, dy = ty - r.y, d = Math.hypot(dx, dy);
@@ -1287,6 +1332,11 @@ export class Sim {
             r.y += (dy / d) * budget;
             budget = 0;
           }
+        }
+        r.charge = Math.max(0, charge - (before - budget) * ROBOT_DRAIN);
+        if (!r.path.length && r.state === 'go' && r.home) {
+          r.state = 'charge'; // arrived at its depot
+          continue;
         }
         if (!r.path.length && r.state === 'go') {
           const dock = this.byId(r.target);
@@ -1317,6 +1367,7 @@ export class Sim {
         while (r.t >= 1 && dock.bufL!.length && r.items.length < ROBOT_CAP) {
           r.items.push(dock.bufL!.shift()!);
           r.t -= 1;
+          r.charge = Math.max(0, (r.charge ?? 1) - ROBOT_DRAIN_WORK);
         }
       } else {
         const idx = r.items.findIndex((it) => !dock.recipe || dock.recipe === it);
@@ -1330,6 +1381,7 @@ export class Sim {
           if (j < 0) break;
           dock.bufL!.push(r.items.splice(j, 1)[0]);
           r.t -= 1;
+          r.charge = Math.max(0, (r.charge ?? 1) - ROBOT_DRAIN_WORK);
         }
       }
     }

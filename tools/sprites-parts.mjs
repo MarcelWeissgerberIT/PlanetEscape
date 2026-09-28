@@ -60,6 +60,57 @@ function beltStrip(x, y, w, h) {
 
 const S = {};
 
+// ---------- detail kit: small technical bits that make a housing look used and alive ----------
+const MONO = 'DejaVu Sans Mono, monospace';
+const txt = (x, y, t, size = 11, color = '#cbd5e1', anchor = 'middle') => `<text x="${x}" y="${y}" font-family="${MONO}" font-size="${size}" font-weight="bold" fill="${color}" text-anchor="${anchor}" letter-spacing="0.5">${t}</text>`;
+/** Type plate with two screws and stencil text. */
+const plate = (x, y, w, h, t, color = '#e2e8f0', bg = '#1b2027') => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="3" fill="${bg}" stroke="#0b0e12" stroke-width="2"/><rect x="${x + 1.5}" y="${y + 1.5}" width="${w - 3}" height="2" fill="#fff" opacity="0.08"/><circle cx="${x + 5}" cy="${y + h / 2}" r="2" fill="#6b7482"/><circle cx="${x + w - 5}" cy="${y + h / 2}" r="2" fill="#6b7482"/>${txt(x + w / 2, y + h / 2 + h * 0.3, t, Math.min(h * 0.72, 14), color)}`;
+/** A row of rivets between two points. */
+const rivets = (x1, y1, x2, y2, n, r = 2.4) => Array.from({ length: n }, (_, k) => { const f = n === 1 ? 0.5 : k / (n - 1), x = x1 + (x2 - x1) * f, y = y1 + (y2 - y1) * f; return `<circle cx="${x}" cy="${y}" r="${r}" fill="#9aa4b1" stroke="#15191f" stroke-width="1"/><circle cx="${x - r * 0.35}" cy="${y - r * 0.35}" r="${r * 0.35}" fill="#fff" opacity="0.6"/>`; }).join('');
+/** Cooling fan behind a grille. */
+function fan(x, y, r) {
+  const blades = Array.from({ length: 6 }, (_, k) => `<path d="M${x} ${y}q${r * 0.55} ${-r * 0.2} ${r * 0.72} ${-r * 0.62}q${-r * 0.35} ${-r * 0.1} ${-r * 0.72} ${r * 0.62}z" fill="#3b4452" transform="rotate(${k * 60} ${x} ${y})"/>`).join('');
+  return `<circle cx="${x}" cy="${y}" r="${r + 3}" fill="#0b0e12"/><circle cx="${x}" cy="${y}" r="${r + 1.5}" fill="none" stroke="url(#chrome)" stroke-width="3"/><circle cx="${x}" cy="${y}" r="${r}" fill="#11151b"/>${blades}<circle cx="${x}" cy="${y}" r="${r * 0.22}" fill="url(#chrome)" stroke="#0b0e12" stroke-width="1.5"/>${[0.45, 0.8].map((k) => `<circle cx="${x}" cy="${y}" r="${r * k}" fill="none" stroke="#6b7482" stroke-width="1.2" opacity="0.7"/>`).join('')}<path d="M${x - r} ${y}H${x + r}M${x} ${y - r}V${y + r}" stroke="#6b7482" stroke-width="1.2" opacity="0.7"/>`;
+}
+/** A hose or cable along a path, with a highlight and clamp rings at the given points. */
+const hose = (d, w = 8, color = '#262d37', clamps = []) => `<path d="${d}" fill="none" stroke="#07090c" stroke-width="${w + 3}" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="${color}" stroke-width="${w}" stroke-linecap="round" stroke-linejoin="round"/><path d="${d}" fill="none" stroke="#fff" stroke-opacity="0.18" stroke-width="${Math.max(1, w * 0.28)}" stroke-linecap="round" stroke-linejoin="round" transform="translate(-1 -1)"/>${clamps.map(([x, y]) => `<circle cx="${x}" cy="${y}" r="${w * 0.72}" fill="url(#chrome)" stroke="#0b0e12" stroke-width="1.5"/>`).join('')}`;
+/** Analogue gauge. */
+function gauge(x, y, r, v = 0.6, color = AMBER) {
+  const a = (-135 + 270 * v) * (Math.PI / 180);
+  const ticks = Array.from({ length: 7 }, (_, k) => { const t = (-135 + 45 * k) * (Math.PI / 180); return `<line x1="${x + Math.sin(t) * r * 0.62}" y1="${y - Math.cos(t) * r * 0.62}" x2="${x + Math.sin(t) * r * 0.8}" y2="${y - Math.cos(t) * r * 0.8}" stroke="${k > 4 ? RED : '#94a3b8'}" stroke-width="1.6"/>`; }).join('');
+  return `<circle cx="${x}" cy="${y}" r="${r + 2}" fill="#0b0e12"/><circle cx="${x}" cy="${y}" r="${r}" fill="url(#chrome)"/><circle cx="${x}" cy="${y}" r="${r * 0.84}" fill="#e8edf2"/>${ticks}<line x1="${x}" y1="${y}" x2="${x + Math.sin(a) * r * 0.72}" y2="${y - Math.cos(a) * r * 0.72}" stroke="${color === AMBER ? '#b91c1c' : color}" stroke-width="2" stroke-linecap="round"/><circle cx="${x}" cy="${y}" r="${r * 0.14}" fill="#1f2937"/>`;
+}
+/** A row of tiny status LEDs. */
+const ledRow = (x, y, colors, gap = 9, r = 2.6) => colors.map((c, k) => `<circle cx="${x + k * gap}" cy="${y}" r="${r + 1.2}" fill="#07090c"/><circle cx="${x + k * gap}" cy="${y}" r="${r}" fill="${c}" ${c === '#1f2937' ? '' : 'filter="url(#glow)"'}/>`).join('');
+/** Cooling fins. */
+const heatsink = (x, y, w, h, n) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="#1b2027" stroke="#0b0e12" stroke-width="1.5"/>${Array.from({ length: n }, (_, k) => `<rect x="${x + 2 + k * ((w - 4) / n)}" y="${y + 2}" width="${(w - 4) / n - 2}" height="${h - 4}" rx="1" fill="url(#chromeV)" opacity="0.8"/>`).join('')}`;
+/** Small monitor with a trace, bars or text lines. */
+function screen(x, y, w, h, kind = 'graph', color = CYAN) {
+  let body = '';
+  if (kind === 'graph') {
+    const pts = Array.from({ length: 9 }, (_, k) => `${x + 4 + k * ((w - 8) / 8)},${y + h * (0.35 + 0.3 * Math.sin(k * 1.3) * Math.cos(k * 0.7))}`).join(' ');
+    body = `<polyline points="${pts}" fill="none" stroke="${color}" stroke-width="2" filter="url(#glow)"/>`;
+  } else if (kind === 'bars') {
+    body = Array.from({ length: 6 }, (_, k) => { const bh = (h - 8) * (0.3 + 0.6 * Math.abs(Math.sin(k * 1.7 + 1))); return `<rect x="${x + 4 + k * ((w - 8) / 6)}" y="${y + h - 4 - bh}" width="${(w - 8) / 6 - 2}" height="${bh}" fill="${color}" opacity="0.85"/>`; }).join('');
+  } else {
+    body = Array.from({ length: Math.floor((h - 6) / 7) }, (_, k) => `<rect x="${x + 4}" y="${y + 4 + k * 7}" width="${(w - 8) * (0.4 + 0.5 * Math.abs(Math.sin(k * 2.1)))}" height="3" fill="${color}" opacity="0.8"/>`).join('');
+  }
+  return `<rect x="${x - 2}" y="${y - 2}" width="${w + 4}" height="${h + 4}" rx="4" fill="url(#chrome)" stroke="#0b0e12" stroke-width="1.5"/><rect x="${x}" y="${y}" width="${w}" height="${h}" rx="2" fill="#04121a"/>${body}<rect x="${x}" y="${y}" width="${w}" height="${h * 0.4}" rx="2" fill="#fff" opacity="0.05"/>`;
+}
+/** Warning triangle. */
+const warn = (x, y, s = 16, color = AMBER) => `<path d="M${x} ${y - s * 0.55}L${x + s * 0.55} ${y + s * 0.45}H${x - s * 0.55}Z" fill="${color}" stroke="#12161b" stroke-width="1.8" stroke-linejoin="round"/><rect x="${x - 1.2}" y="${y - s * 0.22}" width="2.4" height="${s * 0.36}" fill="#12161b"/><circle cx="${x}" cy="${y + s * 0.28}" r="1.5" fill="#12161b"/>`;
+/** Bar code sticker. */
+const barcode = (x, y, w, h) => `<rect x="${x}" y="${y}" width="${w}" height="${h}" fill="#e5e7eb" stroke="#0b0e12" stroke-width="1"/>${Array.from({ length: Math.floor((w - 4) / 2.2) }, (_, k) => (k * 7) % 3 ? `<rect x="${x + 2 + k * 2.2}" y="${y + 2}" width="${(k * 5) % 2 ? 1.4 : 0.8}" height="${h - 4}" fill="#111827"/>` : '').join('')}`;
+/** Grab handle. */
+const handle = (x, y, w, vertical = false) => vertical
+  ? `<rect x="${x - 3}" y="${y}" width="6" height="${w}" rx="3" fill="url(#chrome)" stroke="#0b0e12" stroke-width="1.5"/><rect x="${x - 5}" y="${y - 2}" width="10" height="5" rx="2" fill="#475569"/><rect x="${x - 5}" y="${y + w - 3}" width="10" height="5" rx="2" fill="#475569"/>`
+  : `<rect x="${x}" y="${y - 3}" width="${w}" height="6" rx="3" fill="url(#chromeV)" stroke="#0b0e12" stroke-width="1.5"/><rect x="${x - 2}" y="${y - 5}" width="5" height="10" rx="2" fill="#475569"/><rect x="${x + w - 3}" y="${y - 5}" width="5" height="10" rx="2" fill="#475569"/>`;
+/** Knob with an indicator notch. */
+const knob = (x, y, r, a = 40) => `<circle cx="${x}" cy="${y}" r="${r + 2}" fill="#0b0e12"/><circle cx="${x}" cy="${y}" r="${r}" fill="url(#chrome)"/><circle cx="${x}" cy="${y}" r="${r * 0.7}" fill="url(#steel)"/><line x1="${x}" y1="${y}" x2="${x + Math.sin(a * Math.PI / 180) * r * 0.8}" y2="${y - Math.cos(a * Math.PI / 180) * r * 0.8}" stroke="${ORANGE}" stroke-width="2.4" stroke-linecap="round"/>`;
+/** Panel seam with screws. */
+const seam = (x1, y1, x2, y2) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="#12161b" stroke-width="2"/><line x1="${x1 + 1}" y1="${y1 + 1}" x2="${x2 + 1}" y2="${y2 + 1}" stroke="#8a94a2" stroke-opacity="0.25" stroke-width="1"/>`;
+
+
 S.timer = `${housing()}
   <circle cx="128" cy="134" r="66" fill="#0b0e12" stroke="#15191f" stroke-width="4"/>
   <circle cx="128" cy="134" r="62" fill="url(#chrome)" opacity="0.7"/>
@@ -141,24 +192,37 @@ S.road = `<rect width="256" height="256" fill="url(#asphalt)"/><rect width="256"
   <circle cx="44" cy="70" r="4" fill="#0b0d10" opacity="0.6"/><circle cx="200" cy="180" r="5" fill="#0b0d10" opacity="0.5"/><circle cx="150" cy="60" r="3" fill="#9ca3af" opacity="0.25"/>`;
 
 S.dock = `${housing()}
-  <rect x="50" y="50" width="156" height="156" rx="10" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
-  ${Array.from({ length: 7 }, (_, k) => `<rect x="60" y="${66 + k * 19}" width="136" height="12" rx="6" fill="url(#chromeV)" stroke="#12161b" stroke-width="1.5"/>`).join('')}
-  ${hazard(50, 34, 156, 14)}
-  ${strip(34, 70, 6, 116)}${strip(216, 70, 6, 116)}
-  ${chevron(128, 118, 22)}
-  ${led(40, 212, GREEN, 4)}${led(216, 212, AMBER, 4)}`;
+  <rect x="50" y="52" width="140" height="152" rx="8" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  ${Array.from({ length: 7 }, (_, k) => `<rect x="58" y="${62 + k * 20}" width="124" height="12" rx="6" fill="url(#chromeV)" stroke="#12161b" stroke-width="1.5"/><circle cx="62" cy="${68 + k * 20}" r="2.2" fill="#475569"/><circle cx="178" cy="${68 + k * 20}" r="2.2" fill="#475569"/>`).join('')}
+  ${hazard(50, 34, 140, 14)}
+  <rect x="196" y="52" width="26" height="100" rx="5" fill="url(#steelV)" stroke="#12161b" stroke-width="2.5"/>
+  ${screen(200, 58, 18, 26, 'bars', GREEN)}${ledRow(203, 96, [GREEN, AMBER], 11, 2.6)}
+  <rect x="202" y="108" width="14" height="10" rx="2" fill="${RED}" stroke="#0b0e12" stroke-width="1.5"/><rect x="202" y="124" width="14" height="10" rx="2" fill="${GREEN}" stroke="#0b0e12" stroke-width="1.5"/>
+  ${hose('M209 152 C 209 180, 196 196, 180 212', 5, '#1f2937', [[206, 172]])}
+  ${plate(56, 208, 82, 14, 'DOCK-B', '#e2e8f0')}
+  ${strip(36, 70, 5, 116)}
+  ${chevron(120, 124, 20)}`;
 
-S.depot = `${housing(14, 14, 228, 228, 34)}
-  <rect x="30" y="30" width="196" height="54" rx="8" fill="url(#roof)" stroke="#12161b" stroke-width="3"/>
-  ${vents(46, 42, 4, 50)}${vents(160, 42, 4, 50)}
-  <rect x="112" y="36" width="32" height="42" rx="6" fill="#0c0f13" stroke="#475569" stroke-width="2"/>${led(128, 57, GREEN, 6)}
-  ${[36, 134].map((x) => `
-    <rect x="${x}" y="96" width="86" height="126" rx="8" fill="#0c0f13" stroke="#12161b" stroke-width="3"/>
-    <rect x="${x + 5}" y="101" width="76" height="88" fill="url(#ribs)"/>
-    ${strip(x + 8, 92, 70, 6)}
-    <rect x="${x + 14}" y="176" width="58" height="40" rx="10" fill="url(#steel)" stroke="#12161b" stroke-width="2"/>
-    <rect x="${x + 20}" y="180" width="46" height="8" rx="4" fill="${CYAN}" filter="url(#glow)"/>`).join('')}
-  ${hazard(36, 222, 184, 8)}`;
+S.depot = `${housing(10, 10, 236, 236, 30)}
+  <rect x="24" y="24" width="208" height="70" rx="6" fill="url(#roof)" stroke="#12161b" stroke-width="3"/>
+  ${seam(24, 58, 232, 58)}
+  ${fan(52, 58, 21)}
+  ${screen(84, 32, 60, 36, 'graph', GREEN)}${ledRow(88, 80, [GREEN, GREEN, AMBER, '#1f2937', CYAN], 11, 2.6)}
+  <circle cx="170" cy="55" r="16" fill="#0b0e12"/><circle cx="170" cy="55" r="13" fill="url(#chrome)" stroke="#0b0e12" stroke-width="1.5"/><circle cx="170" cy="55" r="8" fill="#7c2d12" stroke="#0b0e12" stroke-width="1.5"/><circle cx="167" cy="52" r="2.5" fill="#fdba74" opacity="0.8"/>
+  ${heatsink(194, 32, 30, 50, 5)}
+  ${plate(62, 98, 132, 18, 'R-DEPOT 04', '#fde68a')}
+  ${warn(40, 107, 15)}${warn(216, 107, 15)}
+  ${[0, 1, 2, 3].map((k) => {
+    const x = 24 + k * 53;
+    return `<rect x="${x}" y="122" width="49" height="102" rx="5" fill="#0a0d11" stroke="#12161b" stroke-width="3"/>
+    <rect x="${x + 3}" y="125" width="43" height="14" fill="url(#ribs)"/>
+    ${txt(x + 24.5, 150, String(k + 1), 12, '#94a3b8')}
+    <rect x="${x + 7}" y="156" width="35" height="50" rx="4" fill="#111820" stroke="${CYAN}" stroke-opacity="0.45" stroke-width="1.5" stroke-dasharray="4 3"/>
+    <rect x="${x + 16}" y="196" width="17" height="6" rx="2" fill="url(#chromeV)"/><rect x="${x + 19}" y="198" width="4" height="2" fill="${GREEN}"/><rect x="${x + 26}" y="198" width="4" height="2" fill="${GREEN}"/>
+    ${hazard(x + 3, 212, 43, 8)}`;
+  }).join('')}
+  ${hose('M30 96 C 20 120, 22 160, 26 200', 5, '#1f2937', [[24, 150]])}${hose('M226 96 C 236 120, 234 160, 230 200', 5, '#7c2d12', [[232, 150]])}
+  ${barcode(196, 100, 26, 12)}`;
 
 S.stacker = `${housing()}
   <rect x="54" y="42" width="14" height="172" rx="4" fill="url(#chromeV)" stroke="#12161b" stroke-width="2"/>
@@ -177,9 +241,11 @@ S.hall = `${housing(10, 10, 236, 236, 26)}
     <rect x="${46 + c * 62}" y="${46 + r * 62}" width="${[36, 20, 40, 12, 28, 40, 8, 32, 24][r * 3 + c]}" height="5" rx="2" fill="${CYAN}" filter="url(#glow)"/>`).join('')).join('')}
   ${hazard(26, 232, 204, 8)}`;
 
+const hallSizes = () => {
 for (const n of [4, 8, 12, 16]) {
   S[`hall${n}`] = `${S.hall}<rect x="84" y="112" width="88" height="34" rx="8" fill="#0c0f13" stroke="${CYAN}" stroke-width="3" filter="url(#glow)"/><text x="128" y="137" text-anchor="middle" font-family="DejaVu Sans, Arial, sans-serif" font-weight="bold" font-size="24" fill="#ecfeff">${n}×${n}</text>`;
 }
+};
 
 const windBase = `<g filter="url(#shadow)"><path d="${oct(30, 30, 196, 196, 40)}" fill="url(#steel)" stroke="#12161b" stroke-width="4"/>
   <path d="${oct(30, 30, 196, 196, 40)}" fill="#000" filter="url(#grain)"/></g>
@@ -209,14 +275,21 @@ S.reactor = `${housing(8, 8, 240, 240, 44)}
   ${hazard(96, 16, 64, 10)}${hazard(96, 230, 64, 10)}`;
 
 S.robot = `<g filter="url(#shadow)">
-  ${[[62, 58], [178, 58], [62, 190], [178, 190]].map(([x, y]) => `<rect x="${x - 16}" y="${y - 24}" width="32" height="48" rx="8" fill="#0c0f13" stroke="#374151" stroke-width="2"/>`).join('')}
-  <path d="${oct(58, 28, 140, 200, 26)}" fill="url(#steel)" stroke="#12161b" stroke-width="4"/>
-  <path d="${oct(58, 28, 140, 200, 26)}" fill="#000" filter="url(#grain)"/>
-  <rect x="74" y="88" width="108" height="124" rx="10" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
-  ${Array.from({ length: 5 }, (_, k) => `<rect x="80" y="${96 + k * 23}" width="96" height="14" rx="7" fill="url(#chromeV)" opacity="0.55"/>`).join('')}
-  <rect x="76" y="40" width="104" height="36" rx="10" fill="#1f2937" stroke="#12161b" stroke-width="3"/>
-  ${strip(84, 34, 88, 8)}
-  </g>${led(92, 58, CYAN, 5)}${led(164, 58, CYAN, 5)}`;
+  ${[[54, 62], [202, 62], [54, 194], [202, 194]].map(([x, y]) => `<rect x="${x - 15}" y="${y - 26}" width="30" height="52" rx="9" fill="#0b0e12" stroke="#374151" stroke-width="2"/>${Array.from({ length: 5 }, (_, k) => `<rect x="${x - 13}" y="${y - 22 + k * 10}" width="26" height="4" fill="#1f2937"/>`).join('')}<circle cx="${x}" cy="${y}" r="6" fill="url(#chrome)" stroke="#0b0e12" stroke-width="1.5"/>`).join('')}
+  <path d="${oct(60, 24, 136, 210, 24)}" fill="url(#steel)" stroke="#12161b" stroke-width="4"/>
+  <path d="${oct(60, 24, 136, 210, 24)}" fill="#000" filter="url(#grain)"/>
+  ${hazard(72, 26, 112, 10)}
+  <rect x="76" y="40" width="104" height="34" rx="8" fill="#141a22" stroke="#12161b" stroke-width="3"/>
+  ${strip(84, 44, 88, 6)}
+  <rect x="80" y="54" width="22" height="14" rx="4" fill="#fef9c3" filter="url(#glow)"/><rect x="154" y="54" width="22" height="14" rx="4" fill="#fef9c3" filter="url(#glow)"/>
+  ${screen(110, 54, 36, 16, 'text', GREEN)}
+  <rect x="72" y="84" width="112" height="118" rx="8" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  ${Array.from({ length: 6 }, (_, k) => `<rect x="78" y="${92 + k * 18}" width="100" height="11" rx="5.5" fill="url(#chromeV)" opacity="0.6"/>`).join('')}
+  ${rivets(66, 84, 66, 200, 6, 2.4)}${rivets(190, 84, 190, 200, 6, 2.4)}
+  <circle cx="128" cy="216" r="15" fill="#0b0e12"/><circle cx="128" cy="216" r="12" fill="#1e293b" stroke="${CYAN}" stroke-width="2.5" filter="url(#glow)"/><circle cx="124" cy="212" r="3" fill="#a5f3fc"/>
+  ${txt(100, 222, '07', 11, '#fde68a')}
+  <line x1="170" y1="212" x2="182" y2="190" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"/><circle cx="182" cy="190" r="3" fill="${RED}" filter="url(#glow)"/>
+  </g>`;
 
 // ---------- logic and computer parts (were flat icons) ----------
 
@@ -332,6 +405,38 @@ S.lamp = `${housing()}
   <circle cx="128" cy="128" r="40" fill="none" stroke="#e2e8f0" stroke-opacity="0.15" stroke-width="2"/>
   <ellipse cx="114" cy="112" rx="14" ry="9" fill="#fff" opacity="0.18" transform="rotate(-35 114 112)"/>
   ${chevron(128, 38, 10, 'rgba(34,211,238,0.6)')}`;
+
+
+// ---------- extra details on the remaining parts ----------
+const DETAILS = {
+  timer: `${rivets(62, 36, 194, 36, 7)}${knob(128, 212, 8, 60)}${plate(146, 204, 50, 14, 'SEC')}${barcode(64, 205, 40, 12)}`,
+  sensor: `${warn(51, 76, 14)}${warn(205, 76, 14)}${hose('M51 170 C 51 200, 70 214, 84 228', 4, '#1f2937', [[60, 206]])}${hose('M205 170 C 205 200, 186 214, 172 228', 4, '#7c2d12', [[196, 206]])}${txt(51, 186, 'TX', 9, '#fca5a5')}${txt(205, 186, 'RX', 9, '#fca5a5')}`,
+  radio: `${plate(98, 150, 60, 14, 'CH 1-8')}${rivets(44, 150, 44, 220, 5)}${rivets(212, 150, 212, 220, 5)}${gauge(54, 128, 11, 0.7)}${ledRow(186, 128, [GREEN, CYAN], 11)}`,
+  battery: `${plate(90, 214, 76, 14, '7.2 kV', '#fde68a')}${warn(36, 128, 14)}${hose('M64 208 C 64 222, 40 222, 36 230', 4, '#7c2d12')}${hose('M192 208 C 192 222, 216 222, 220 230', 4, '#1f2937')}${ledRow(206, 44, [GREEN, GREEN, AMBER], 0.01, 0)}`,
+  picker_base: `${plate(92, 44, 72, 13, 'ARM-1')}${hose('M170 170 C 190 190, 200 200, 206 214', 5, '#1f2937', [[190, 192]])}${ledRow(58, 60, [GREEN, AMBER, '#1f2937'], 9)}${warn(196, 62, 13)}`,
+  picker: `${plate(92, 44, 72, 13, 'ARM-1')}${ledRow(58, 60, [GREEN, AMBER, '#1f2937'], 9)}`,
+  stacker: `${gauge(46, 178, 10, 0.4, CYAN)}${plate(170, 190, 30, 14, '8x')}${ledRow(174, 44, [GREEN, AMBER], 10)}${hose('M72 214 C 90 226, 166 226, 184 214', 4, '#1f2937', [[128, 224]])}`,
+  wind_base: `${plate(92, 36, 72, 14, 'WT-08')}${handle(150, 196, 30)}${rivets(56, 90, 56, 166, 4)}${rivets(200, 90, 200, 166, 4)}${ledRow(116, 200, [GREEN, AMBER], 12)}`,
+  wind: `${plate(92, 36, 72, 14, 'WT-08')}`,
+  reactor: `${warn(128, 34, 18, '#facc15')}${plate(92, 214, 72, 14, 'FUSION', '#e9d5ff')}${gauge(70, 128, 10, 0.8, '#a855f7')}${gauge(186, 128, 10, 0.55, '#a855f7')}${ledRow(106, 72, [GREEN, GREEN, '#a855f7', AMBER], 11)}`,
+  adder: `${plate(96, 196, 64, 13, 'ADD')}${ledRow(58, 60, [GREEN, '#1f2937'], 9)}${rivets(196, 64, 196, 96, 3)}`,
+  subtractor: `${plate(96, 196, 64, 13, 'SUB')}${ledRow(58, 60, [AMBER, '#1f2937'], 9)}${rivets(196, 64, 196, 96, 3)}`,
+  multiplier: `${plate(96, 196, 64, 13, 'MUL')}${ledRow(58, 60, ['#c084fc', '#1f2937'], 9)}${rivets(196, 64, 196, 96, 3)}`,
+  divider: `${plate(96, 196, 64, 13, 'DIV')}${ledRow(58, 60, ['#f472b6', '#1f2937'], 9)}${rivets(196, 64, 196, 96, 3)}`,
+  register: `${plate(96, 196, 64, 13, 'RAM')}${ledRow(58, 60, [CYAN, AMBER], 9)}${barcode(174, 56, 26, 10)}`,
+  oscillator: `${plate(52, 168, 44, 14, 'XTAL')}${gauge(186, 174, 11, 0.65, CYAN)}${rivets(60, 40, 110, 40, 4)}`,
+  terminal: `${barcode(168, 226, 44, 12)}${ledRow(196, 144, [GREEN], 1)}${rivets(34, 154, 34, 214, 4, 2)}`,
+  keyboard: `${hose('M40 40 C 40 24, 60 18, 84 30', 5, '#1f2937', [[48, 26]])}${barcode(186, 16, 36, 14)}${rivets(20, 70, 20, 190, 6, 2)}`,
+  screen: `${fan(206, 196, 12)}${plate(50, 206, 70, 14, 'RX-VID')}${ledRow(136, 212, [GREEN, CYAN, '#1f2937'], 10)}`,
+  speaker: `${plate(92, 204, 72, 14, '80 W')}${knob(44, 206, 8, -40)}${knob(212, 206, 8, 70)}`,
+  matrix: `${rivets(56, 30, 200, 30, 6)}${rivets(56, 226, 200, 226, 6)}${txt(128, 237, '8x8 RGB', 9, '#94a3b8')}`,
+  switch: `${plate(46, 196, 52, 14, 'SW')}${warn(206, 204, 14)}${rivets(60, 40, 90, 40, 2)}${rivets(166, 40, 196, 40, 2)}`,
+  lamp: `${plate(102, 206, 52, 13, 'LUX')}${ledRow(48, 50, [AMBER], 1)}${rivets(196, 44, 212, 60, 2)}`,
+  bus: `${txt(200, 106, 'BUS-A1', 10, '#bbf7d0')}${txt(56, 162, 'R12', 9, '#bbf7d0')}${[[92, 92], [164, 164]].map(([x, y]) => `<rect x="${x - 7}" y="${y - 3.5}" width="14" height="7" rx="1.5" fill="#d6c7a1" stroke="#1c1917" stroke-width="1"/><rect x="${x - 2}" y="${y - 3.5}" width="1.6" height="7" fill="#b91c1c"/><rect x="${x + 1}" y="${y - 3.5}" width="1.6" height="7" fill="#1d4ed8"/>`).join('')}`,
+  hall: `${fan(34, 34, 10)}${fan(222, 34, 10)}${plate(92, 12, 72, 12, 'STORE')}`,
+};
+for (const [k, v] of Object.entries(DETAILS)) if (S[k]) S[k] += v;
+hallSizes();
 
 const ITEMS = {
   motor: `<g filter="url(#shadow)"><rect x="40" y="70" width="150" height="116" rx="20" fill="url(#steel)" stroke="#12161b" stroke-width="6"/>

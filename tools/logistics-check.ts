@@ -64,6 +64,7 @@ function world() {
   if (w.count(sink) < 24) throw new Error('robots do not deliver');
   // a filter on the drop-off dock: robots stop bringing circuits
   drop.recipe = 'iron_plate';
+  w.tick(4); // what is already in the dock still goes out
   const n = w.count(sink);
   w.tick(15);
   if (w.count(sink) !== n) throw new Error('drop-off filter ignored');
@@ -106,6 +107,33 @@ function world() {
   console.log('example: sink', sink?.store, 'robots', sim.robots().map((r) => `${r.state}/${r.items.length}`));
   if (!sink || (sink.store!.iron_plate ?? 0) < 16 || (sink.store!.copper_wire ?? 0) < 10) throw new Error('example chain does not deliver');
 }
+// battery: on a long road robots run low, drive home, charge in a bay and keep delivering
+{
+  const w = world();
+  const src = w.place('storage', 2, 4, 2);
+  src.store = { iron_plate: 400 };
+  w.place('dock', 2, 5, 2);
+  for (let x = 2; x <= 45; x++) w.place('road', x, 6);
+  const drop = w.place('dock', 45, 5, 0);
+  drop.mode = 'unload';
+  const sink = w.place('hall4', 43, 1, 0); // big enough for ten minutes of deliveries
+  const depot = w.place('depot', 3, 7);
+  depot.threshold = 2;
+  let charged = 0, minCharge = 1, wasCharging = new Set<number>();
+  for (let i = 0; i < 30 * 600; i++) {
+    w.sim.tick(1 / 30);
+    for (const r of w.sim.robots()) {
+      minCharge = Math.min(minCharge, r.charge ?? 1);
+      if (r.state === 'charge' && !wasCharging.has(r.id)) { charged++; wasCharging.add(r.id); }
+      if (r.state !== 'charge') wasCharging.delete(r.id);
+    }
+  }
+  console.log('battery: charging stops', charged, 'lowest charge', minCharge.toFixed(2), 'delivered', w.count(sink), 'robots', w.sim.robots().map((r) => `${r.state}/${Math.round((r.charge ?? 1) * 100)}%`));
+  if (charged < 2) throw new Error('robots never went home to charge');
+  if (minCharge <= 0) throw new Error('a robot ran completely flat');
+  if (w.count(sink) < 200) throw new Error('charging stalls the deliveries');
+}
+
 // free play (not the playground): robots have to be produced and delivered
 {
   const st: GameState = newGame(13, { mode: 'free', mapSize: 'medium', infiniteOre: true, allUnlocked: true, storms: false }, { w: 48, h: 48, blank: true });

@@ -589,12 +589,74 @@ export class Renderer {
     }
   }
 
+  /** Tiny battery gauge: green, amber when low, red when empty. */
+  private drawCharge(cx: number, cy: number, v: number, w: number) {
+    const { ctx } = this;
+    ctx.fillStyle = 'rgba(8,12,18,0.85)';
+    ctx.fillRect(cx - w / 2 - 1.5, cy - 3, w + 3, 6);
+    ctx.fillStyle = v > 0.5 ? '#34d399' : v > 0.2 ? '#f59e0b' : '#ef4444';
+    if (v <= 0.2 && Math.sin(this.time * 8) < 0) ctx.fillStyle = '#7f1d1d';
+    ctx.fillRect(cx - w / 2, cy - 1.5, w * Math.max(0.04, v), 3);
+    ctx.fillStyle = '#94a3b8';
+    ctx.fillRect(cx + w / 2 + 1.5, cy - 1.5, 2, 3);
+  }
+
+  /** Depot life: robots charging in the four bays, bay lights, and a turning beacon while robots are out. */
+  private drawDepotLife(b: Building, sz: number) {
+    const { ctx } = this;
+    const robots = this.sim.robots().filter((r) => r.depot === b.id);
+    const charging = robots.filter((r) => r.state === 'charge');
+    const out = robots.length - charging.length;
+    const k = sz / 256;
+    const spr = buildingSprite('robot' as BuildingId);
+    for (let i = 0; i < 4; i++) {
+      const bx = b.x * TILE + (24 + i * 53 + 24.5) * k, by = b.y * TILE + 181 * k;
+      const r = charging[i];
+      // bay light: green = charging, cyan = free for a robot the depot owns, dark = empty
+      const owned = i < this.sim.depotRobots(b);
+      ctx.fillStyle = r ? '#34d399' : owned ? 'rgba(34,211,238,0.55)' : '#1f2937';
+      ctx.fillRect(bx - 6 * k * 2, b.y * TILE + 131 * k, 12 * k * 2, 3 * k * 2);
+      if (!r) continue;
+      if (ready(spr)) ctx.drawImage(spr, bx - 22 * k, by - 26 * k, 44 * k, 52 * k);
+      const v = r.charge ?? 1;
+      this.drawCharge(bx, b.y * TILE + 150 * k, v, 34 * k);
+      const pulse = 0.35 + 0.35 * Math.sin(this.time * 5 + i);
+      ctx.fillStyle = `rgba(52,211,153,${pulse})`;
+      ctx.fillRect(bx - 17 * k, b.y * TILE + 205 * k, 34 * k, 3 * k);
+    }
+    // beacon on the roof: turns while robots are out
+    const lx = b.x * TILE + 170 * k, ly = b.y * TILE + 55 * k;
+    if (out > 0) {
+      const a = this.time * 5;
+      const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, 26 * k);
+      g.addColorStop(0, 'rgba(251,146,60,0.9)');
+      g.addColorStop(1, 'rgba(251,146,60,0)');
+      ctx.fillStyle = g;
+      ctx.beginPath();
+      ctx.moveTo(lx, ly);
+      ctx.arc(lx, ly, 30 * k, a, a + 0.9);
+      ctx.closePath();
+      ctx.fill();
+      ctx.beginPath();
+      ctx.moveTo(lx, ly);
+      ctx.arc(lx, ly, 30 * k, a + Math.PI, a + Math.PI + 0.9);
+      ctx.closePath();
+      ctx.fill();
+    }
+    ctx.fillStyle = out > 0 ? '#fb923c' : '#7c2d12';
+    ctx.beginPath();
+    ctx.arc(lx, ly, 7 * k, 0, Math.PI * 2);
+    ctx.fill();
+  }
+
   /** Transport robots: a small rounded vehicle with a headlight, carrying its first item on top. */
   private drawRobots(x0: number, y0: number, x1: number, y1: number) {
     const { ctx } = this;
     for (const r of this.sim.robots()) {
+      if (r.state === 'charge') continue; // drawn inside its depot bay
       if (r.x < x0 || r.x > x1 + 1 || r.y < y0 || r.y > y1 + 1) continue;
       const px = r.x * TILE, py = r.y * TILE;
+      if (!this.lowDetail) this.drawCharge(px, py - TILE * 0.42, r.charge ?? 1, TILE * 0.5);
       ctx.save();
       ctx.translate(px, py);
       ctx.rotate((r.dir * Math.PI) / 2);
@@ -1062,6 +1124,7 @@ export class Renderer {
       return;
     }
     if (b.type === 'depot') {
+      if (!this.lowDetail) this.drawDepotLife(b, sz);
       const owned = this.sim.depotRobots(b);
       if (!this.lowDetail) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, String(owned), owned ? '#22d3ee' : '#f59e0b');
       if (!owned && !this.lowDetail) this.drawTag(cx, b.y * TILE - 4, t('depot_empty_tag'), '#f59e0b');
