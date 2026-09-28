@@ -258,6 +258,8 @@ export interface ChallengeDef {
   buildings: BuildingId[];
   recipes: string[];
   deliver: Partial<Record<ItemId, number>>;
+  rate?: Partial<Record<ItemId, number>>; // throughput goal (items per minute into the core), held for rateHold seconds
+  rateHold?: number;
   medals: [number, number, number];
 }
 export const CHALLENGES: ChallengeDef[] = [
@@ -270,6 +272,10 @@ export const CHALLENGES: ChallengeDef[] = [
     buildings: ['miner', 'smelter', 'conveyor', 'splitter', 'merger', 'solar', 'storage'],
     recipes: ['iron_plate', 'copper_plate'],
     deliver: { iron_plate: 90, copper_plate: 45 },
+    // one drill makes 37.5 ore and one smelter 30 plates a minute: 80 iron needs three drills and three smelters,
+    // 30 copper the fourth drill; every drill counts
+    rate: { iron_plate: 80, copper_plate: 30 },
+    rateHold: 60,
     medals: [210, 330, 540],
   },
   {
@@ -281,6 +287,8 @@ export const CHALLENGES: ChallengeDef[] = [
     buildings: ['miner', 'smelter', 'conveyor', 'splitter', 'merger', 'assembler', 'printer', 'solar', 'storage'],
     recipes: ['iron_plate', 'copper_plate', 'copper_wire', 'machine_part'],
     deliver: { machine_part: 40 },
+    rate: { machine_part: 12 },
+    rateHold: 60,
     medals: [240, 360, 600],
   },
   {
@@ -303,6 +311,8 @@ export const CHALLENGES: ChallengeDef[] = [
     buildings: ['miner', 'smelter', 'conveyor', 'splitter', 'merger', 'assembler', 'printer', 'solar', 'storage', 'switch'],
     recipes: ['iron_plate', 'copper_plate', 'copper_wire', 'machine_part'],
     deliver: { machine_part: 40 },
+    rate: { machine_part: 9 },
+    rateHold: 60,
     medals: [300, 450, 720],
   },
 ];

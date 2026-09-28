@@ -2,7 +2,8 @@
 // can be won inside its kit quota and prints the time next to the medal times.
 import { CHALLENGE_BY_ID, RADIO_RANGE } from '../src/game/data';
 import { Sim } from '../src/game/sim';
-import { depositEdges, isFree } from '../src/game/solver';
+import { depositEdges, isFree, layPath, routeBelt } from '../src/game/solver';
+import type { SolverLog } from '../src/game/solver';
 import type { Building, BuildingId, Dir, TerrainId } from '../src/game/types';
 import { DX, DY } from '../src/game/types';
 import { challengeState } from '../src/game/world';
@@ -139,5 +140,56 @@ const around = (x: number, y: number) => [0, 1, 2, 3].map((d) => ({ x: x + DX[d]
   const m = CHALLENGE_BY_ID.c_radio.medals;
   console.log('c_radio reference:', t === undefined ? 'NOT DONE' : `${Math.round(t)} s`, `(medals ${m.join('/')})`, 'distances', txs.map((tx) => Math.round(Math.hypot(tx.x - rx.x, tx.y - rx.y))).join('/'), 'delivered', JSON.stringify(c.st.delivered));
   if (t === undefined) throw new Error('c_radio reference solution failed');
+}
+// ---------- Four drills: three chained iron drills -> splitter -> three smelters -> merger -> core, the fourth drill on copper ----------
+{
+  const c = setup('c_drills');
+  const { sim, st, core, place } = c;
+  const W = st.width;
+  const free = (x: number, y: number) => isFree(sim, x, y);
+  const iron = (x: number, y: number) => st.terrain[y * W + x] === 'iron_ore' && !sim.at(x, y);
+  // auto print is off: print the splitter, the merger, the fourth smelter and two panels first
+  for (const [type, n] of [['splitter', 1], ['merger', 1], ['smelter', 1], ['solar', 2]] as [BuildingId, number][]) if (sim.queuePrint(type, n) !== n) throw new Error(`c_drills: cannot print ${type}`);
+  c.run(12);
+  let built = false;
+  for (const e of depositEdges(sim, 'iron_ore', { x: core.x + 1, y: core.y + 1 })) {
+    const d = e.dir, l = ((d + 3) & 3) as Dir, r = ((d + 1) & 3) as Dir;
+    const at = (k: number, side: Dir | null = null, s = 0) => ({ x: e.x + DX[d] * k + (side === null ? 0 : DX[side] * s), y: e.y + DY[d] * k + (side === null ? 0 : DY[side] * s) });
+    const back1 = at(-1), back2 = at(-2);
+    if (!iron(back1.x, back1.y) || !iron(back2.x, back2.y)) continue;
+    const tiles = [at(1), at(2), at(2, l, 1), at(2, r, 1), at(3), at(3, l, 1), at(3, r, 1), at(4), at(4, l, 1), at(4, r, 1), at(5)];
+    if (!tiles.every((t) => free(t.x, t.y))) continue;
+    for (const m of [e, back1, back2]) place('miner', m.x, m.y, d);
+    place('conveyor', at(1).x, at(1).y, d);
+    place('splitter', at(2).x, at(2).y, d);
+    // the splitter hands ore to its left and right neighbours and forward
+    for (const t of [at(2, l, 1), at(2, r, 1), at(3)]) place('smelter', t.x, t.y, d);
+    place('conveyor', at(3, l, 1).x, at(3, l, 1).y, d);
+    place('conveyor', at(4, l, 1).x, at(4, l, 1).y, r); // left smelter's plates turn right into the merger
+    place('conveyor', at(3, r, 1).x, at(3, r, 1).y, d);
+    place('conveyor', at(4, r, 1).x, at(4, r, 1).y, l);
+    place('merger', at(4).x, at(4).y, d);
+    const path = routeBelt(sim, at(5), { building: core });
+    const log: SolverLog = { ok: true, steps: [], placed: [] };
+    if (!path || !layPath(sim, path, log)) throw new Error(`c_drills: iron line to the core: ${log.error ?? 'no route'}`);
+    built = true;
+    break;
+  }
+  if (!built) throw new Error('c_drills: no iron edge with room for the manifold');
+  // copper: the fourth drill straight into a smelter, a belt to the core (the fourth smelter is printed)
+  const e = c.line('copper_ore', 2);
+  place('miner', e.x, e.y, e.dir);
+  place('smelter', e.x + DX[e.dir], e.y + DY[e.dir], e.dir);
+  const cpath = routeBelt(sim, { x: e.x + DX[e.dir] * 2, y: e.y + DY[e.dir] * 2 }, { building: core });
+  const clog: SolverLog = { ok: true, steps: [], placed: [] };
+  if (!cpath || !layPath(sim, cpath, clog)) throw new Error(`c_drills: copper line: ${clog.error ?? 'no route'}`);
+  // power: 4 drills (8) + 4 smelters (12) against the core (10) and one panel (4): print two more panels
+  c.solars(3);
+  c.run(150);
+  if (process.env.PE_DEBUG) console.log('c_drills after 150 s:', st.buildings.filter((b) => b.type !== 'conveyor' && b.type !== 'core').map((b) => `${b.type}@${b.x},${b.y}:${b.status}${b.site ? '(site)' : ''}${b.output ? JSON.stringify(b.output) : ''}`).join(' '), 'rates', sim.deliveryRate('iron_plate'), sim.deliveryRate('copper_plate'));
+  const t = c.run(1350);
+  const m = CHALLENGE_BY_ID.c_drills.medals;
+  console.log('c_drills reference:', t === undefined ? 'NOT DONE' : `${Math.round(t)} s`, `(medals ${m.join('/')})`, 'rate iron', sim.deliveryRate('iron_plate'), 'copper', sim.deliveryRate('copper_plate'), 'power', `${st.powerDemand}/${st.powerSupply}`, 'kits', JSON.stringify(st.kits));
+  if (t === undefined) throw new Error('c_drills reference solution failed');
 }
 console.log('challenge references ok');

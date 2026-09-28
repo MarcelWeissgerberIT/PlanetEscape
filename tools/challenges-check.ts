@@ -27,6 +27,18 @@ for (const c of CHALLENGES) {
   for (let s = 0; s < 5; s++) for (let i = 0; i < 30; i++) sim.tick(1 / 30);
   for (const [k, n] of Object.entries(c.deliver)) for (let i = 0; i < n!; i++) sim.accept(core, k as ItemId, 0);
   sim.tick(1 / 30);
+  if (c.rate) {
+    // a throughput goal: the amounts alone are not enough
+    if (st.challengeDone !== undefined) throw new Error(`${c.id}: done without holding the rate`);
+    const acc: Record<string, number> = {};
+    for (let s = 0; s < (c.rateHold ?? 45) + 70 && st.challengeDone === undefined; s++) {
+      for (const [k, r] of Object.entries(c.rate)) {
+        acc[k] = (acc[k] ?? 0) + (r! + 3) / 60;
+        while (acc[k] >= 1) { sim.accept(core, k as ItemId, 0); acc[k]--; }
+      }
+      for (let i = 0; i < 30; i++) sim.tick(1 / 30);
+    }
+  }
   const events = sim.events.filter((e) => e.type === 'challenge_done');
   console.log(c.id, 'done after', st.challengeDone?.toFixed(1), 's, medal', challengeMedal(c.id, st.challengeDone ?? 1e9), 'wear', sim.wearOn(), 'autoPrint', st.autoPrint);
   if (st.challengeDone === undefined || events.length !== 1) throw new Error(`${c.id}: goal not detected`);

@@ -3459,7 +3459,7 @@ export class Sim {
   currentMission() {
     const ch = this.challenge();
     if (ch) {
-      if (this.challengeMission?.id !== ch.id) this.challengeMission = { id: ch.id, deliver: ch.deliver, unlocks: [], unlockRecipes: [] };
+      if (this.challengeMission?.id !== ch.id) this.challengeMission = { id: ch.id, deliver: ch.deliver, rate: ch.rate, rateHold: ch.rateHold, unlocks: [], unlockRecipes: [] };
       return this.challengeMission;
     }
     if (this.state.launched && this.state.options.mode !== 'playground') return flightMission(this.state.flights ?? 0);
