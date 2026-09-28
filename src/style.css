@@ -1,4 +1,5 @@
 :root {
+  --pe-css: 1; /* index.html checks this to know the stylesheet arrived */
   --bg: #15171c;
   --panel: rgba(16, 20, 28, 0.62);
   --panel-2: rgba(40, 48, 62, 0.55);
