@@ -203,7 +203,9 @@ export const TERMINAL_RAM_BANKS = 16; // circuits -> 256 B each = 4 KB
 export const TERMINAL_BANK_BYTES = 256;
 export const TERMINAL_CRYSTALS = 6; // quartz / glass -> 100 Hz each
 export const REGISTER_MAX = 255;
-export const OSCILLATOR_CRYSTALS = 3; // crystals one oscillator holds, 100 Hz each
+export const OSCILLATOR_CRYSTALS = 3; // crystals one oscillator holds
+export const CRYSTAL_HZ = { quartz: 100, glass: 2000 }; // glass = turbo crystal
+export const TERMINAL_HZ_MAX = 60000;
 export const CHIP_ROM_BYTES = 0x200; // interpreter area + font live on the chip itself; every program byte needs a RAM cell or a bank
 export const BOARD_PARTS: Set<BuildingId> = new Set(['bus', 'register', 'oscillator']);
 export const TERMINAL_DISPLAY = { dx: 3, dy: 0, w: 64, h: 32 }; // lamp display region relative to the terminal

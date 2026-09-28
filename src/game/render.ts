@@ -3,7 +3,7 @@ import { Camera, TILE } from './camera';
 import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W } from './chip8';
 import { ARITH } from './sim';
-import { BOARD_PARTS, CHIP_ROM_BYTES, OSCILLATOR_CRYSTALS, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { BOARD_PARTS, CHIP_ROM_BYTES, CRYSTAL_HZ, OSCILLATOR_CRYSTALS, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -738,16 +738,17 @@ export class Renderer {
       return;
     }
     if (b.type === 'oscillator') {
-      const n = b.clock ?? 0;
+      const q = b.clock ?? 0, g = b.turbo ?? 0;
       for (let i = 0; i < OSCILLATOR_CRYSTALS; i++) {
-        ctx.fillStyle = i < n ? '#22d3ee' : 'rgba(255,255,255,0.14)';
+        ctx.fillStyle = i < q ? '#22d3ee' : i < q + g ? '#f8fafc' : 'rgba(255,255,255,0.14)';
         ctx.fillRect(b.x * TILE + 9 + i * 11, b.y * TILE + sz - 11, 8, 5);
       }
-      if (n && !this.lowDetail) {
-        const k = 0.5 + 0.5 * Math.sin(this.time * n * 4);
-        this.animGlow(cx, cy - 3, 4 + 3 * k, '#22d3ee');
+      const hz = q * CRYSTAL_HZ.quartz + g * CRYSTAL_HZ.glass;
+      if (hz && !this.lowDetail) {
+        const k = 0.5 + 0.5 * Math.sin(this.time * (g ? 40 : q * 4));
+        this.animGlow(cx, cy - 3, 4 + 3 * k, g ? '#f8fafc' : '#22d3ee');
       }
-      this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 11, `${n * 100}`, n ? '#22d3ee' : '#f59e0b');
+      this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 11, hz >= 1000 ? `${hz / 1000}k` : `${hz}`, hz ? (g ? '#f8fafc' : '#22d3ee') : '#f59e0b');
       return;
     }
     if (ARITH.has(b.type)) {

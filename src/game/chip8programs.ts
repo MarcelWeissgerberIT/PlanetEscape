@@ -6,7 +6,311 @@ export interface Chip8Program {
   source: string;
 }
 
+
+/** 128 view directions as (8*cos, 8*sin) signed bytes, y down. */
+function dirTable(): string {
+  const rows: string[] = [];
+  for (let d = 0; d < 128; d += 8) {
+    const parts: string[] = [];
+    for (let k = d; k < d + 8; k++) {
+      const a = (k / 128) * Math.PI * 2;
+      const dx = Math.round(8 * Math.cos(a)) & 0xff, dy = Math.round(8 * Math.sin(a)) & 0xff;
+      parts.push('0x' + dx.toString(16).toUpperCase().padStart(2, '0'), '0x' + dy.toString(16).toUpperCase().padStart(2, '0'));
+    }
+    rows.push('  DB ' + parts.join(', '));
+  }
+  return rows.join('\n');
+}
+
+/** The maze: # wall, . floor, D the exit door; 16x16, one byte per cell. */
+export const RAY_MAP = [
+  '################',
+  '#..............#',
+  '#.####.#####.#.#',
+  '#.#..#.....#.#.#',
+  '#.#..#.###.#.#.#',
+  '#.#....#...#...#',
+  '#.######.#####.#',
+  '#........#.....#',
+  '######.#.#.###.#',
+  '#......#.#...#.#',
+  '#.######.###.#.#',
+  '#.#........#.#.#',
+  '#.#.######.#.#.#',
+  '#.#......#...#D#',
+  '#...####.#####.#',
+  '################',
+];
+function mapTable(): string {
+  return RAY_MAP.map((row) => '  DB ' + [...row].map((c) => (c === '#' ? '1' : c === 'D' ? '2' : '0')).join(', ')).join('\n');
+}
+
+const RAY_SOURCE = `; KORA RAY: a first-person corridor in 64x32, Wolfenstein style.
+; 32 rays per frame, half a cell per step, 128 view directions, 4.4 fixed point positions.
+; Keys: 5 = forward, 8 = back, 7 = turn left, 9 = turn right, 6 = fire (keyboard W S A D E). Walk into the striped door.
+start:
+  LD V2, 0x18      ; x = cell 1 + 8/16
+  LD V3, 0x18      ; y
+  LD V4, 0         ; view direction 0..127, 0 = east
+  LD VD, 0         ; muzzle flash frames
+  LD VE, 0         ; frame counter
+loop:
+  CLS
+  ADD VE, 1
+  LD V0, 7
+  SKNP V0
+  CALL tleft
+  LD V0, 9
+  SKNP V0
+  CALL tright
+  LD V0, 5
+  SKNP V0
+  CALL fwd
+  LD V0, 8
+  SKNP V0
+  CALL back
+  LD V0, 6
+  SKNP V0
+  CALL fire
+  LD V5, 0         ; column 0..31
+col:
+  LD V0, V4
+  ADD V0, V5
+  ADD V0, 0xF0     ; ray = view + column - 16 (90 degrees field of view)
+  LD V1, 0x7F
+  AND V0, V1
+  ADD V0, V0
+  LD I, dirs
+  ADD I, V0
+  LD V1, [I]       ; V0 = dx, V1 = dy
+  LD V6, V0
+  LD V7, V1
+  LD V8, V2
+  LD V9, V3
+  LD VA, 0         ; steps walked
+ray:
+  ADD V8, V6
+  ADD V9, V7
+  ADD VA, 1
+  CALL cell        ; V0 = map cell under the ray
+  SE V0, 0
+  JP hit
+  SE VA, 16
+  JP ray
+hit:
+  LD VB, V0        ; 1 wall, 2 door, 0 nothing in reach
+  SNE VB, 0
+  JP next
+  LD I, htab
+  ADD I, VA
+  LD V0, [I]       ; V0 = wall height for this distance
+  LD I, bar
+  LD V1, 7
+  SUB V1, V0       ; VF = 1 when height <= 7: far wall, dithered
+  SNE VF, 1
+  LD I, dither
+  SNE VB, 2
+  LD I, door
+  LD VB, V0        ; VB = height
+  LD VC, V5
+  ADD VC, VC       ; screen x = 2 * column
+  LD V1, VB
+  SHR V1
+  LD VA, 16
+  SUB VA, V1       ; VA = top row = 16 - height / 2
+  LD V1, 15
+  SUB V1, VB       ; VF = 1 when height <= 15: one sprite
+  SE VF, 1
+  JP tall
+  LD V0, VB
+  ADD V0, V0
+  ADD V0, V0
+  CALL drw
+  JP next
+tall:
+  LD V0, 60        ; 15 rows first
+  CALL drw
+  ADD VA, 15
+  LD V0, VB
+  ADD V0, 0xF1     ; height - 15
+  ADD V0, V0
+  ADD V0, V0
+  CALL drw
+next:
+  ADD V5, 1
+  SE V5, 32
+  JP col
+  LD I, gun
+  LD V0, 27
+  LD V1, 25
+  DRW V0, V1, 7
+  SE VD, 0
+  CALL flash
+  LD V0, 1
+  LD DT, V0
+wait:
+  LD V0, DT
+  SE V0, 0
+  JP wait
+  JP loop
+
+; draw a 2 px wide column of V0/4 rows at (VC, VA): jump table, one DRW per height
+drw:
+  JP V0, drwtab
+drwtab:
+  RET
+  RET
+  DRW VC, VA, 1
+  RET
+  DRW VC, VA, 2
+  RET
+  DRW VC, VA, 3
+  RET
+  DRW VC, VA, 4
+  RET
+  DRW VC, VA, 5
+  RET
+  DRW VC, VA, 6
+  RET
+  DRW VC, VA, 7
+  RET
+  DRW VC, VA, 8
+  RET
+  DRW VC, VA, 9
+  RET
+  DRW VC, VA, 10
+  RET
+  DRW VC, VA, 11
+  RET
+  DRW VC, VA, 12
+  RET
+  DRW VC, VA, 13
+  RET
+  DRW VC, VA, 14
+  RET
+  DRW VC, VA, 15
+  RET
+
+; V0 = map[(V9 & 0xF0) | (V8 >> 4)]
+cell:
+  LD V0, V8
+  SHR V0
+  SHR V0
+  SHR V0
+  SHR V0
+  LD V1, V9
+  LD VC, 0xF0
+  AND V1, VC
+  OR V0, V1
+  LD I, map
+  ADD I, V0
+  LD V0, [I]
+  RET
+
+tleft:
+  ADD V4, 0xFC
+  LD V0, 0x7F
+  AND V4, V0
+  RET
+tright:
+  ADD V4, 4
+  LD V0, 0x7F
+  AND V4, V0
+  RET
+fwd:
+  LD V0, V4
+  JP move
+back:
+  LD V0, V4
+  ADD V0, 64
+  LD V1, 0x7F
+  AND V0, V1
+move:              ; every second frame half a cell along direction V0, walls block, the door wins
+  LD V1, VE
+  LD VC, 1
+  AND V1, VC
+  SE V1, 0
+  RET
+  ADD V0, V0
+  LD I, dirs
+  ADD I, V0
+  LD V1, [I]
+  LD V8, V2
+  LD V9, V3
+  ADD V8, V0
+  ADD V9, V1
+  CALL cell
+  SNE V0, 2
+  JP win
+  SE V0, 0
+  RET
+  LD V2, V8
+  LD V3, V9
+  RET
+fire:
+  SE VD, 0
+  RET
+  LD VD, 3
+  LD V0, 3
+  LD ST, V0
+  RET
+flash:
+  LD I, muzzle
+  LD V0, 29
+  LD V1, 19
+  DRW V0, V1, 6
+  ADD VD, 0xFF
+  RET
+win:               ; long beep, show the level number, back to the start
+  LD V0, 30
+  LD ST, V0
+  LD I, lvl
+  LD V0, [I]
+  ADD V0, 1
+  LD [I], V0
+  CLS
+  LD F, V0
+  LD V1, 30
+  LD VC, 13
+  DRW V1, VC, 5
+  LD V0, 60
+  LD DT, V0
+wwait:
+  LD V0, DT
+  SE V0, 0
+  JP wwait
+  LD V2, 0x18
+  LD V3, 0x18
+  LD V4, 0
+  RET
+
+htab:
+  DB 0, 30, 24, 16, 12, 10, 8, 7, 6, 5, 5, 4, 4, 4, 3, 3, 3
+bar:
+  DB 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0
+dither:
+  DB 0x80, 0x40, 0x80, 0x40, 0x80, 0x40, 0x80, 0x40, 0x80, 0x40, 0x80, 0x40, 0x80, 0x40, 0x80
+door:
+  DB 0xC0, 0xC0, 0x00, 0xC0, 0xC0, 0x00, 0xC0, 0xC0, 0x00, 0xC0, 0xC0, 0x00, 0xC0, 0xC0, 0x00
+gun:
+  DB 0x18, 0x18, 0x3C, 0x3C, 0x7E, 0x7E, 0x7E
+muzzle:
+  DB 0x24, 0x18, 0x7E, 0x18, 0x24, 0x00
+lvl:
+  DB 0
+dirs:
+${dirTable()}
+map:
+${mapTable()}
+`;
+
 export const CHIP8_PROGRAMS: Chip8Program[] = [
+  {
+    id: 'ray',
+    name: 'KORA RAY',
+    keys: 'W/S walk · A/D turn · E fire (keys 5 8 7 9 6)',
+    source: RAY_SOURCE,
+  },
   {
     id: 'pong',
     name: 'PONG',

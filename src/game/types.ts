@@ -129,6 +129,7 @@ export interface Building {
   run?: boolean;
   trace?: boolean; // terminal: slow clock (2 Hz) and register lamps above it
   timer?: number; // switch in pulse mode: seconds it stays open (each side pulse adds 0.5 s)
+  turbo?: number; // oscillator: glass crystals (2 kHz each)
   ram?: number; // installed memory banks (circuits delivered), 256 bytes each
   clock?: number; // installed oscillator crystals (quartz or glass delivered), 100 Hz each
   // arithmetic modules / register

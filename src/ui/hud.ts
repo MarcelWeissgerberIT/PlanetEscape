@@ -12,7 +12,7 @@ import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 import { CHIP8_H, CHIP8_W, disasm } from '../game/chip8';
-import { OSCILLATOR_CRYSTALS, TERMINAL_CRYSTALS } from '../game/data';
+import { CRYSTAL_HZ, OSCILLATOR_CRYSTALS } from '../game/data';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
 export interface HudCallbacks {
@@ -1219,10 +1219,11 @@ export class Hud {
       const switches = this.sim.terminalSwitches(b);
       const items: ItemId[] = ['copper_wire', 'iron_plate', 'copper_plate', 'glass', 'circuit', 'quartz'];
       const mem = this.sim.terminalMemory(b);
-      const crystals = this.sim.terminalCrystals(b);
+      const cr = this.sim.terminalCrystals(b);
+      const crystals = cr.quartz + cr.glass;
       const parts = `<div class="term-parts">
           <div class="tp"><span>${itemImg('circuit', 'icon xs')} ${t('term_ram')}</span><b class="${mem.have < mem.need ? 'bad' : ''}">${mem.have} B</b><small>${t('term_ram_detail', { c: mem.cells, k: mem.banks, b: mem.need })}</small></div>
-          <div class="tp"><span>${itemImg('quartz', 'icon xs')} ${t('term_clock')}</span><b class="${crystals ? '' : 'bad'}">${crystals}/${TERMINAL_CRYSTALS} · ${this.sim.terminalHz(b)} Hz</b><small>${t('term_clock_hint')}</small></div>
+          <div class="tp"><span>${itemImg('quartz', 'icon xs')} ${t('term_clock')}</span><b class="${crystals ? '' : 'bad'}">${this.sim.terminalHz(b)} Hz</b><small>${t('term_clock_detail', { q: cr.quartz, g: cr.glass })} · ${t('term_clock_hint')}</small></div>
           ${this.editor ? `<button class="btn small" data-act="term-install">${t('term_install')}</button>` : ''}
         </div>`;
       body = `<canvas class="term-screen" id="term-screen" width="${CHIP8_W * 4}" height="${CHIP8_H * 4}"></canvas>
@@ -1263,8 +1264,8 @@ export class Hud {
           <div class="dirs"><span class="lbl">${t('lamp_mode')}</span><button class="chip ${(b.mode ?? 'hold') === 'hold' ? 'active' : ''}" data-mode="hold">${t('lamp_hold')}</button><button class="chip ${b.mode === 'pass' ? 'active' : ''}" data-mode="pass">${t('lamp_pass')}</button></div>
           ${b.mode === 'pass' ? dirPicker : ''}${picker(t('lamp_filter'))}`;
       } else if (b.type === 'oscillator') {
-        const n = b.clock ?? 0;
-        body = `${statusLine()}<div class="arith-val">${itemImg('quartz', 'icon xs')} <b class="num">${n}/${OSCILLATOR_CRYSTALS}</b> <small>· ${n * 100} Hz</small></div><p class="save-hint">${t('oscillator_hint')}</p>`;
+        const q = b.clock ?? 0, g = b.turbo ?? 0;
+        body = `${statusLine()}<div class="arith-val">${itemImg('quartz', 'icon xs')} <b class="num">${q}</b> ${itemImg('glass', 'icon xs')} <b class="num">${g}</b> <small>· ${q + g}/${OSCILLATOR_CRYSTALS} · ${q * CRYSTAL_HZ.quartz + g * CRYSTAL_HZ.glass} Hz</small></div><p class="save-hint">${t('oscillator_hint')}</p>`;
       } else if (b.type === 'bus') {
         body = `<p class="save-hint">${t('bus_hint')}</p>`;
       } else if (b.type === 'switch') {

@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP_ROM_BYTES, ORE_PER_TILE, OSCILLATOR_CRYSTALS, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_HZ, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP_ROM_BYTES, CRYSTAL_HZ, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -52,7 +52,7 @@ export type SimEvent =
 
 export const ARITH = new Set<BuildingId>(['register', 'adder', 'subtractor', 'multiplier', 'divider']);
 /** A terminal's mainboard: connected tiles, its RAM cells in address order and the crystals of its oscillators. */
-export type Board = { key: string; tiles: Set<number>; cells: Building[]; crystals: number };
+export type Board = { key: string; tiles: Set<number>; cells: Building[]; crystals: number; turbo: number };
 
 export interface Problem {
   building: Building;
@@ -508,11 +508,11 @@ export class Sim {
           return true;
         }
         if (b.type === 'oscillator') {
-          if ((item === 'quartz' || item === 'glass') && (b.clock ?? 0) < OSCILLATOR_CRYSTALS) {
-            b.clock = (b.clock ?? 0) + 1;
-            return true;
-          }
-          return false;
+          if ((b.clock ?? 0) + (b.turbo ?? 0) >= OSCILLATOR_CRYSTALS) return false;
+          if (item === 'quartz') b.clock = (b.clock ?? 0) + 1;
+          else if (item === 'glass') b.turbo = (b.turbo ?? 0) + 1; // glass = turbo crystal
+          else return false;
+          return true;
         }
         if (b.type === 'bus') return false;
         if (b.type === 'terminal') {
@@ -671,8 +671,8 @@ export class Sim {
           this.pushRegisterLamps(b);
           break;
         case 'oscillator':
-          b.status = (b.clock ?? 0) ? 'ok' : 'starved';
-          b.missing = (b.clock ?? 0) ? undefined : ['quartz'];
+          b.status = (b.clock ?? 0) + (b.turbo ?? 0) ? 'ok' : 'starved';
+          b.missing = (b.clock ?? 0) + (b.turbo ?? 0) ? undefined : ['quartz'];
           break;
         case 'bus':
           b.status = 'ok';
@@ -789,7 +789,7 @@ export class Sim {
     const tiles = new Set<number>();
     const seen = new Set<number>();
     const cells: Building[] = [];
-    let crystals = 0;
+    let crystals = 0, turbo = 0;
     const queue: number[] = [];
     for (let y = b.y; y < b.y + s; y++) for (let x = b.x; x < b.x + s; x++) seen.add(y * st.width + x);
     for (let y = b.y; y < b.y + s; y++) for (let x = b.x; x < b.x + s; x++) queue.push(y * st.width + x);
@@ -807,18 +807,22 @@ export class Sim {
         tiles.add(ni);
         queue.push(ni);
         if (p.type === 'register') cells.push(p);
-        else if (p.type === 'oscillator') crystals += p.clock ?? 0;
+        else if (p.type === 'oscillator') {
+          crystals += p.clock ?? 0;
+          turbo += p.turbo ?? 0;
+        }
       }
     }
     cells.sort((p, q) => p.y - q.y || p.x - q.x); // address order: row by row, like reading
-    const board: Board = { key, tiles, cells, crystals };
+    const board: Board = { key, tiles, cells, crystals, turbo };
     this.boards.set(b.id, board);
     return board;
   }
 
-  /** Crystals ticking for a terminal: its own plus the oscillators on its board (capped at full speed). */
-  terminalCrystals(b: Building): number {
-    return Math.min(TERMINAL_CRYSTALS, (b.clock ?? 0) + this.board(b).crystals);
+  /** Crystals ticking for a terminal: its own quartz plus the oscillators on its board. */
+  terminalCrystals(b: Building): { quartz: number; glass: number } {
+    const board = this.board(b);
+    return { quartz: (b.clock ?? 0) + board.crystals, glass: board.turbo };
   }
 
   /** Bytes the current program needs and bytes installed (RAM cells on the board + circuit banks); the chip carries the first 512 B itself. */
@@ -829,8 +833,10 @@ export class Sim {
     return { need: romLen, have: cells + banks * TERMINAL_BANK_BYTES, cells, banks, banksNeeded: Math.ceil(Math.max(0, romLen - cells) / TERMINAL_BANK_BYTES) };
   }
 
+  /** Instructions per second: quartz 100 Hz each, glass 2 kHz each (turbo), capped; trace mode crawls at 2 Hz. */
   terminalHz(b: Building): number {
-    const full = Math.round((TERMINAL_HZ * this.terminalCrystals(b)) / TERMINAL_CRYSTALS);
+    const c = this.terminalCrystals(b);
+    const full = Math.min(TERMINAL_HZ_MAX, c.quartz * CRYSTAL_HZ.quartz + c.glass * CRYSTAL_HZ.glass);
     return b.trace ? Math.min(full, TERMINAL_TRACE_HZ) : full;
   }
 
@@ -1142,7 +1148,7 @@ export class Sim {
     this.applyMemory(b);
     // parts first: no crystal = no clock, too little memory = the program does not fit
     const mem = this.terminalMemory(b);
-    const crystals = this.terminalCrystals(b);
+    const crystals = this.terminalCrystals(b).quartz + this.terminalCrystals(b).glass;
     if (!crystals || mem.have < mem.need) {
       b.status = 'starved';
       b.missing = [...(!crystals ? (['quartz'] as ItemId[]) : []), ...(mem.have < mem.need ? (['circuit'] as ItemId[]) : [])];
