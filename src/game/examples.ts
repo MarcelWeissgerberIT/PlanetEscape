@@ -360,13 +360,14 @@ export function buildRay(): GameState {
 // ---------- KORA BLOCKS: 2D block world in colour, the map lives in the RAM cells ----------
 
 export function buildBlocks(): GameState {
-  const c = ctx(80082, 160, 128);
+  const c = ctx(80082, 160, 140);
   const { st, sim, core, place } = c;
   const tx = core.x + 4, ty = core.y - 18;
-  const term = terminalWithDisplay(c, tx, ty);
+  const term = terminalWithDisplay(c, tx, ty, true);
+  for (const m of st.buildings) if (m.type === 'matrix') m.value = 16; // 8x4 matrices of 16x16 = the 128x64 hi-res screen
   const OSC = 4;
   for (let i = 0; i < OSC; i++) place('oscillator', tx + i, ty - 1).turbo = 3;
-  const RAM_X = tx + 11, RAM_Y = ty - 44, RAM_W = 64, RAM_H = 43; // 2752 cells, the program needs 2738; the field ends right above the bus
+  const RAM_X = tx + 11, RAM_Y = ty - 51, RAM_W = 64, RAM_H = 50; // 3200 cells for about 3.1 KB of program; the field ends right above the bus
   for (let x = tx + OSC; x <= tx + 10; x++) place('bus', x, ty - 1);
   place('bus', tx + 10, ty - 2);
   place('bus', tx + 10, ty - 3);
@@ -378,7 +379,7 @@ export function buildBlocks(): GameState {
   keyAt(c, tx + 2, ty, 6); // E dig ahead
   keyAt(c, tx + 2, ty + 1, 4); // Q place
   for (let i = 0; i < 2; i++) place('solar', tx - 6 + i, ty + 6);
-  sim.setProgram(term, CHIP8_PROGRAMS.find((p) => p.id === 'blocks')!.source);
+  sim.setProgram(term, CHIP8_PROGRAMS.find((p) => p.id === 'blockshd')!.source);
   term.run = true;
   c.tick(1);
   sim.resetTerminal(term);
@@ -386,9 +387,9 @@ export function buildBlocks(): GameState {
   return finish(
     c,
     {
-      title: 'KORA BLOCKS · Blockwelt',
-      de: 'Eine 2D-Blockwelt in Farbe, gerechnet von der Platine: Gras, Erde, Stein, Erz, Bäume, und du als heller Strich mittendrin. Das Display zeigt jetzt 15 Farben, weil die CPU vier Bildebenen kennt (PLANE-Befehl) und jede Lampe die Farbe des Teils annimmt, das sie hält.\n\nDas Krasse: Die Welt liegt als Zahlen im RAM. Das Feld aus 64×43 Speicherzellen oben rechts ist der Speicher, und die Zeilen 2 bis 33 SIND die Karte: 0 = Luft, 2 = Erde, 3 = Stein, 4 = Gras, 5 = Holz, 6 = Blätter, 9 = Erz. Wer eine Zelle per Band verändert, verändert die Welt. Beim Start siehst du, wie die CPU die Landschaft Spalte für Spalte in den Speicher schreibt und dabei den Bildschirm füllt. Vier Turbo-Oszillatoren geben 24 kHz.\n\nSteuerung (Chip antippen oder die sechs Randschalter): A/D laufen, W springen, S nach unten graben, E vor dir graben, Q den getragenen Block vor dir setzen. Oben links zählt die Anzeige deine Blöcke. Gegrabenes Erz leuchtet orange.',
-      en: 'A 2D block world in colour, computed by the board: grass, dirt, stone, ore, trees, and you as a bright stroke in the middle. The display now shows 15 colours because the CPU knows four picture planes (PLANE instruction) and every lamp takes the colour of the item it holds.\n\nThe wild part: the world sits in RAM as numbers. The 64×43 field of registers top right is the memory, and rows 2 to 33 ARE the map: 0 = air, 2 = dirt, 3 = stone, 4 = grass, 5 = wood, 6 = leaves, 9 = ore. Change a cell by belt and you change the world. At start you watch the CPU write the landscape into memory column by column while it fills the screen. Four turbo oscillators give 24 kHz.\n\nControls (tap the chip or the six rim switches): A/D walk, W jump, S dig below, E dig ahead, Q place the carried block ahead. Top left counts your blocks. Dug ore glows orange.',
+      title: 'KORA BLOCKS HD · Blockwelt',
+      de: 'Eine 2D-Blockwelt in Farbe, gerechnet von der Platine, jetzt in 128×64: Der Chip läuft im Hi-Res-Modus (HIGH-Befehl) und zeichnet jede Weltzelle als 2×2-Block mit Zweifarb-Textur, Gras mit dunklem Halm, Stein mit hellem Sprenkel, Erz mit Glanz, dazu blauer Himmel mit weißen Wolken und ein Spieler mit Kopf und Körper. Die Wand sind 32 LED-Matrizen à 16×16, 15 Farben aus vier Bildebenen (PLANE-Befehl).\n\nDas Krasse: Die Welt liegt als Zahlen im RAM. Das Feld aus 64×50 Speicherzellen oben rechts ist der Speicher, und die Zeilen 2 bis 33 SIND die Karte: 0 = Luft, 2 = Erde, 3 = Stein, 4 = Gras, 5 = Holz, 6 = Blätter, 9 = Erz. Wer eine Zelle per Band verändert, verändert die Welt. Beim Start siehst du, wie die CPU die Landschaft Spalte für Spalte in den Speicher schreibt und dabei den Bildschirm füllt. Vier Turbo-Oszillatoren geben 24 kHz.\n\nSteuerung (Chip antippen oder die sechs Randschalter): A/D laufen, W springen, S nach unten graben, E vor dir graben, Q den getragenen Block vor dir setzen. Oben links zählt die Anzeige deine Blöcke. Gegrabenes Erz leuchtet orange.',
+      en: 'A 2D block world in colour, computed by the board, now in 128×64: the chip runs in hi-res mode (HIGH instruction) and draws every world cell as a 2×2 block with a two-colour texture, grass with a dark blade, stone with a light speck, ore with a glint, plus a blue sky with white clouds and a player with head and body. The wall is 32 LED matrices of 16×16, 15 colours from four picture planes (PLANE instruction).\n\nThe wild part: the world sits in RAM as numbers. The 64×50 field of registers top right is the memory, and rows 2 to 33 ARE the map: 0 = air, 2 = dirt, 3 = stone, 4 = grass, 5 = wood, 6 = leaves, 9 = ore. Change a cell by belt and you change the world. At start you watch the CPU write the landscape into memory column by column while it fills the screen. Four turbo oscillators give 24 kHz.\n\nControls (tap the chip or the six rim switches): A/D walk, W jump, S dig below, E dig ahead, Q place the carried block ahead. Top left counts your blocks. Dug ore glows orange.',
     },
     { x: tx + 26, y: ty - 6, zoom: 0.36 },
   );
@@ -546,7 +547,7 @@ export const EXAMPLES: Example[] = [
   { id: 'trailer', title: 'KORA TRAILER', icon: 'terminal', de: '30-Sekunden-Trailer, vom Chip in Assembler gerechnet, auf 32 LED-Matrizen.', en: 'A 30 second trailer computed by the chip in assembly, on 32 LED matrices.', build: buildTrailer },
   { id: 'video', title: 'Videowand · Video wall', icon: 'screen', de: 'YouTube-Tab, Kamera oder Datei auf 128 LED-Matrizen, mit Ton und Abtast-Band.', en: 'A YouTube tab, camera or file on 128 LED matrices, with sound and a sampling belt.', build: buildVideoWall },
   { id: 'ray', title: 'KORA RAY', icon: 'oscillator', de: 'Doom-artiges Ego-Labyrinth mit 60 kHz Turbo-Takt.', en: 'Doom-style first-person maze on a 60 kHz turbo clock.', build: buildRay },
-  { id: 'blocks', title: 'KORA BLOCKS', icon: 'register', de: 'Bunte 2D-Blockwelt, die Karte liegt als Zahlen im RAM.', en: 'Colour 2D block world, the map sits in RAM as numbers.', build: buildBlocks },
+  { id: 'blocks', title: 'KORA BLOCKS HD', icon: 'register', de: 'Bunte 2D-Blockwelt in 128×64 mit Texturen, die Karte liegt als Zahlen im RAM.', en: 'Colour 2D block world in 128×64 with textures, the map sits in RAM as numbers.', build: buildBlocks },
   { id: 'ttt', title: 'Tic Tac Toe', icon: 'lamp', de: 'Neun Lampen, Depots unter Druck, Züge per Schalter.', en: 'Nine lamps, pressurised depots, moves by switch.', build: buildTicTacToe },
   { id: 'counter', title: 'Binärzähler · Binary counter', icon: 'divider', de: 'Acht Dividierer halbieren den Strom: ein Ripple-Counter aus Bändern.', en: 'Eight dividers halve the stream: a ripple counter made of belts.', build: buildBinaryCounter },
   { id: 'light', title: 'Lauflicht · Running light', icon: 'switch', de: 'Teile kreisen in einem Bandring, Lampen leuchten im Vorbeilaufen.', en: 'Items circle a belt ring, lamps light as they pass.', build: buildRunningLight },

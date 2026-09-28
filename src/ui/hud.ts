@@ -12,7 +12,7 @@ import { hasSave, load as loadSave, lastDropped, serialize } from '../game/save'
 import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
-import { CHIP8_H, CHIP8_W, disasm } from '../game/chip8';
+import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W, disasm } from '../game/chip8';
 import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize } from '../game/data';
 import { VIDEO_CROPS } from '../game/video';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
@@ -957,7 +957,15 @@ export class Hud {
     for (let y = 0; y < 8; y++) wall.items.push({ type: 'bus', dx: 1, dy: y, dir: 0, recipe: null });
     for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) wall.items.push({ type: 'matrix', dx: 2 + x, dy: y, dir: 0, recipe: null, value: 16 });
     for (let x = 0; x < 8; x++) wall.items.push({ type: 'register', dx: 1 + x, dy: 8, dir: 1, recipe: null });
-    return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8), matrix, wall, this.displayBlueprint()];
+    // keypad: 4 rows of 4 keys, a bus trace between the rows and one column joining them; wire the column to a terminal
+    const keypad: Blueprint = { name: t('preset_keypad'), w: 5, h: 8, items: [] };
+    const keys = [[1, 2, 3, 0xc], [4, 5, 6, 0xd], [7, 8, 9, 0xe], [0xa, 0, 0xb, 0xf]];
+    for (let r = 0; r < 4; r++) {
+      for (let x = 0; x < 5; x++) keypad.items.push({ type: 'bus', dx: x, dy: r * 2, dir: 0, recipe: null });
+      keypad.items.push({ type: 'bus', dx: 4, dy: r * 2 + 1, dir: 0, recipe: null });
+      keys[r].forEach((k, x) => keypad.items.push({ type: 'switch', dx: x, dy: r * 2 + 1, dir: 0, recipe: null, threshold: k, mode: 'pulse', open: false }));
+    }
+    return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8), matrix, wall, keypad, this.displayBlueprint()];
   }
 
   showBlueprints() {
@@ -1402,10 +1410,11 @@ export class Hud {
     c2.fillStyle = '#04141a';
     c2.fillRect(0, 0, canvas.width, canvas.height);
     const own = ITEMS[(b.recipe as ItemId) ?? 'copper_wire'].color;
-    const px = canvas.width / CHIP8_W, py = canvas.height / CHIP8_H;
-    for (let y = 0; y < CHIP8_H; y++)
-      for (let x = 0; x < CHIP8_W; x++) {
-        const v = cpu.display[y * CHIP8_W + x] & 15;
+    const W = cpu.hires ? HIRES_W : CHIP8_W, Hh = cpu.hires ? HIRES_H : CHIP8_H, buf = cpu.hires ? cpu.fb : cpu.display;
+    const px = canvas.width / W, py = canvas.height / Hh;
+    for (let y = 0; y < Hh; y++)
+      for (let x = 0; x < W; x++) {
+        const v = buf[y * W + x] & 15;
         if (!v) continue;
         const it = CHIP8_PALETTE[v];
         c2.fillStyle = it ? ITEMS[it].color : own;

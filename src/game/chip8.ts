@@ -4,6 +4,8 @@
 
 export const CHIP8_W = 64;
 export const CHIP8_H = 32;
+export const HIRES_W = 128; // SUPER-CHIP high resolution (HIGH / LOW opcodes)
+export const HIRES_H = 64;
 const PROGRAM_START = 0x200;
 
 const FONT = [
@@ -21,7 +23,9 @@ export class Chip8 {
   stack: number[] = [];
   dt = 0;
   st = 0;
-  display = new Uint8Array(CHIP8_W * CHIP8_H); // per pixel: bitmask of the 4 colour planes (XO-CHIP style), 0 = off
+  display = new Uint8Array(CHIP8_W * CHIP8_H); // per pixel: bitmask of the 4 colour planes (XO-CHIP style), 0 = off; in hi-res a 2x2-downsampled view of fb
+  fb = new Uint8Array(HIRES_W * HIRES_H); // hi-res frame buffer (128x64), canonical while hires is on
+  hires = false;
   plane = 1; // planes DRW and CLS act on (Fn01)
   keys = new Uint8Array(16);
   waitingKey = -1; // register waiting for a key press (Fx0A), -1 = none
@@ -53,6 +57,8 @@ export class Chip8 {
     this.dt = 0;
     this.st = 0;
     this.display.fill(0);
+    this.fb.fill(0);
+    this.hires = false;
     this.plane = 1;
     this.keys.fill(0);
     this.waitingKey = -1;
@@ -131,9 +137,21 @@ export class Chip8 {
     const v = this.v;
     switch (op >> 12) {
       case 0x0:
-        if (op === 0x00e0) {
-          if (this.plane === 15) this.display.fill(0);
-          else for (let i = 0; i < this.display.length; i++) this.display[i] &= ~this.plane;
+        if (op === 0x00ff || op === 0x00fe) {
+          // HIGH / LOW: switch resolution (the screen is cleared)
+          this.hires = op === 0x00ff;
+          this.display.fill(0);
+          this.fb.fill(0);
+          this.dirty = true;
+          this.syncHint = false;
+        } else if (op === 0x00e0) {
+          if (this.plane === 15) {
+            this.display.fill(0);
+            this.fb.fill(0);
+          } else {
+            for (let i = 0; i < this.display.length; i++) this.display[i] &= ~this.plane;
+            for (let i = 0; i < this.fb.length; i++) this.fb[i] &= ~this.plane;
+          }
           this.dirty = true;
           this.syncHint = false;
         } else if (op === 0x00ee) {
@@ -236,26 +254,37 @@ export class Chip8 {
         // sprite: n rows of 8 pixels at (Vx, Vy), XOR drawn on every selected plane (one sprite per plane, back to
         // back in memory), VF = collision, wraps around the edges
         const planes = [1, 2, 4, 8].filter((p) => this.plane & p);
-        if (this.i + n * planes.length > this.memLimit) {
-          this.halted = `memory at 0x${(this.i + n * planes.length).toString(16).toUpperCase()} missing`;
+        const big = n === 0; // DRW Vx, Vy, 0 = 16x16 sprite (two bytes per row)
+        const rows = big ? 16 : n, bytesPerPlane = big ? 32 : n;
+        if (this.i + bytesPerPlane * planes.length > this.memLimit) {
+          this.halted = `memory at 0x${(this.i + bytesPerPlane * planes.length).toString(16).toUpperCase()} missing`;
           return;
         }
-        const px = v[x] % CHIP8_W, py = v[y] % CHIP8_H;
+        const W = this.hires ? HIRES_W : CHIP8_W, H = this.hires ? HIRES_H : CHIP8_H;
+        const px = v[x] % W, py = v[y] % H;
         v[0xf] = 0;
         let off = 0;
         for (const p of planes) {
-          for (let row = 0; row < n; row++) {
-            const bits = this.mem[(this.i + off + row) & 0xfff];
-            const yy = (py + row) % CHIP8_H;
-            for (let col = 0; col < 8; col++) {
-              if (!(bits & (0x80 >> col))) continue;
-              const xx = (px + col) % CHIP8_W;
-              const idx = yy * CHIP8_W + xx;
-              if (this.display[idx] & p) v[0xf] = 1;
-              this.display[idx] ^= p;
+          for (let row = 0; row < rows; row++) {
+            const bits = big ? (this.mem[(this.i + off + row * 2) & 0xfff] << 8) | this.mem[(this.i + off + row * 2 + 1) & 0xfff] : this.mem[(this.i + off + row) & 0xfff];
+            const width = big ? 16 : 8, top = big ? 0x8000 : 0x80;
+            const yy = (py + row) % H;
+            for (let col = 0; col < width; col++) {
+              if (!(bits & (top >> col))) continue;
+              const xx = (px + col) % W;
+              if (this.hires) {
+                const idx = yy * HIRES_W + xx;
+                if (this.fb[idx] & p) v[0xf] = 1;
+                this.fb[idx] ^= p;
+                if (!(xx & 1) && !(yy & 1)) this.display[(yy >> 1) * CHIP8_W + (xx >> 1)] = this.fb[idx]; // lo-res view
+              } else {
+                const idx = yy * CHIP8_W + xx;
+                if (this.display[idx] & p) v[0xf] = 1;
+                this.display[idx] ^= p;
+              }
             }
           }
-          off += n;
+          off += bytesPerPlane;
         }
         this.dirty = true;
         this.syncHint = false;
@@ -313,7 +342,7 @@ export function disasm(op: number): string {
   const h = (v: number, w = 2) => '0x' + v.toString(16).toUpperCase().padStart(w, '0');
   const R = (r: number) => 'V' + r.toString(16).toUpperCase();
   switch (op >> 12) {
-    case 0x0: return op === 0x00e0 ? 'CLS' : op === 0x00ee ? 'RET' : `SYS ${h(nnn, 3)}`;
+    case 0x0: return op === 0x00e0 ? 'CLS' : op === 0x00ee ? 'RET' : op === 0x00ff ? 'HIGH' : op === 0x00fe ? 'LOW' : `SYS ${h(nnn, 3)}`;
     case 0x1: return `JP ${h(nnn, 3)}`;
     case 0x2: return `CALL ${h(nnn, 3)}`;
     case 0x3: return `SE ${R(x)}, ${h(nn)}`;
@@ -422,6 +451,8 @@ export function assemble(source: string): AsmResult {
         for (const a of args) out.push(num(a, it, 0xff));
         break;
       case 'CLS': emit(0x00e0); break;
+      case 'HIGH': emit(0x00ff); break;
+      case 'LOW': emit(0x00fe); break;
       case 'RET': emit(0x00ee); break;
       case 'SYS': emit(num(a0, it, 0xfff)); break;
       case 'JP':

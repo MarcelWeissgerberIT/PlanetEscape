@@ -1,7 +1,7 @@
 import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
 import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
-import { CHIP8_H, CHIP8_W } from './chip8';
+import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from './chip8';
 import { audioLevel } from './video';
 import { ARITH } from './sim';
 import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
@@ -695,16 +695,22 @@ export class Renderer {
       }
       if (cpu && sc.frame !== frame) {
         sc.frame = frame;
+        const W = cpu.hires ? HIRES_W : CHIP8_W, H = cpu.hires ? HIRES_H : CHIP8_H;
+        const buf = cpu.hires ? cpu.fb : cpu.display;
+        if (sc.canvas.width !== W) {
+          sc.canvas.width = W;
+          sc.canvas.height = H;
+        }
         const c2 = sc.canvas.getContext('2d')!;
-        const img = c2.createImageData(CHIP8_W, CHIP8_H);
+        const img = c2.createImageData(W, H);
         const own = (b.recipe as ItemId) ?? 'copper_wire';
         const rgb = (item: ItemId) => {
           const m = /^#?([0-9a-f]{2})([0-9a-f]{2})([0-9a-f]{2})/i.exec(ITEMS[item].color);
           return m ? [parseInt(m[1], 16), parseInt(m[2], 16), parseInt(m[3], 16)] : [34, 211, 238];
         };
         const pal = CHIP8_PALETTE.map((it, k) => (k ? rgb(it ?? own) : [4, 20, 26]));
-        for (let i = 0; i < CHIP8_W * CHIP8_H; i++) {
-          const c = pal[cpu.display[i] & 15];
+        for (let i = 0; i < W * H; i++) {
+          const c = pal[buf[i] & 15];
           img.data[i * 4] = c[0];
           img.data[i * 4 + 1] = c[1];
           img.data[i * 4 + 2] = c[2];
@@ -869,6 +875,14 @@ export class Renderer {
           ctx.strokeStyle = open ? '#34d399' : '#ef4444';
           ctx.lineWidth = 3;
           ctx.strokeRect(b.x * TILE + 3, b.y * TILE + 3, TILE - 6, TILE - 6);
+          if (b.threshold !== undefined && b.threshold >= 0 && b.threshold <= 15 && !this.lowDetail) {
+            // a key of a terminal: its number
+            ctx.fillStyle = open ? '#34d399' : 'rgba(255,255,255,0.85)';
+            ctx.font = 'bold 15px system-ui, sans-serif';
+            ctx.textAlign = 'center';
+            ctx.textBaseline = 'middle';
+            ctx.fillText(b.threshold.toString(16).toUpperCase(), b.x * TILE + TILE / 2, b.y * TILE + TILE - 12);
+          }
         }
       }
       if (b.type === 'mixer') {

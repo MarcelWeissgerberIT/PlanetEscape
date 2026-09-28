@@ -979,6 +979,422 @@ pl_br:
 ${Object.entries(GLYPHS).map(([k, rows]) => `g_${k}:\n  DB ${rows.map(hx).join(', ')}`).join('\n')}
 `;
 
+
+const BLOCKS_HD_SOURCE = `; KORA BLOCKS HD: the block world in 128x64 (HIGH resolution). Every world cell is a 2x2 pixel block with a
+; two-colour texture, the sky is blue with white clouds, the player has head and body. World = 64x32 bytes behind this jump
+; (RAM rows 1..32 are the map). Keys: 7/9 walk (A/D), 5 jump (W), 8 dig below (S), 6 dig ahead (E), 4 place (Q).
+  JP main
+  DB 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+  DB 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0
+${worldTable()}
+main:
+  HIGH
+  LD VD, 8         ; player x (cell)
+  LD VE, 0         ; player y (top cell of two)
+  LD V4, 1         ; facing
+  LD V5, 0         ; jump
+  LD V6, 0         ; carried
+  LD V7, 2         ; carried type
+  LD VC, 0
+  PLANE 7          ; sky: 8x4 sprites of 16x16
+  LD I, skybig
+  LD V3, 0
+skyy:
+  LD V2, 0
+skyx:
+  DRW V2, V3, 0
+  ADD V2, 16
+  SE V2, 128
+  JP skyx
+  ADD V3, 16
+  SE V3, 64
+  JP skyy
+  LD V8, 20        ; ground height while generating
+  LD V9, 0
+gen:
+  RND V0, 3
+  SE V0, 0
+  JP g1
+  ADD V8, 0xFF
+g1:
+  SE V0, 3
+  JP g2
+  ADD V8, 1
+g2:
+  LD V1, V8
+  LD V0, 12
+  SUB V1, V0
+  SE VF, 1
+  LD V8, 12
+  LD V1, 27
+  SUB V1, V8
+  SE VF, 1
+  LD V8, 27
+  LD VA, V8
+  LD VB, 4
+  CALL put
+  LD VB, 2
+  ADD VA, 1
+  CALL put
+  ADD VA, 1
+  CALL put
+  ADD VA, 1
+  CALL put
+gstone:
+  ADD VA, 1
+  SNE VA, 32
+  JP gnext
+  RND VB, 7
+  SE VB, 0
+  LD VB, 3
+  SNE VB, 0
+  LD VB, 9
+  CALL put
+  JP gstone
+gnext:
+  LD V0, V9
+  LD V1, 7
+  AND V0, V1
+  SNE V0, 4
+  CALL tree
+  ADD V9, 1
+  SE V9, 64
+  JP gen
+  LD V9, 10
+  LD VA, 3
+  CALL cloud
+  LD V9, 30
+  LD VA, 5
+  CALL cloud
+  LD V9, 50
+  LD VA, 2
+  CALL cloud
+  LD V8, 0
+  CALL digit
+  CALL xorplayer
+loop:
+  ADD V8, 1
+  CALL xorplayer   ; erase
+  SE V5, 0
+  JP jump
+  LD V9, VD
+  LD VA, VE
+  ADD VA, 2
+  CALL solid
+  SNE V0, 0
+  ADD VE, 1
+  JP horiz
+jump:
+  LD V9, VD
+  LD VA, VE
+  ADD VA, 0xFF
+  CALL solid
+  SE V0, 0
+  JP jend
+  ADD VE, 0xFF
+  ADD V5, 0xFF
+  JP horiz
+jend:
+  LD V5, 0
+horiz:
+  LD V0, V8
+  LD V1, 1
+  AND V0, V1
+  SE V0, 0
+  JP keys2
+  LD V0, 7
+  SKNP V0
+  CALL left
+  LD V0, 9
+  SKNP V0
+  CALL right
+keys2:
+  LD V0, 5
+  SKNP V0
+  CALL jumpk
+  SE VC, 0
+  ADD VC, 0xFF
+  SE VC, 0
+  JP redraw
+  LD V0, 8
+  SKNP V0
+  CALL digdown
+  LD V0, 6
+  SKNP V0
+  CALL digface
+  LD V0, 4
+  SKNP V0
+  CALL placek
+redraw:
+  CALL xorplayer   ; draw
+  LD V0, 4
+  LD DT, V0
+wait:
+  LD V0, DT
+  SE V0, 0
+  JP wait
+  JP loop
+
+; ---- world access: V9 = x, VA = y (cells) ----
+cell:
+  LD V0, VA
+  SHR V0
+  SHR V0
+  ADD V0, V0
+  ADD V0, V0
+  CALL bandsel
+  LD V0, VA
+  LD V1, 3
+  AND V0, V1
+  SHL V0
+  SHL V0
+  SHL V0
+  SHL V0
+  SHL V0
+  SHL V0
+  ADD V0, V9
+  ADD I, V0
+  LD V0, [I]
+  RET
+bandsel:
+  JP V0, bandtab
+bandtab:
+  LD I, band0
+  RET
+  LD I, band1
+  RET
+  LD I, band2
+  RET
+  LD I, band3
+  RET
+  LD I, band4
+  RET
+  LD I, band5
+  RET
+  LD I, band6
+  RET
+  LD I, band7
+  RET
+solid:
+  LD V1, 63
+  SUB V1, V9
+  SE VF, 1
+  JP wall
+  LD V1, 31
+  SUB V1, VA
+  SE VF, 1
+  JP wall
+  JP cell
+wall:
+  LD V0, 1
+  LD V1, 1
+  RET
+put:               ; write VB into the cell, replace the sky there by the block (generation only: VC is free)
+  CALL cell
+  LD V0, VB
+  LD [I], V0
+  LD VC, VB
+  LD VB, 0
+  CALL xorcell
+  LD VB, VC
+  CALL xorcell
+  RET
+xorcell:           ; toggle the picture of block type VB at cell (V9, VA); 0 = a sky block
+  LD V2, V9
+  ADD V2, V2
+  LD V3, VA
+  ADD V3, V3
+  SNE VB, 0
+  JP xsky
+  LD V0, VB
+  ADD V0, V0
+  ADD V0, V0
+  CALL plsel       ; base colour = the type
+  LD I, b3
+  DRW V2, V3, 2
+  LD I, dtab
+  ADD I, VB
+  LD V0, [I]       ; detail colour
+  ADD V0, V0
+  ADD V0, V0
+  CALL plsel
+  LD I, d1
+  DRW V2, V3, 2
+  RET
+xsky:
+  PLANE 7
+  LD I, b2
+  DRW V2, V3, 2
+  RET
+plsel:
+  JP V0, pltab
+pltab:
+${Array.from({ length: 16 }, (_, k) => `  PLANE ${k}\n  RET`).join('\n')}
+xorplayer:         ; toggle sky under the player and the player itself (2 cells tall)
+  LD V2, VD
+  ADD V2, V2
+  LD V3, VE
+  ADD V3, V3
+  PLANE 7
+  LD I, sky4
+  DRW V2, V3, 4
+  PLANE 8
+  LD I, pl4
+  DRW V2, V3, 4
+  RET
+cloud:             ; three white cells from (V9, VA)
+  LD VC, 3
+c1:
+  LD VB, 0
+  CALL xorcell
+  PLANE 8
+  LD I, b2
+  DRW V2, V3, 2
+  ADD V9, 1
+  ADD VC, 0xFF
+  SE VC, 0
+  JP c1
+  RET
+tree:
+  RND V0, 1
+  SE V0, 1
+  RET
+  LD VA, V8
+  LD VB, 5
+  ADD VA, 0xFF
+  CALL put
+  ADD VA, 0xFF
+  CALL put
+  ADD VA, 0xFF
+  CALL put
+  LD VB, 6
+  ADD VA, 0xFF
+  CALL put
+  ADD V9, 0xFF
+  CALL put
+  ADD VA, 0xFF
+  CALL put
+  ADD V9, 1
+  CALL put
+  ADD V9, 1
+  CALL put
+  ADD VA, 1
+  CALL put
+  ADD V9, 0xFF
+  RET
+digit:
+  PLANE 8
+  LD F, V6
+  LD V2, 0
+  LD V3, 0
+  DRW V2, V3, 5
+  RET
+left:
+  LD V4, 0
+  LD V9, VD
+  ADD V9, 0xFF
+  JP step
+right:
+  LD V4, 1
+  LD V9, VD
+  ADD V9, 1
+step:
+  LD VA, VE
+  CALL solid
+  SE V0, 0
+  RET
+  ADD VA, 1
+  CALL solid
+  SE V0, 0
+  RET
+  LD VD, V9
+  RET
+jumpk:
+  SE V5, 0
+  RET
+  LD V9, VD
+  LD VA, VE
+  ADD VA, 2
+  CALL solid
+  SNE V0, 0
+  RET
+  LD V5, 3
+  RET
+fx:
+  SNE V4, 0
+  ADD V9, 0xFF
+  SE V4, 0
+  ADD V9, 1
+  RET
+digdown:
+  LD V9, VD
+  LD VA, VE
+  ADD VA, 2
+  JP dig
+digface:
+  LD V9, VD
+  CALL fx
+  LD VA, VE
+  ADD VA, 1
+dig:
+  CALL solid
+  SNE V0, 0
+  RET
+  SNE V1, 1
+  RET
+  LD VB, V0
+  LD V0, 0
+  LD [I], V0
+  CALL xorcell     ; the block goes
+  LD V7, VB
+  LD VB, 0
+  CALL xorcell     ; sky comes
+  CALL digit
+  ADD V6, 1
+  SNE V6, 16
+  LD V6, 15
+  CALL digit
+  LD VC, 4
+  RET
+placek:
+  SNE V6, 0
+  RET
+  LD V9, VD
+  CALL fx
+  LD VA, VE
+  ADD VA, 1
+  CALL solid
+  SE V0, 0
+  RET
+  SNE V1, 1
+  RET
+  LD V0, V7
+  LD [I], V0
+  LD VB, 0
+  CALL xorcell
+  LD VB, V7
+  CALL xorcell
+  CALL digit
+  ADD V6, 0xFF
+  CALL digit
+  LD VC, 4
+  RET
+b2:
+  DB 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0
+b3:
+  DB 0xC0, 0x80, 0xC0, 0x80, 0xC0, 0x80, 0xC0, 0x80
+d1:
+  DB 0x00, 0x40, 0x00, 0x40, 0x00, 0x40, 0x00, 0x40
+sky4:
+  DB 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0, 0xC0
+pl4:
+  DB 0x40, 0xC0, 0xC0, 0x80
+dtab:
+  DB 0, 0, 15, 8, 6, 2, 4, 11, 0, 8, 0, 0, 0, 0, 0, 0
+skybig:
+  DB ${Array(96).fill('0xFF').join(', ')}
+`;
+
 export const CHIP8_PROGRAMS: Chip8Program[] = [
   {
     id: 'pong',
@@ -1369,5 +1785,11 @@ spark:
     name: 'KORA TRAILER',
     keys: 'no keys: a 30 s demo loop',
     source: TRAILER_SOURCE,
+  },
+  {
+    id: 'blockshd',
+    name: 'KORA BLOCKS HD',
+    keys: 'A/D walk · W jump · S dig below · E dig ahead · Q place (keys 7 9 5 8 6 4) · 128×64 on 16×16 matrices',
+    source: BLOCKS_HD_SOURCE,
   },
 ];
