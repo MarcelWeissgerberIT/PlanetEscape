@@ -268,6 +268,7 @@ export interface GameState {
   unlockedRecipes: string[];
   time: number; // seconds of play
   launched: boolean;
+  flights?: number; // supply flights sent after the launch (endless goals)
   powerSupply: number;
   powerDemand: number;
   chapterStart?: number; // game time when the current story chapter began (for the star rating)

@@ -207,14 +207,36 @@ export function recipesFor(machine: RecipeDef['machine']): RecipeDef[] {
 
 /** The ship: what has to be delivered to the Landing Core to launch. */
 export const SHIP_PARTS: Partial<Record<ItemId, number>> = {
-  hull_plate: 30,
-  engine: 6,
+  hull_plate: 24,
+  engine: 5,
   nav_computer: 4,
-  fuel_cell: 14,
-  life_support: 6,
+  fuel_cell: 10,
+  life_support: 5,
 };
 export const SHIP_PART_IDS = Object.keys(SHIP_PARTS) as ItemId[];
 export const SHIP_TOTAL = Object.values(SHIP_PARTS).reduce((a, c) => a + (c ?? 0), 0);
+
+/**
+ * After the launch the colony keeps asking for supply flights: each one wants a few advanced parts and a
+ * steady rate of one of them, a little more with every flight. Deterministic per flight number (no save field).
+ */
+export const FLIGHT_POOL: ItemId[] = ['steel_frame', 'circuit', 'precision_part', 'hull_plate', 'fuel_cell', 'engine', 'life_support', 'nav_computer'];
+export const FLIGHT_BASE: Partial<Record<ItemId, number>> = { steel_frame: 20, circuit: 16, precision_part: 8, hull_plate: 10, fuel_cell: 6, engine: 3, life_support: 3, nav_computer: 2 };
+export const FLIGHT_RATE: Partial<Record<ItemId, number>> = { steel_frame: 6, circuit: 5, precision_part: 3, hull_plate: 3, fuel_cell: 2, engine: 1, life_support: 1, nav_computer: 1 };
+export function flightMission(n: number): MissionDef {
+  const scale = 1 + 0.35 * n;
+  const pick: ItemId[] = [];
+  let h = Math.imul(n + 1, 2654435761) >>> 0;
+  while (pick.length < 3) {
+    h = Math.imul(h ^ (h >>> 13), 1274126177) >>> 0;
+    const it = FLIGHT_POOL[h % FLIGHT_POOL.length];
+    if (!pick.includes(it)) pick.push(it);
+  }
+  const deliver: Partial<Record<ItemId, number>> = {};
+  for (const it of pick) deliver[it] = Math.ceil(FLIGHT_BASE[it]! * scale);
+  const r = pick[0];
+  return { id: 'flight', deliver, rate: { [r]: Math.ceil(FLIGHT_RATE[r]! * (1 + 0.2 * n)) }, rateHold: 60, unlocks: [], unlockRecipes: [], reward: { machine_part: 10 + 2 * n, circuit: 6 + n } };
+}
 
 /** Minimum machine utilisation for the third star of a chapter. */
 export const STAR_EFFICIENCY = 0.45;
@@ -470,5 +492,5 @@ export const LEVELS: LevelDef[] = [
   { seed: 1404, size: 52, basics: [{ type: 'iron_ore', dist: 7, r: 2.6 }, { type: 'copper_ore', dist: 8, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.0 }, { type: 'iron_ore', dist: 14, r: 2.4 }], extraTypes: ['copper_ore'], extra: 1, rocks: 6, storms: false, contracts: true, inventory: { iron_plate: 140, copper_plate: 60 }, kits: { assembler: 3, printer: 1, conveyor: 40 }, par: 780 },
   { seed: 1505, size: 60, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 11, r: 2.4 }, { type: 'iron_ore', dist: 15, r: 2.4 }, { type: 'copper_ore', dist: 17, r: 2.2 }], extraTypes: ['quartz', 'iron_ore'], extra: 2, rocks: 10, storms: false, contracts: true, inventory: { iron_plate: 180, copper_plate: 70 }, kits: { assembler: 4, printer: 1, hall4: 1, conveyor: 50 }, par: 960 },
   { seed: 1606, size: 72, basics: [{ type: 'iron_ore', dist: 7, r: 2.8 }, { type: 'copper_ore', dist: 9, r: 2.6 }, { type: 'quartz', dist: 12, r: 2.4 }, { type: 'ice', dist: 12, r: 2.4 }, { type: 'oil', dist: 15, r: 2.0 }, { type: 'iron_ore', dist: 18, r: 2.6 }], extraTypes: ['copper_ore', 'ice', 'quartz'], extra: 3, rocks: 16, storms: true, contracts: true, inventory: { iron_plate: 260, copper_plate: 110 }, kits: { assembler: 6, printer: 2, refinery: 3, mixer: 1, miner: 4, smelter: 3, solar: 2, conveyor: 80 }, par: 1260 },
-  { seed: 1707, size: 96, basics: [{ type: 'iron_ore', dist: 7, r: 3.0 }, { type: 'copper_ore', dist: 9, r: 2.8 }, { type: 'quartz', dist: 12, r: 2.6 }, { type: 'ice', dist: 13, r: 2.6 }, { type: 'oil', dist: 15, r: 2.4 }, { type: 'iron_ore', dist: 19, r: 3.0 }, { type: 'copper_ore', dist: 21, r: 2.6 }], extraTypes: ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'], extra: 10, rocks: 30, storms: true, contracts: true, inventory: { iron_plate: 340, copper_plate: 140 }, kits: { assembler: 8, printer: 3, refinery: 4, fabricator: 4, generator: 1, mixer: 1, miner: 6, smelter: 4, solar: 4, conveyor: 120 }, par: 1800 },
+  { seed: 1707, size: 96, basics: [{ type: 'iron_ore', dist: 7, r: 3.0 }, { type: 'copper_ore', dist: 9, r: 2.8 }, { type: 'quartz', dist: 12, r: 2.6 }, { type: 'ice', dist: 13, r: 2.6 }, { type: 'oil', dist: 15, r: 2.4 }, { type: 'iron_ore', dist: 19, r: 3.0 }, { type: 'copper_ore', dist: 21, r: 2.6 }], extraTypes: ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'], extra: 10, rocks: 30, storms: true, contracts: true, inventory: { iron_plate: 340, copper_plate: 140 }, kits: { assembler: 10, printer: 3, refinery: 4, fabricator: 5, generator: 1, mixer: 1, miner: 8, smelter: 5, solar: 6, splitter: 4, conveyor: 160 }, par: 1800 },
 ];

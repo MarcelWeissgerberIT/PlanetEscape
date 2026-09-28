@@ -99,11 +99,12 @@ function summary() {
           index: st.missionIndex + 1,
           of: MISSIONS.length,
           id: m.id,
-          deliver: Object.fromEntries(Object.entries(m.deliver).map(([k, n]) => [k, { have: Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0), need: n }])),
+          deliver: Object.fromEntries(Object.entries(m.deliver).map(([k, n]) => [k, { have: st.launched ? st.delivered[k as ItemId] ?? 0 : Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0), need: n }])),
           build: m.build ? Object.fromEntries(Object.entries(m.build).map(([k, n]) => [k, { have: sim.countBuildings(k as BuildingId), need: n }])) : undefined,
         }
       : null,
     launched: st.launched,
+    flights: st.flights ?? 0,
     shipProgress: Math.round(sim.shipProgress() * 100) / 100,
     time: Math.round(st.time),
     map: { width: st.width, height: st.height, core: { x: core.x, y: core.y, size: 3 } },

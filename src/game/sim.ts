@@ -14,6 +14,7 @@ import {
   TERRAIN_ITEM,
   TUNNEL_RANGE,
   CONTRACT_INTERVAL,
+  flightMission,
   PROJECTS,
   PROJECT_BY_ID,
   AUTOMATION_MIN_MISSION,
@@ -50,6 +51,7 @@ export type SimEvent =
   | { type: 'depleted'; x: number; y: number }
   | { type: 'contract_offer'; contract: Contract }
   | { type: 'repaired'; b: Building }
+  | { type: 'flight'; n: number }
   | { type: 'contract_done'; contract: Contract }
   | { type: 'contract_failed'; contract: Contract }
   | { type: 'storm'; on: boolean }
@@ -1070,7 +1072,7 @@ export class Sim {
     // events: KORA reports a situation and waits for a decision
     if (st.event) {
       if (st.time >= st.event.until) this.resolveEvent('b');
-    } else if (st.time >= (st.nextEventAt ?? Infinity) && st.missionIndex >= EVENT_MIN_MISSION && !st.launched) {
+    } else if (st.time >= (st.nextEventAt ?? Infinity) && st.missionIndex >= EVENT_MIN_MISSION) {
       st.nextEventAt = st.time + EVENT_INTERVAL[0] + Math.random() * (EVENT_INTERVAL[1] - EVENT_INTERVAL[0]);
       const ev = this.makeEvent();
       if (ev) {
@@ -2825,7 +2827,7 @@ export class Sim {
   score(): { total: number; time: number; parts: number; thrift: number; contracts: number; hard: boolean } {
     const st = this.state;
     let parts = 0;
-    for (const k in SHIP_PARTS) parts += Math.min(st.ship[k as ItemId] ?? 0, SHIP_PARTS[k as ItemId]!) * 50;
+    for (const k in SHIP_PARTS) parts += Math.min(st.ship[k as ItemId] ?? 0, SHIP_PARTS[k as ItemId]!) * 62;
     const time = Math.max(0, 6000 - Math.floor(st.time / 2));
     const thrift = Math.max(0, 2500 - st.buildings.length * 5);
     const contracts = st.contractsDone * 100;
@@ -3405,6 +3407,7 @@ export class Sim {
   }
 
   currentMission() {
+    if (this.state.launched && this.state.options.mode !== 'playground') return flightMission(this.state.flights ?? 0);
     return MISSIONS[this.state.missionIndex] ?? null;
   }
 
@@ -3453,16 +3456,27 @@ export class Sim {
 
   private checkMission(dt = 0) {
     const m = this.currentMission();
-    if (!m || this.state.launched) return;
+    if (!m) return;
     // the throughput clock runs on its own: it counts while every rate goal is met and restarts when one drops
     const rs = this.rateStatus();
     if (rs) this.state.rateHeld = rs.met ? (this.state.rateHeld ?? 0) + dt : 0;
     for (const k in m.deliver) {
-      const have = Math.max(this.state.delivered[k as ItemId] ?? 0, this.state.ship[k as ItemId] ?? 0);
+      const have = this.state.launched ? this.state.delivered[k as ItemId] ?? 0 : Math.max(this.state.delivered[k as ItemId] ?? 0, this.state.ship[k as ItemId] ?? 0);
       if (have < m.deliver[k as ItemId]!) return;
     }
     if (rs && (this.state.rateHeld ?? 0) < rs.hold) return;
     if (m.build) for (const k in m.build) if (this.countBuildings(k as BuildingId) < m.build[k as BuildingId]!) return;
+    if (this.state.launched) {
+      // a supply flight leaves: its cargo is loaded from the stock, KORA pays with parts
+      for (const k in m.deliver) this.addInv(k as ItemId, -Math.min(this.state.inventory[k as ItemId] ?? 0, m.deliver[k as ItemId]!));
+      if (m.reward) for (const k in m.reward) this.addInv(k as ItemId, m.reward[k as ItemId]!);
+      this.state.delivered = {};
+      this.state.rateLog = {};
+      this.state.rateHeld = 0;
+      this.state.flights = (this.state.flights ?? 0) + 1;
+      this.events.push({ type: 'flight', n: this.state.flights });
+      return;
+    }
     for (const u of m.unlocks) if (!this.state.unlockedBuildings.includes(u)) this.state.unlockedBuildings.push(u);
     for (const r of m.unlockRecipes) if (!this.state.unlockedRecipes.includes(r)) this.state.unlockedRecipes.push(r);
     if (m.reward) for (const k in m.reward) this.addInv(k as ItemId, m.reward[k as ItemId]!);

@@ -21,6 +21,7 @@
     "contracts:check": "esbuild tools/contracts-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/contracts-check.mjs --log-level=warning && node mcp/dist/contracts-check.mjs",
     "projects:check": "esbuild tools/projects-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/projects-check.mjs --log-level=warning && node mcp/dist/projects-check.mjs",
     "wear:check": "esbuild tools/wear-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/wear-check.mjs --log-level=warning && node mcp/dist/wear-check.mjs",
+    "flights:check": "esbuild tools/flights-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/flights-check.mjs --log-level=warning && node mcp/dist/flights-check.mjs",
     "kits:check": "esbuild tools/kits-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/kits-check.mjs --log-level=warning && node mcp/dist/kits-check.mjs",
     "storage:check": "esbuild tools/storage-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/storage-check.mjs --log-level=warning && node mcp/dist/storage-check.mjs",
     "logistics:check": "esbuild tools/logistics-check.ts --bundle --platform=node --format=esm --outfile=mcp/dist/logistics-check.mjs --log-level=warning && node mcp/dist/logistics-check.mjs",

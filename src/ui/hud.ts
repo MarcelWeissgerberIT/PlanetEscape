@@ -590,7 +590,7 @@ export class Hud {
       const rows =
         shown
           .map(([k, n]) => {
-            const have = Math.min(n!, Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0));
+            const have = Math.min(n!, st.launched ? st.delivered[k as ItemId] ?? 0 : Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0));
             return `<div class="mrow ${have >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
           })
           .join('') + (entries.length > shown.length ? `<div class="mrow more">+${entries.length - shown.length} …</div>` : '');
@@ -609,7 +609,8 @@ export class Hud {
             return `<div class="mrow rate ${r >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${t('rate_row', { item: tItem(k as ItemId) })}</span><span class="mcount">${r}/${n}</span></div>`;
           }).join('') + `<div class="mrow rate ${rs.held >= rs.hold ? 'done' : ''}"><span class="mname">⏱ ${t('rate_hold')}</span><span class="mcount">${Math.floor(Math.min(rs.held, rs.hold))}/${rs.hold} s</span></div>`
         : '';
-      body = `<div class="mtitle"><span class="mnum">${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}</span> ${mt.title}</div>
+      const num = st.launched ? `🚀 ${t('flight')} ${(st.flights ?? 0) + 1}` : `${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}`;
+      body = `<div class="mtitle"><span class="mnum">${num}</span> ${mt.title}</div>
         <div class="mtext">${this.koraMsg && this.koraMsgT > 0 ? this.koraMsg : mt.text}</div>
         ${this.koraMsg && this.koraMsgT > 0 && this.koraAction ? `<div class="mact"><span class="btn small primary" data-act="kora-action">${this.koraAction.label}</span></div>` : ''}
         <div class="mrows">${builds}${rows}${rateRows}</div>`;
@@ -2708,6 +2709,14 @@ export class Hud {
         e.remove();
       }
     };
+  }
+
+  /** A supply flight left after the launch. */
+  flightDone(n: number) {
+    sfx.launch();
+    const next = this.sim.currentMission();
+    this.toast(`🚀 ${t('flight_done', { n })}${next ? `<br><small>${t('flight_next')}: ${Object.entries(next.deliver).map(([k, v]) => `${v}× ${tItem(k as ItemId)}`).join(', ')}</small>` : ''}`, 6000, 'success');
+    this.renderTop();
   }
 
   missionComplete(index: number) {

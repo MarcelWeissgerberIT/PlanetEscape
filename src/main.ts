@@ -180,6 +180,7 @@ function frame(now: number) {
     for (const ev of sim.events) {
       switch (ev.type) {
         case 'mission': hud.missionComplete(ev.index); break;
+        case 'flight': hud.flightDone(ev.n); break;
         case 'launch':
           if (!launchShown) {
             launchShown = true;
