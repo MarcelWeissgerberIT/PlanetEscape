@@ -729,3 +729,14 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 .medal-big { font-size: 56px; margin: 4px 0; text-align: center; }
 .kit-row.quota .kit-have { color: #f59e0b; }
 .quota-chip { opacity: 0.8; cursor: default; }
+
+.tip { z-index: 60; overflow-y: auto; }
+.tip img[data-item], .tip img[data-building], .cost img[data-item], .ucost img[data-item] { cursor: pointer; }
+.mini-tree, .mini-tree ul { list-style: none; margin: 2px 0; padding: 0; }
+.mini-tree ul { margin-left: 9px; padding-left: 9px; border-left: 1px solid rgba(34, 211, 238, 0.35); }
+.mini-tree li { position: relative; padding: 1px 0; }
+.mini-tree ul > li::before { content: ''; position: absolute; left: -9px; top: 11px; width: 7px; border-top: 1px solid rgba(34, 211, 238, 0.35); }
+.mini-tree .mt-node { display: inline-flex; align-items: center; gap: 4px; font-size: 12px; white-space: nowrap; }
+.mini-tree .mt-node em { color: var(--accent); font-style: normal; font-size: 11px; }
+.mini-tree .mt-node small { color: var(--muted); }
+.mini-tree .mt-node img:hover { outline: 1px solid var(--accent); }

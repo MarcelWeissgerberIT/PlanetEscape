@@ -156,20 +156,24 @@ export class Hud {
       const bpb = (e.target as HTMLElement).closest('[data-bp-building]') as HTMLElement | null;
       if (bpb && !bpb.closest('.modal')) {
         e.stopPropagation();
+        this.hideTip(true);
         this.showBuildingBlueprint(bpb.dataset.bpBuilding as BuildingId);
         return;
       }
       const bimg = (e.target as HTMLElement).closest('img[data-building]') as HTMLImageElement | null;
       if (bimg && !bimg.closest('.build-btn, .modal')) {
         e.stopPropagation();
+        this.hideTip(true);
         this.showBuildingBlueprint(bimg.dataset.building as BuildingId);
         return;
       }
       const img = (e.target as HTMLElement).closest('img[data-item]') as HTMLImageElement | null;
       if (!img) return;
-      if (img.closest('.build-btn, .inv-item, .cost, .upgrade')) return;
+      if (img.closest('.build-btn, .inv-item')) return;
       if (img.closest('.recipe') && !img.closest('.r-in')) return; // the output icon selects the recipe
+      if (img.closest('button:not(.recipe)') && !img.closest('.tip')) return; // an icon inside an action button is its label
       e.stopPropagation();
+      this.hideTip(true);
       this.showChain(img.dataset.item as ItemId);
     });
     this.minimapBox.addEventListener('pointerdown', (e) => {
@@ -2119,12 +2123,36 @@ export class Hud {
       const b = target(e);
       if (!b || e.pointerType !== 'mouse') return;
       clear();
-      this.tipTimer = window.setTimeout(() => this.showTip(b), 550);
+      this.keepTip();
+      this.tipTimer = window.setTimeout(() => this.showTip(b), this.tipOpen() ? 120 : 450);
     });
     this.bottom.addEventListener('pointerout', (e) => {
-      if (e.pointerType !== 'mouse') return;
+      if (e.pointerType !== 'mouse' || !target(e)) return;
       clear();
       this.hideTip();
+    });
+    // any other material or building icon (mission card, costs, panels, dialogs) explains itself on hover
+    const iconOf = (e: Event) => {
+      const img = (e.target as HTMLElement).closest('img[data-item], img[data-building]') as HTMLElement | null;
+      return img && !img.closest('.tip, .build-btn, .inv-item, .title') ? img : null;
+    };
+    this.root.addEventListener('pointerover', (e) => {
+      if (e.pointerType !== 'mouse') return;
+      const img = iconOf(e);
+      if (!img) return;
+      clear();
+      this.keepTip();
+      this.tipTimer = window.setTimeout(() => this.showTip(img), this.tipOpen() ? 120 : 450);
+    });
+    this.root.addEventListener('pointerout', (e) => {
+      if (e.pointerType !== 'mouse' || !iconOf(e)) return;
+      clear();
+      this.hideTip();
+    });
+    // the pointer may travel from the icon into the tip (to press its buttons or follow a link)
+    this.tip.addEventListener('pointerenter', () => this.keepTip());
+    this.tip.addEventListener('pointerleave', (e) => {
+      if (e.pointerType === 'mouse') this.hideTip();
     });
     // pointercancel is not in this list: Chrome cancels the pointer on a long press (context menu), which is exactly the gesture we want
     for (const ev of ['pointerup', 'pointerleave']) this.bottom.addEventListener(ev, () => clear());
@@ -2138,38 +2166,83 @@ export class Hud {
         this.tipSuppressClick = false;
         return;
       }
-      this.hideTip();
+      this.hideTip(true);
     }, true);
     this.root.addEventListener('pointerdown', (e) => {
-      if (!(e.target as HTMLElement).closest('.tip')) this.hideTip();
+      if (!(e.target as HTMLElement).closest('.tip')) this.hideTip(true);
     }, true);
     this.tip.onclick = (e) => {
       const c = (e.target as HTMLElement).closest('[data-chain]') as HTMLElement | null;
       if (c) {
-        this.hideTip();
+        this.hideTip(true);
         this.showChain(c.dataset.chain as ItemId);
       }
     };
   }
 
-  private showTip(btn: HTMLElement) {
-    const build = btn.dataset.build as BuildingId | undefined;
-    const item = btn.dataset.chain as ItemId | undefined;
-    const html = build ? this.buildingTipHtml(build) : item ? this.itemTipHtml(item) : '';
+  private tipHideTimer: number | null = null;
+  private tipFor: HTMLElement | null = null;
+
+  private tipOpen(): boolean {
+    return !this.tip.classList.contains('hidden');
+  }
+
+  /** Cancel a pending hide (the pointer came back to the icon or into the tip). */
+  private keepTip() {
+    if (this.tipHideTimer) clearTimeout(this.tipHideTimer);
+    this.tipHideTimer = null;
+  }
+
+  private showTip(src: HTMLElement) {
+    const build = (src.dataset.build ?? src.dataset.building) as BuildingId | undefined;
+    const item = (src.dataset.chain ?? src.dataset.item) as ItemId | undefined;
+    const html = build && BUILDINGS[build] ? this.buildingTipHtml(build) : item ? this.itemTipHtml(item) : '';
     if (!html) return;
-    this.tip.innerHTML = html;
+    this.keepTip();
+    if (this.tipFor !== src || !this.tipOpen()) this.tip.innerHTML = html;
+    this.tipFor = src;
     this.tip.classList.remove('hidden');
-    const r = btn.getBoundingClientRect();
-    const w = Math.min(340, window.innerWidth - 16);
+    const r = src.getBoundingClientRect();
+    const w = Math.min(360, window.innerWidth - 16);
     this.tip.style.width = `${w}px`;
     const left = Math.max(8, Math.min(window.innerWidth - w - 8, r.left + r.width / 2 - w / 2));
     this.tip.style.left = `${left}px`;
-    this.tip.style.top = '';
-    this.tip.style.bottom = `${window.innerHeight - r.top + 8}px`;
+    // above the icon when there is room, else below it; a small overlap keeps the way into the tip open
+    if (r.top > window.innerHeight * 0.45) {
+      this.tip.style.top = '';
+      this.tip.style.bottom = `${window.innerHeight - r.top + 2}px`;
+      this.tip.style.maxHeight = `${Math.max(160, r.top - 12)}px`;
+    } else {
+      this.tip.style.bottom = '';
+      this.tip.style.top = `${r.bottom + 2}px`;
+      this.tip.style.maxHeight = `${Math.max(160, window.innerHeight - r.bottom - 12)}px`;
+    }
   }
 
-  hideTip() {
-    this.tip.classList.add('hidden');
+  /** Hide the tip, by default after a short grace time so the pointer can move into it. */
+  hideTip(now = false) {
+    this.keepTip();
+    if (now) {
+      this.tip.classList.add('hidden');
+      this.tipFor = null;
+      return;
+    }
+    this.tipHideTimer = window.setTimeout(() => {
+      this.tipHideTimer = null;
+      this.tip.classList.add('hidden');
+      this.tipFor = null;
+    }, 380);
+  }
+
+  /** Compact production chain for a tip: every node links to its blueprint. */
+  private miniTree(id: ItemId, n: number, depth: number, seen: Set<ItemId>): string {
+    const r = RECIPES.find((rc) => rc.output === id);
+    const terrain = (Object.keys(TERRAIN_ITEM) as TerrainId[]).some((k) => TERRAIN_ITEM[k] === id);
+    const mach = r ? `<img class="icon xs mt-mach" src="${buildingUrl(r.machine)}" alt="" data-building="${r.machine}" title="${tBuilding(r.machine)}">` : terrain ? `<img class="icon xs mt-mach" src="${buildingUrl('miner')}" alt="" data-building="miner" title="${tBuilding('miner')}">` : '';
+    const label = `<span class="mt-node">${n > 1 ? `<em>${n}×</em>` : ''}${itemImg(id, 'icon xs')}<span>${tItem(id)}</span>${mach ? `<small>←</small>${mach}` : ''}</span>`;
+    if (!r || seen.has(id) || depth >= 5) return `<li>${label}</li>`;
+    const next = new Set(seen).add(id);
+    return `<li>${label}<ul>${Object.entries(r.inputs).map(([k, m]) => this.miniTree(k as ItemId, m!, depth + 1, next)).join('')}</ul></li>`;
   }
 
   private recipeRow(r: (typeof RECIPES)[number]): string {
@@ -2188,6 +2261,7 @@ export class Hud {
       <p>${tBuildingDesc(id)}</p>
       <div class="tip-line"><span>${t('cost')}</span>${cost}</div>
       ${recipes.length ? `<div class="tip-line"><span>${t('recipes')}</span></div>${recipes.map((r) => this.recipeRow(r)).join('')}` : ''}
+      ${Object.keys(def.cost).length ? `<div class="tip-line"><span>${t('tip_chain_kit')}</span></div><ul class="mini-tree">${Object.entries(def.cost).map(([k, n]) => this.miniTree(k as ItemId, n!, 0, new Set())).join('')}</ul>` : ''}
       <button class="btn small" data-bp-building="${id}">${icon('research', 'sm')} ${t('bp_title')}</button>
       <small class="dim">${t('tip_hint')}</small>`;
   }
@@ -2202,7 +2276,8 @@ export class Hud {
       ${terrain ? `<p>${t('tip_mined', { m: tBuilding('miner') })}</p>` : made.map((r) => `<div class="tip-line"><span>${tBuilding(r.machine)}</span></div>${this.recipeRow(r)}`).join('')}
       ${usedIn ? `<div class="tip-line"><span>${t('tip_used_in')}</span><span>${usedIn}</span></div>` : ''}
       ${costOf ? `<div class="tip-line"><span>${t('tip_builds')}</span><span class="wrap">${costOf}</span></div>` : ''}
-      <button class="btn small" data-chain="${id}">${t('chains')}</button>`;
+      ${made.length ? `<div class="tip-line"><span>${t('tip_chain')}</span></div><ul class="mini-tree">${this.miniTree(id, 1, 0, new Set())}</ul>` : ''}
+      <button class="btn small" data-chain="${id}">${icon('research', 'sm')} ${t('bp_title')}</button>`;
   }
 
   /** Styled replacement for window.confirm. */
@@ -2386,6 +2461,7 @@ export class Hud {
    * (with the machines needed for the chosen rate and how many are built); buildings show their kit materials.
    */
   showBlueprint(what: { kind: 'item'; id: ItemId } | { kind: 'building'; id: BuildingId }, push = true) {
+    this.hideTip(true);
     const st = this.sim.state;
     const sim = this.sim;
     if (push) {
