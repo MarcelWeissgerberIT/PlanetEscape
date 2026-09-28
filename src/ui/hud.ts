@@ -751,7 +751,7 @@ export class Hud {
     }).join('');
     const delActive = this.tool.kind === 'delete';
     const paintTool = this.tool.kind === 'paint' ? this.tool : null;
-    const terrains: (TerrainId | 'core')[] = ['ground', 'rock', 'iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'core'];
+    const terrains: (TerrainId | 'core')[] = ['ground', 'rock', 'iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', ...(this.sim.coreHidden ? [] : ['core' as const])];
     const paletteHtml = terrains
       .map((tr) => {
         const active = paintTool?.terrain === tr;

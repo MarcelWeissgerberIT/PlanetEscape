@@ -171,9 +171,17 @@ export class Sim {
     this.creative = state.options.mode === 'playground'; // the playground is always free of cost and requirements
   }
 
+  /** The playground has no ship to build: the core stays in the save as the base power source but takes no tiles. */
+  get coreHidden(): boolean {
+    return this.state.options.mode === 'playground';
+  }
+
   rebuildGrid() {
     this.grid.fill(null);
-    for (const b of this.state.buildings) this.index(b);
+    for (const b of this.state.buildings) {
+      if (b.type === 'core' && this.coreHidden) continue;
+      this.index(b);
+    }
   }
 
   private index(b: Building) {

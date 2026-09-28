@@ -334,7 +334,9 @@ export class Renderer {
     ctx.strokeRect(0, 0, s.width * TILE, s.height * TILE);
 
     const visible: Building[] = [];
+    const hideCore = this.sim.coreHidden;
     for (const b of s.buildings) {
+      if (hideCore && b.type === 'core') continue;
       const sz = BUILDINGS[b.type].size;
       if (b.x + sz <= x0 || b.x > x1 || b.y + sz <= y0 || b.y > y1) continue;
       visible.push(b);
@@ -1455,6 +1457,7 @@ export class Renderer {
       }
       g.putImageData(img, 0, 0);
       for (const b of s.buildings) {
+        if (b.type === 'core' && this.sim.coreHidden) continue;
         const sz = BUILDINGS[b.type].size;
         g.fillStyle = b.type === 'core' ? '#fbbf24' : b.type === 'conveyor' || b.type === 'tunnel' ? '#67e8f9' : '#e2e8f0';
         g.fillRect(b.x, b.y, sz, sz);
