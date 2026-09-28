@@ -1395,6 +1395,460 @@ skybig:
   DB ${Array(96).fill('0xFF').join(', ')}
 `;
 
+
+// ---------- KDOS: a command line for the terminal, typed on a keyboard building ----------
+
+/** 4x5 font for ASCII 32..95 (rows as 4-character patterns, '#' = pixel). */
+const FONT: Record<string, string[]> = {
+  ' ': ['....', '....', '....', '....', '....'], '!': ['.#..', '.#..', '.#..', '....', '.#..'], '"': ['#.#.', '#.#.', '....', '....', '....'],
+  '#': ['#.#.', '####', '#.#.', '####', '#.#.'], '$': ['.###', '#...', '.##.', '...#', '###.'], '%': ['#..#', '...#', '..#.', '.#..', '#..#'],
+  '&': ['.#..', '#.#.', '.#..', '#.#.', '.##.'], "'": ['.#..', '.#..', '....', '....', '....'], '(': ['..#.', '.#..', '.#..', '.#..', '..#.'],
+  ')': ['.#..', '..#.', '..#.', '..#.', '.#..'], '*': ['#.#.', '.#..', '#.#.', '....', '....'], '+': ['....', '.#..', '###.', '.#..', '....'],
+  ',': ['....', '....', '....', '.#..', '#...'], '-': ['....', '....', '###.', '....', '....'], '.': ['....', '....', '....', '....', '.#..'],
+  '/': ['...#', '..#.', '.#..', '#...', '....'], '0': ['###.', '#..#', '#..#', '#..#', '###.'], '1': ['.#..', '##..', '.#..', '.#..', '###.'],
+  '2': ['###.', '...#', '###.', '#...', '###.'], '3': ['###.', '...#', '###.', '...#', '###.'], '4': ['#..#', '#..#', '###.', '...#', '...#'],
+  '5': ['###.', '#...', '###.', '...#', '###.'], '6': ['###.', '#...', '###.', '#..#', '###.'], '7': ['###.', '...#', '..#.', '.#..', '.#..'],
+  '8': ['###.', '#..#', '###.', '#..#', '###.'], '9': ['###.', '#..#', '###.', '...#', '###.'], ':': ['....', '.#..', '....', '.#..', '....'],
+  ';': ['....', '.#..', '....', '.#..', '#...'], '<': ['..#.', '.#..', '#...', '.#..', '..#.'], '=': ['....', '###.', '....', '###.', '....'],
+  '>': ['#...', '.#..', '..#.', '.#..', '#...'], '?': ['###.', '...#', '.##.', '....', '.#..'], '@': ['###.', '#.##', '#.##', '#...', '###.'],
+  A: ['###.', '#..#', '###.', '#..#', '#..#'], B: ['##..', '#.#.', '###.', '#..#', '###.'], C: ['###.', '#...', '#...', '#...', '###.'],
+  D: ['##..', '#.#.', '#.#.', '#.#.', '##..'], E: ['###.', '#...', '###.', '#...', '###.'], F: ['###.', '#...', '###.', '#...', '#...'],
+  G: ['###.', '#...', '#.##', '#..#', '###.'], H: ['#..#', '#..#', '###.', '#..#', '#..#'], I: ['###.', '.#..', '.#..', '.#..', '###.'],
+  J: ['..##', '...#', '...#', '#..#', '.##.'], K: ['#..#', '#.#.', '##..', '#.#.', '#..#'], L: ['#...', '#...', '#...', '#...', '###.'],
+  M: ['#..#', '####', '####', '#..#', '#..#'], N: ['#..#', '##.#', '#.##', '#..#', '#..#'], O: ['.##.', '#..#', '#..#', '#..#', '.##.'],
+  P: ['###.', '#..#', '###.', '#...', '#...'], Q: ['.##.', '#..#', '#..#', '#.#.', '.#.#'], R: ['###.', '#..#', '###.', '#.#.', '#..#'],
+  S: ['.###', '#...', '.##.', '...#', '###.'], T: ['###.', '.#..', '.#..', '.#..', '.#..'], U: ['#..#', '#..#', '#..#', '#..#', '.##.'],
+  V: ['#..#', '#..#', '#..#', '.##.', '.#..'], W: ['#..#', '#..#', '####', '####', '#..#'], X: ['#..#', '.##.', '.#..', '.##.', '#..#'],
+  Y: ['#..#', '.##.', '.#..', '.#..', '.#..'], Z: ['###.', '...#', '.#..', '#...', '###.'], '[': ['##..', '#...', '#...', '#...', '##..'],
+  '\\': ['#...', '.#..', '..#.', '...#', '....'], ']': ['.##.', '..#.', '..#.', '..#.', '.##.'], '^': ['.#..', '#.#.', '....', '....', '....'],
+  _: ['....', '....', '....', '....', '###.'],
+};
+function fontTable(from: number, to: number): string {
+  const bytes: string[] = [];
+  for (let c = from; c < to; c++) {
+    const rows = FONT[String.fromCharCode(c)] ?? ['####', '#..#', '#..#', '#..#', '####'];
+    for (const r of rows) bytes.push(hx(parseInt([...r].map((ch) => (ch === '#' ? '1' : '0')).join('') + '0000', 2)));
+  }
+  const lines: string[] = [];
+  for (let i = 0; i < bytes.length; i += 20) lines.push('  DB ' + bytes.slice(i, i + 20).join(', '));
+  return lines.join('\n');
+}
+const KDOS_STRINGS = [
+  'KDOS 1.0  KORA DISK OS', 'TYPE HELP FOR COMMANDS', 'HELP VER CLS DIR ECHO', 'COLOR TIME MEM RUN KORA', 'KDOS 1.0  KORA CHIP-8 HD',
+  'PONG    EXE   274', 'BRIX    EXE', 'RAY     EXE  1008', 'BLOCKS  EXE  3028', 'TRAILER EXE  1300', '5 FILE(S)',
+  'BAD COMMAND OR FILE NAME', 'FILE NOT FOUND', 'LOADING...', 'UPTIME ', ' S', '3584 BYTES TOTAL', 'HELLO. I AM KORA.', 'OK',
+  'HELP', 'VER', 'CLS', 'DIR', 'ECHO ', 'COLOR ', 'TIME', 'MEM', 'RUN ', 'KORA', 'PONG', 'BRIX', 'RAY', 'BLOCKS', 'TRAILER',
+];
+const SID = (k: number) => k * 4; // index in the string jump table
+const say = (k: number) => `  LD VA, ${SID(k)}\n  CALL puts\n  CALL newline`;
+
+const KDOS_SOURCE = `; KDOS 1.0: a command line on the KORA terminal. Needs a keyboard building wired to the terminal (LD Vx, KB),
+; a 128x64 display (8x4 matrices of 16x16) and this program in RAM. Commands: HELP VER CLS DIR ECHO COLOR TIME MEM RUN KORA.
+; RUN PONG / BRIX / RAY / BLOCKS / TRAILER loads that program from "disk" (EXEC n).
+main:
+  HIGH
+  LD V5, 14        ; text colour (plane mask)
+  LD V2, 0         ; cursor x
+  LD V3, 0         ; cursor y
+  LD V4, 0         ; line length
+  LD V8, 0         ; frames
+  LD V9, 0         ; seconds
+  LD VC, 0         ; cursor shown
+${say(0)}
+${say(1)}
+prompt:
+  LD V4, 0
+  LD V6, 75
+  CALL putc
+  LD V6, 62
+  CALL putc
+loop:
+  ADD V8, 1
+  SE V8, 60
+  JP l2
+  LD V8, 0
+  ADD V9, 1
+l2:
+  LD V0, V8
+  LD V1, 31
+  AND V0, V1
+  SNE V0, 0
+  CALL cursor
+  LD V6, KB
+  SE V6, 0
+  JP key
+  LD V0, 1
+  LD DT, V0
+w:
+  LD V0, DT
+  SE V0, 0
+  JP w
+  JP loop
+key:
+  LD VD, V6        ; cursor uses V6 for its glyph: keep the typed character
+  SE VC, 0
+  CALL cursor
+  LD V6, VD
+  SNE V6, 8
+  JP bksp
+  SNE V6, 13
+  JP enter
+  LD V0, V6
+  LD V1, 32
+  SUB V0, V1
+  SE VF, 1
+  JP loop
+  LD V0, 95
+  SUB V0, V6
+  SE VF, 1
+  JP loop
+  SNE V4, 22
+  JP loop
+  LD I, linebuf
+  ADD I, V4
+  LD V0, V6
+  LD [I], V0
+  CALL putc
+  ADD V4, 1
+  JP loop
+bksp:
+  SNE V4, 0
+  JP loop
+  ADD V4, 0xFF
+  ADD V2, 0xFB
+  LD I, linebuf
+  ADD I, V4
+  LD V0, [I]
+  LD V6, V0
+  CALL glyph
+  JP loop
+enter:
+  LD I, linebuf
+  ADD I, V4
+  LD V0, 0
+  LD [I], V0
+  CALL newline
+  SNE V4, 0
+  JP prompt
+  CALL exec
+  JP prompt
+
+; ---- console ----
+cursor:            ; toggle the underscore at the cursor
+  LD V6, 95
+  CALL glyph
+  LD V0, 1
+  XOR VC, V0
+  RET
+putc:              ; draw V6 and advance
+  CALL glyph
+  ADD V2, 5
+  LD V0, 123
+  SUB V0, V2
+  SE VF, 1
+  CALL newline
+  RET
+glyph:             ; XOR the glyph of V6 at (V2, V3) in colour V5
+  LD V0, V6
+  LD V1, 64
+  SUB V0, V1
+  SE VF, 1
+  JP glo
+  CALL mul5
+  LD I, font2
+  ADD I, V0
+  JP drawc
+glo:
+  LD V0, V6
+  LD V1, 32
+  SUB V0, V1
+  CALL mul5
+  LD I, font
+  ADD I, V0
+  JP drawc
+mul5:
+  LD V1, V0
+  ADD V0, V0
+  ADD V0, V0
+  ADD V0, V1
+  RET
+drawc:             ; sprite at I, 5 rows, once on every plane of V5
+  LD V0, V5
+  LD V1, 1
+  AND V0, V1
+  SE V0, 0
+  CALL dc1
+  LD V0, V5
+  LD V1, 2
+  AND V0, V1
+  SE V0, 0
+  CALL dc2
+  LD V0, V5
+  LD V1, 4
+  AND V0, V1
+  SE V0, 0
+  CALL dc4
+  LD V0, V5
+  LD V1, 8
+  AND V0, V1
+  SE V0, 0
+  CALL dc8
+  RET
+dc1:
+  PLANE 1
+  DRW V2, V3, 5
+  RET
+dc2:
+  PLANE 2
+  DRW V2, V3, 5
+  RET
+dc4:
+  PLANE 4
+  DRW V2, V3, 5
+  RET
+dc8:
+  PLANE 8
+  DRW V2, V3, 5
+  RET
+newline:
+  LD V2, 0
+  ADD V3, 6
+  LD V0, 54
+  SUB V0, V3
+  SE VF, 1
+  CALL scrollup
+  RET
+scrollup:
+  SCU 6
+  LD V3, 54
+  RET
+puts:              ; print string VA (id*4)
+  LD V7, 0
+pl:
+  LD V0, VA
+  CALL setstr
+  ADD I, V7
+  LD V0, [I]
+  SNE V0, 0
+  RET
+  LD V6, V0
+  CALL putc
+  ADD V7, 1
+  JP pl
+putline:           ; print the typed line from index VB
+  LD I, linebuf
+  ADD I, VB
+  LD V0, [I]
+  SNE V0, 0
+  RET
+  LD V6, V0
+  CALL putc
+  ADD VB, 1
+  JP putline
+match:             ; VF = 1 when string VA is a prefix of the typed line from index VB; V7 = index after it
+  LD V7, VB
+  LD VD, 0
+ml:
+  LD V0, VA
+  CALL setstr
+  ADD I, VD
+  LD V0, [I]
+  LD VE, V0
+  SNE VE, 0
+  JP mok
+  LD I, linebuf
+  ADD I, V7
+  LD V0, [I]
+  SNE V0, VE
+  JP mnext
+  LD VF, 0
+  RET
+mnext:
+  ADD V7, 1
+  ADD VD, 1
+  JP ml
+mok:
+  LD VF, 1
+  RET
+setstr:
+  JP V0, strtab
+strtab:
+${KDOS_STRINGS.map((_, k) => `  LD I, s${k}\n  RET`).join('\n')}
+
+; ---- commands ----
+exec:
+  LD VB, 0
+  LD VA, ${SID(19)}
+  CALL match
+  SE VF, 1
+  JP e_ver
+${say(2)}
+${say(3)}
+  RET
+e_ver:
+  LD VA, ${SID(20)}
+  CALL match
+  SE VF, 1
+  JP e_cls
+${say(4)}
+  RET
+e_cls:
+  LD VA, ${SID(21)}
+  CALL match
+  SE VF, 1
+  JP e_dir
+  PLANE 15
+  CLS
+  LD V2, 0
+  LD V3, 0
+  RET
+e_dir:
+  LD VA, ${SID(22)}
+  CALL match
+  SE VF, 1
+  JP e_echo
+${[5, 6, 7, 8, 9, 10].map(say).join('\n')}
+  RET
+e_echo:
+  LD VA, ${SID(23)}
+  CALL match
+  SE VF, 1
+  JP e_color
+  LD VB, V7
+  CALL putline
+  CALL newline
+  RET
+e_color:
+  LD VA, ${SID(24)}
+  CALL match
+  SE VF, 1
+  JP e_time
+  LD I, linebuf
+  ADD I, V7
+  LD V0, [I]
+  LD V1, 48
+  SUB V0, V1       ; '0'..'9' -> 0..9, 'A'..'F' -> 17..22
+  LD V1, V0
+  LD VD, 9
+  SUB VD, V1
+  SE VF, 1
+  ADD V0, 0xF9     ; letters: -7
+  SNE V0, 0
+  RET
+  LD V1, 15
+  SUB V1, V0
+  SE VF, 1
+  RET
+  LD V5, V0
+${say(18)}
+  RET
+e_time:
+  LD VA, ${SID(25)}
+  CALL match
+  SE VF, 1
+  JP e_mem
+  LD VA, ${SID(14)}
+  CALL puts
+  LD I, bcd
+  LD B, V9
+  LD V7, V2
+  LD V2, [I]
+  LD VD, V0
+  LD VE, V1
+  LD VB, V2
+  LD V2, V7
+  LD V6, VD
+  ADD V6, 48
+  CALL putc
+  LD V6, VE
+  ADD V6, 48
+  CALL putc
+  LD V6, VB
+  ADD V6, 48
+  CALL putc
+${say(15)}
+  RET
+e_mem:
+  LD VA, ${SID(26)}
+  CALL match
+  SE VF, 1
+  JP e_run
+${say(16)}
+  RET
+e_run:
+  LD VA, ${SID(27)}
+  CALL match
+  SE VF, 1
+  JP e_kora
+  LD VB, V7
+  LD VA, ${SID(29)}
+  CALL match
+  SNE VF, 1
+  JP run1
+  LD VA, ${SID(30)}
+  CALL match
+  SNE VF, 1
+  JP run2
+  LD VA, ${SID(31)}
+  CALL match
+  SNE VF, 1
+  JP run3
+  LD VA, ${SID(32)}
+  CALL match
+  SNE VF, 1
+  JP run4
+  LD VA, ${SID(33)}
+  CALL match
+  SNE VF, 1
+  JP run5
+${say(12)}
+  RET
+run1:
+  CALL loading
+  EXEC 1
+  RET
+run2:
+  CALL loading
+  EXEC 2
+  RET
+run3:
+  CALL loading
+  EXEC 3
+  RET
+run4:
+  CALL loading
+  EXEC 4
+  RET
+run5:
+  CALL loading
+  EXEC 5
+  RET
+loading:
+${say(13)}
+  RET
+e_kora:
+  LD VA, ${SID(28)}
+  CALL match
+  SE VF, 1
+  JP e_bad
+${say(17)}
+  RET
+e_bad:
+${say(11)}
+  RET
+
+; ---- data ----
+linebuf:
+  DB ${Array(24).fill('0').join(', ')}
+bcd:
+  DB 0, 0, 0
+${KDOS_STRINGS.map((str, k) => `s${k}:\n  DB ${[...str].map((ch) => ch.charCodeAt(0)).join(', ')}, 0`).join('\n')}
+font:
+${fontTable(32, 64)}
+font2:
+${fontTable(64, 96)}
+`;
+
 export const CHIP8_PROGRAMS: Chip8Program[] = [
   {
     id: 'pong',
@@ -1791,5 +2245,11 @@ spark:
     name: 'KORA BLOCKS HD',
     keys: 'A/D walk · W jump · S dig below · E dig ahead · Q place (keys 7 9 5 8 6 4) · 128×64 on 16×16 matrices',
     source: BLOCKS_HD_SOURCE,
+  },
+  {
+    id: 'kdos',
+    name: 'KDOS 1.0',
+    keys: 'keyboard building: HELP VER CLS DIR ECHO COLOR TIME MEM RUN KORA',
+    source: KDOS_SOURCE,
   },
 ];

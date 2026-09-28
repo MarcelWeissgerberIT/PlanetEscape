@@ -52,6 +52,7 @@ export type BuildingId =
   | 'matrix'
   | 'screen'
   | 'speaker'
+  | 'keyboard'
   | 'switch'
   | 'terminal'
   | 'oscillator'

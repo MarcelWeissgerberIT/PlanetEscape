@@ -513,3 +513,10 @@ textarea.text-input { resize: vertical; min-height: 110px; font-family: inherit;
 .mx-cell { border: none; border-radius: 3px; padding: 0; cursor: pointer; min-width: 0; }
 .mx-cell:hover { outline: 2px solid var(--accent); }
 input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--line); border-radius: 8px; background: transparent; padding: 0 2px; margin-right: 6px; vertical-align: middle; }
+
+.kbd { display: flex; flex-direction: column; gap: 4px; margin: 6px 0; }
+.kbrow { display: flex; gap: 4px; justify-content: center; }
+.kb { min-width: 26px; height: 32px; padding: 0 6px; border-radius: 7px; border: 1px solid var(--glass-line); background: rgba(255, 255, 255, 0.08); color: var(--text); font: 700 13px ui-monospace, Menlo, monospace; cursor: pointer; }
+.kb:active { background: rgba(34, 211, 238, 0.35); }
+.kb.wide { min-width: 44px; }
+.kb.space { flex: 1; max-width: 160px; }

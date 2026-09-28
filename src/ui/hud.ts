@@ -1344,6 +1344,16 @@ export class Hud {
           <p class="save-hint">${t('vid_sample_hint')}</p>
           <div class="lbl">${(() => { const n = this.sim.speakersOf(b).length; return live ? (this.cb.videoHasAudio(b) ? (n ? `🔊 ${t('vid_sound_on', { n })}` : `🔇 ${t('vid_sound_nospeaker')}`) : `🔇 ${t('vid_sound_none')}`) : `🔈 ${t('vid_sound_idle', { n })}`; })()}</div>
           <p class="save-hint">${t('vid_hint')}</p>`;
+      } else if (b.type === 'keyboard') {
+        const tm = this.sim.keyboardTerminal(b);
+        const rows = ['1234567890', 'QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM.:/'];
+        const keyBtn = (ch: string) => `<button class="kb" data-kbc="${ch.charCodeAt(0)}">${ch}</button>`;
+        body = `<div class="lbl">${tm ? `<span class="okline">● ${t('kb_linked')}</span>` : `<span class="bad">○ ${t('kb_unlinked')}</span>`}</div>
+          <div class="kbd">${rows.map((r) => `<div class="kbrow">${[...r].map(keyBtn).join('')}</div>`).join('')}
+            <div class="kbrow"><button class="kb wide" data-kbc="8">⌫</button><button class="kb space" data-kbc="32">${t('kb_space')}</button><button class="kb wide" data-kbc="13">↵</button></div>
+          </div>
+          <input class="text-input" id="kbinput" type="text" autocomplete="off" autocapitalize="characters" placeholder="${t('kb_type_here')}">
+          <p class="save-hint">${t('kb_hint')}</p>`;
       } else if (b.type === 'speaker') {
         const rx = this.sim.linkedReceiver(b);
         const vol = b.value ?? 7;
@@ -1428,9 +1438,19 @@ export class Hud {
     const map: Record<string, number> = { '1': 1, '2': 2, '3': 3, '4': 0xc, q: 4, w: 5, e: 6, r: 0xd, a: 7, s: 8, d: 9, f: 0xe, z: 0xa, y: 0xa, x: 0, c: 0xb, v: 0xf };
     const handler = (down: boolean) => (e: KeyboardEvent) => {
       const b = this.selected;
-      if (!b || b.type !== 'terminal') return;
       const tag = (e.target as HTMLElement)?.tagName;
       if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      if (b?.type === 'keyboard') {
+        // a keyboard building: typing on the real keyboard goes to the wired terminal
+        if (!down) return;
+        const code = e.key === 'Enter' ? 13 : e.key === 'Backspace' ? 8 : e.key.length === 1 ? e.key.toUpperCase().charCodeAt(0) : 0;
+        if (code && (code === 8 || code === 13 || (code >= 32 && code <= 95))) {
+          e.preventDefault();
+          if (this.sim.typeOn(b, code)) sfx.select();
+        }
+        return;
+      }
+      if (!b || b.type !== 'terminal') return;
       const k = map[e.key.toLowerCase()];
       if (k === undefined) return;
       e.preventDefault();
@@ -1459,6 +1479,19 @@ export class Hud {
     this.info.addEventListener('pointerup', up);
     this.info.addEventListener('pointercancel', up);
     this.info.addEventListener('pointerleave', up);
+    // keyboard building: the text field (phones) forwards every key
+    this.info.addEventListener('keydown', (e) => {
+      const b = this.selected;
+      const input = (e.target as HTMLElement).closest('#kbinput') as HTMLInputElement | null;
+      if (!b || b.type !== 'keyboard' || !input) return;
+      const code = e.key === 'Enter' ? 13 : e.key === 'Backspace' ? 8 : e.key.length === 1 ? e.key.toUpperCase().charCodeAt(0) : 0;
+      if (!code || !(code === 8 || code === 13 || (code >= 32 && code <= 95))) return;
+      e.preventDefault();
+      if (this.sim.typeOn(b, code)) sfx.select();
+      if (code === 13) input.value = '';
+      else if (code === 8) input.value = input.value.slice(0, -1);
+      else if (input.value.length < 22) input.value += String.fromCharCode(code);
+    });
   }
 
   /** Program editor: assembly source, built-in programs, assemble & run. */
@@ -1624,6 +1657,11 @@ export class Hud {
         this.input.setTool({ kind: 'paste', bp });
         const r = this.sim.terminalDisplayRect(b);
         this.toast(t('term_display_paste', { x: r.x, y: r.y }), 5000);
+        return;
+      }
+      if (b.type === 'keyboard' && target.dataset.kbc !== undefined) {
+        if (this.sim.typeOn(b, Number(target.dataset.kbc))) sfx.select();
+        else this.toast(`⚠ ${t('kb_unlinked')}`, 2500, 'error');
         return;
       }
       if (b.type === 'screen' && target.dataset.act === 'vid-wire') {

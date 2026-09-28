@@ -793,6 +793,12 @@ export class Renderer {
       }
       return;
     }
+    if (b.type === 'keyboard') {
+      const tm = this.sim.keyboardTerminal(b);
+      if (!tm) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, '!', '#f59e0b');
+      else if (b.working && !this.lowDetail) this.animGlow(b.x * TILE + sz - 14, b.y * TILE + 14, 4, '#34d399');
+      return;
+    }
     if (b.type === 'speaker') {
       const rx = this.sim.linkedReceiver(b);
       const level = rx ? audioLevel(rx.id) : 0;

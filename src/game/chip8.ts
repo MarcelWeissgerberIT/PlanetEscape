@@ -29,6 +29,8 @@ export class Chip8 {
   plane = 1; // planes DRW and CLS act on (Fn01)
   keys = new Uint8Array(16);
   waitingKey = -1; // register waiting for a key press (Fx0A), -1 = none
+  kbuf: number[] = []; // typed characters from a keyboard building (LD Vx, KB pops one; 0 = empty)
+  exec = 0; // set by SYS 001..00F: the program asks the machine to load built-in program n
   dirty = true;
   /** set when the program reads the delay timer or waits for a key: a good moment to show the frame (no tearing) */
   syncHint = false;
@@ -62,6 +64,8 @@ export class Chip8 {
     this.plane = 1;
     this.keys.fill(0);
     this.waitingKey = -1;
+    this.kbuf = [];
+    this.exec = 0;
     this.dirty = true;
     this.syncHint = true;
     this.halted = null;
@@ -162,6 +166,19 @@ export class Chip8 {
           this.pc = this.stack.pop()!;
         } else if (op === 0x0000) {
           this.halted = 'reached empty memory (0000)';
+        } else if ((op & 0xff0) === 0x0d0 && n) {
+          // 00Dn: scroll the screen up n pixels (XO-CHIP)
+          if (this.hires) {
+            this.fb.copyWithin(0, n * HIRES_W);
+            this.fb.fill(0, HIRES_W * HIRES_H - n * HIRES_W);
+            for (let y = 0; y < CHIP8_H; y++) for (let xx = 0; xx < CHIP8_W; xx++) this.display[y * CHIP8_W + xx] = this.fb[(y * 2) * HIRES_W + xx * 2];
+          } else {
+            this.display.copyWithin(0, n * CHIP8_W);
+            this.display.fill(0, CHIP8_W * CHIP8_H - n * CHIP8_W);
+          }
+          this.dirty = true;
+        } else if (nnn >= 1 && nnn <= 15) {
+          this.exec = nnn; // SYS 001..00F: load built-in program nnn (handled by the machine)
         }
         // other 0nnn (machine code) is ignored
         break;
@@ -307,6 +324,10 @@ export class Chip8 {
             this.waitingKey = x;
             this.syncHint = true;
             break;
+          case 0x7a: // LD Vx, KB: next typed character (0 when nothing is waiting)
+            v[x] = this.kbuf.length ? this.kbuf.shift()! : 0;
+            if (!v[x]) this.syncHint = true;
+            break;
           case 0x01: this.plane = x; break; // Fn01: select colour planes (XO-CHIP)
           case 0x15: this.dt = v[x]; break;
           case 0x18: this.st = v[x]; break;
@@ -342,7 +363,7 @@ export function disasm(op: number): string {
   const h = (v: number, w = 2) => '0x' + v.toString(16).toUpperCase().padStart(w, '0');
   const R = (r: number) => 'V' + r.toString(16).toUpperCase();
   switch (op >> 12) {
-    case 0x0: return op === 0x00e0 ? 'CLS' : op === 0x00ee ? 'RET' : op === 0x00ff ? 'HIGH' : op === 0x00fe ? 'LOW' : `SYS ${h(nnn, 3)}`;
+    case 0x0: return op === 0x00e0 ? 'CLS' : op === 0x00ee ? 'RET' : op === 0x00ff ? 'HIGH' : op === 0x00fe ? 'LOW' : (op & 0xff0) === 0x0d0 ? `SCU ${n}` : nnn >= 1 && nnn <= 15 ? `EXEC ${nnn}` : `SYS ${h(nnn, 3)}`;
     case 0x1: return `JP ${h(nnn, 3)}`;
     case 0x2: return `CALL ${h(nnn, 3)}`;
     case 0x3: return `SE ${R(x)}, ${h(nn)}`;
@@ -358,7 +379,7 @@ export function disasm(op: number): string {
     case 0xd: return `DRW ${R(x)}, ${R(y)}, ${n}`;
     case 0xe: return nn === 0x9e ? `SKP ${R(x)}` : nn === 0xa1 ? `SKNP ${R(x)}` : '?';
     case 0xf:
-      return nn === 0x01 ? `PLANE ${x}` : nn === 0x07 ? `LD ${R(x)}, DT` : nn === 0x0a ? `LD ${R(x)}, K` : nn === 0x15 ? `LD DT, ${R(x)}` : nn === 0x18 ? `LD ST, ${R(x)}` : nn === 0x1e ? `ADD I, ${R(x)}` : nn === 0x29 ? `LD F, ${R(x)}` : nn === 0x33 ? `LD B, ${R(x)}` : nn === 0x55 ? `LD [I], ${R(x)}` : nn === 0x65 ? `LD ${R(x)}, [I]` : '?';
+      return nn === 0x01 ? `PLANE ${x}` : nn === 0x7a ? `LD ${R(x)}, KB` : nn === 0x07 ? `LD ${R(x)}, DT` : nn === 0x0a ? `LD ${R(x)}, K` : nn === 0x15 ? `LD DT, ${R(x)}` : nn === 0x18 ? `LD ST, ${R(x)}` : nn === 0x1e ? `ADD I, ${R(x)}` : nn === 0x29 ? `LD F, ${R(x)}` : nn === 0x33 ? `LD B, ${R(x)}` : nn === 0x55 ? `LD [I], ${R(x)}` : nn === 0x65 ? `LD ${R(x)}, [I]` : '?';
   }
   return '?';
 }
@@ -452,6 +473,8 @@ export function assemble(source: string): AsmResult {
         break;
       case 'CLS': emit(0x00e0); break;
       case 'HIGH': emit(0x00ff); break;
+      case 'SCU': emit(0x00d0 | num(a0, it, 0xf)); break;
+      case 'EXEC': emit(num(a0, it, 0xf)); break;
       case 'LOW': emit(0x00fe); break;
       case 'RET': emit(0x00ee); break;
       case 'SYS': emit(num(a0, it, 0xfff)); break;
@@ -477,6 +500,7 @@ export function assemble(source: string): AsmResult {
         else if (A0 === '[I]') emit(0xf055 | (reg(a1, it) << 8));
         else if (A1 === 'DT') emit(0xf007 | (reg(a0, it) << 8));
         else if (A1 === 'K') emit(0xf00a | (reg(a0, it) << 8));
+        else if (A1 === 'KB') emit(0xf07a | (reg(a0, it) << 8));
         else if (A1 === '[I]') emit(0xf065 | (reg(a0, it) << 8));
         else if (isReg(a1)) emit(0x8000 | (reg(a0, it) << 8) | (reg(a1, it) << 4));
         else emit(0x6000 | (reg(a0, it) << 8) | num(a1, it, 0xff));

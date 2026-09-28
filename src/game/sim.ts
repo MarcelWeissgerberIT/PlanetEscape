@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_BASE_HZ, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, SCREEN_BASE_HZ, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -736,6 +736,12 @@ export class Sim {
           b.status = rx ? 'ok' : 'unpaired';
           break;
         }
+        case 'keyboard': {
+          const tm = this.keyboardTerminal(b);
+          b.working = !!tm?.working;
+          b.status = tm ? 'ok' : 'unpaired';
+          break;
+        }
         case 'adder':
         case 'subtractor':
         case 'multiplier':
@@ -950,6 +956,37 @@ export class Sim {
   traceBytes(cpu: Chip8): number[] {
     const op = (cpu.mem[cpu.pc] << 8) | cpu.mem[cpu.pc + 1];
     return [cpu.pc >> 8, cpu.pc & 0xff, op >> 8, op & 0xff, cpu.i >> 8, cpu.i & 0xff, ...Array.from(cpu.v)];
+  }
+
+  /** The terminal a keyboard is wired to: it touches the terminal or a part of its board. */
+  keyboardTerminal(kb: Building): Building | null {
+    const st = this.state;
+    const around = new Set<number>();
+    for (let y = kb.y - 1; y <= kb.y + 2; y++)
+      for (let x = kb.x - 1; x <= kb.x + 2; x++) {
+        if ((x < kb.x || x > kb.x + 1) && (y < kb.y || y > kb.y + 1)) continue; // corners are not adjacent
+        if (x >= 0 && y >= 0 && x < st.width && y < st.height) around.add(y * st.width + x);
+      }
+    for (const t of st.buildings) {
+      if (t.type !== 'terminal') continue;
+      for (const idx of around) {
+        const p = this.at(idx % st.width, Math.floor(idx / st.width));
+        if (p === t) return t;
+        if (p && this.board(t).tiles.has(idx)) return t;
+      }
+    }
+    return null;
+  }
+
+  /** Type a character (ASCII 32..95, 8 = backspace, 13 = enter) on a keyboard; it lands in the wired terminal's buffer. */
+  typeOn(kb: Building, code: number): boolean {
+    const t = this.keyboardTerminal(kb);
+    const cpu = t && this.cpu(t);
+    if (!cpu) return false;
+    if (cpu.kbuf.length >= 64) return false;
+    cpu.kbuf.push(code & 0xff);
+    if (cpu.waitingKey === -2) cpu.waitingKey = -1; // wakes a parked program
+    return true;
   }
 
   /** Execute exactly one instruction (trace mode, paused). */
@@ -1618,6 +1655,13 @@ export class Sim {
     if (n > 0) {
       this.pushTrace(b, cpu); // register lamps above the terminal follow every tick (a real CPU run to watch)
       this.syncCells(b, cpu, true);
+    }
+    if (cpu.exec) {
+      // EXEC n: the running program (KDOS) asks for another built-in program; the terminal loads it like the editor would
+      const id = EXEC_PROGRAMS[cpu.exec - 1];
+      const prog = CHIP8_PROGRAMS.find((p) => p.id === id);
+      cpu.exec = 0;
+      if (prog) this.setProgram(b, prog.source);
     } // register lamps above the terminal follow every tick (a real CPU run to watch)
   }
 

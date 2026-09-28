@@ -257,6 +257,41 @@ export function buildTrailer(): GameState {
   );
 }
 
+// ---------- KDOS: a mini PC with keyboard and command line ----------
+
+export function buildKdos(): GameState {
+  const c = ctx(80089, 120, 96);
+  const { st, sim, core, place } = c;
+  const tx = core.x - 6, ty = core.y - 14;
+  const term = terminalWithDisplay(c, tx, ty, true);
+  for (const m of st.buildings) if (m.type === 'matrix') m.value = 16; // 128x64 text screen
+  place('oscillator', tx, ty - 1).turbo = 3;
+  place('oscillator', tx + 1, ty - 1).clock = 3;
+  const RAM_X = tx + 12, RAM_Y = ty - 10, RAM_W = 32, RAM_H = 60;
+  for (let x = tx + 2; x < RAM_X; x++) place('bus', x, ty - 1);
+  for (let y = 0; y < RAM_H; y++) for (let x = 0; x < RAM_W; x++) place('register', RAM_X + x, RAM_Y + y, 1);
+  place('keyboard', tx, ty + 2); // touches the chip's bottom edge
+  keyAt(c, tx - 1, ty, 1);
+  keyAt(c, tx - 1, ty + 1, 4);
+  keyAt(c, tx + 2, ty, 0xc);
+  keyAt(c, tx + 2, ty + 1, 0xd);
+  place('solar', tx - 4, ty + 5);
+  place('solar', tx - 3, ty + 5);
+  sim.setProgram(term, CHIP8_PROGRAMS.find((p) => p.id === 'kdos')!.source);
+  term.run = true;
+  c.tick(1);
+  sim.resetTerminal(term);
+  return finish(
+    c,
+    {
+      title: 'KDOS · Mini-PC',
+      de: 'Ein Mini-PC aus Bauteilen: Der Chip führt KDOS aus, das KORA Disk Operating System, ein Assembler-Programm mit Kommandozeile. Unter dem Chip sitzt die Tastatur: Tippe sie an, dann geht jeder Tastendruck deiner echten Tastatur an den Rechner (am Handy die Bildschirmtasten oder das Textfeld). Der Bildschirm sind 32 LED-Matrizen à 16×16, 128×64 Pixel, Text in einem 4×5-Zeichensatz, 25 Zeichen pro Zeile, 10 Zeilen mit Scrolling.\n\nBefehle: HELP, VER, CLS, DIR, ECHO text, COLOR 1…F (Textfarbe als Ebenenmaske), TIME (Sekunden seit Start), MEM, KORA. Mit RUN PONG, RUN BRIX, RUN RAY, RUN BLOCKS oder RUN TRAILER lädt der Rechner das Programm von der „Platte“ (Befehl EXEC im Assembler) und startet es; die vier Randschalter und die Tasten 1/Q und 4/R sind dann die Spieltasten. Zurück zu KDOS: Chip antippen, „Programm“, KDOS wählen.\n\nRechts liegt KDOS im RAM (Code, Zeichensatz, Strings, Zeilenpuffer), die orange Zelle ist der Programmzähler. Im Programm-Editor kannst du eigene Befehle ergänzen.',
+      en: 'A mini PC built from parts: the chip runs KDOS, the KORA Disk Operating System, an assembly program with a command line. Below the chip sits the keyboard: tap it and every key you press on your real keyboard goes to the computer (on phones use the on-screen keys or the text field). The screen is 32 LED matrices of 16×16, 128×64 pixels, text in a 4×5 font, 25 characters per line, 10 lines with scrolling.\n\nCommands: HELP, VER, CLS, DIR, ECHO text, COLOR 1…F (text colour as a plane mask), TIME (seconds since boot), MEM, KORA. RUN PONG, RUN BRIX, RUN RAY, RUN BLOCKS or RUN TRAILER loads that program from “disk” (the EXEC instruction) and starts it; the four rim switches and keys 1/Q and 4/R are the game keys then. Back to KDOS: tap the chip, “Program”, pick KDOS.\n\nOn the right KDOS sits in RAM (code, font, strings, line buffer), the orange cell is the program counter. Add your own commands in the program editor.',
+    },
+    { x: tx + 8, y: ty + 3, zoom: 1 },
+  );
+}
+
 // ---------- Video wall: a receiver and 16x8 LED matrices ----------
 
 export function buildVideoWall(): GameState {
@@ -544,6 +579,7 @@ export function buildAdder(): GameState {
 export const EXAMPLES: Example[] = [
   { id: 'pong', title: 'KORA Terminal · PONG', icon: 'terminal', de: 'CPU aus Bauteilen, RAM aus Speicherzellen, Bausteinspieler drücken die Tasten.', en: 'CPU from parts, RAM from registers, block players press the keys.', build: buildPongBoard },
   { id: 'pongmini', title: 'PONG · LED-Matrix', icon: 'matrix', de: 'Dasselbe Spiel auf 32 LED-Matrizen statt 2048 Lampen.', en: 'The same game on 32 LED matrices instead of 2048 lamps.', build: buildPongMatrix },
+  { id: 'kdos', title: 'KDOS · Mini-PC', icon: 'keyboard', de: 'Kommandozeile mit Tastatur: HELP, DIR, RUN PONG … alles in Assembler.', en: 'A command line with keyboard: HELP, DIR, RUN PONG … all in assembly.', build: buildKdos },
   { id: 'trailer', title: 'KORA TRAILER', icon: 'terminal', de: '30-Sekunden-Trailer, vom Chip in Assembler gerechnet, auf 32 LED-Matrizen.', en: 'A 30 second trailer computed by the chip in assembly, on 32 LED matrices.', build: buildTrailer },
   { id: 'video', title: 'Videowand · Video wall', icon: 'screen', de: 'YouTube-Tab, Kamera oder Datei auf 128 LED-Matrizen, mit Ton und Abtast-Band.', en: 'A YouTube tab, camera or file on 128 LED matrices, with sound and a sampling belt.', build: buildVideoWall },
   { id: 'ray', title: 'KORA RAY', icon: 'oscillator', de: 'Doom-artiges Ego-Labyrinth mit 60 kHz Turbo-Takt.', en: 'Doom-style first-person maze on a 60 kHz turbo clock.', build: buildRay },
