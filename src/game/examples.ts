@@ -4,6 +4,7 @@ import { CHIP8_PROGRAMS } from './chip8programs';
 import { Sim } from './sim';
 import type { Building, Dir, GameOptions, GameState } from './types';
 import { newGame } from './world';
+import { SCREEN_BUDGET_MAX } from './data';
 
 export interface Example {
   id: string;
@@ -236,11 +237,29 @@ export function buildVideoWall(): GameState {
   const rx = place('screen', x0, y0);
   rx.value = 2; // 16x8 matrices of 16x16 = 256x128 px
   rx.mode = 'scan';
+  rx.budget = SCREEN_BUDGET_MAX;
+  rx.recipe = 'copper_wire';
   for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) place('matrix', x0 + 2 + x, y0 + y).value = 16;
+  // the wall's wiring: 8 bus lanes in the column between receiver and wall, 8 registers as frame buffer (32768 px)
+  // above them, one turbo oscillator (6 kHz) touching the speakers
+  for (let y = 0; y < 8; y++) place('bus', x0 + 1, y0 + y);
+  for (let x = 0; x < 8; x++) place('register', x0 + 1 + x, y0 - 1, 1);
   place('speaker', x0, y0 + 1);
-  place('speaker', x0 + 1, y0 + 1);
-  place('solar', x0, y0 + 3);
-  place('solar', x0 + 1, y0 + 3);
+  place('speaker', x0, y0 + 2);
+  place('oscillator', x0, y0 + 3).turbo = 3;
+  place('solar', x0, y0 + 4);
+  place('solar', x0, y0 + 5);
+  place('solar', x0, y0 + 6);
+  // phosphor supply: three miners on copper ore feed the receiver from above
+  for (let i = 0; i < 3; i++) {
+    c.st.terrain[(y0 - 3) * c.st.width + x0 - 6 + i] = 'copper_ore';
+    c.st.ore[(y0 - 3) * c.st.width + x0 - 6 + i] = 400;
+  }
+  for (let i = 0; i < 3; i++) place('miner', x0 - 6 + i, y0 - 3, 1);
+  for (let x = x0 - 3; x < x0; x++) c.belt(x, y0 - 3, 1);
+  c.belt(x0, y0 - 3, 2);
+  c.belt(x0, y0 - 2, 2);
+  c.belt(x0, y0 - 1, 2);
   // the sampling made visible: colour samples leave the receiver to the left, run down a belt and through a row of
   // pass lamps (the video as a stream of parts), then into a depot
   c.belt(x0 - 1, y0, 2);
@@ -266,8 +285,8 @@ export function buildVideoWall(): GameState {
     c,
     {
       title: 'Videowand · Video wall',
-      de: 'Ein Video-Empfänger und 128 LED-Matrizen mit je 16×16 LEDs: 256×128 Pixel in 16 Millionen Farben. Tippe den Empfänger links an und wähle die Quelle:\n• „Tab / Bildschirm teilen“: Öffne YouTube in einem zweiten Tab, starte das Video, teile diesen Tab, und es läuft auf der Wand (Desktop-Browser).\n• „Kamera“: Du selbst, in LED.\n• „Videodatei“: eine Datei von diesem Gerät.\nTipp für ein scharfes Bild: YouTube vor dem Teilen in den Vollbildmodus (Taste F) schalten und im Panel den Zuschnitt nutzen. Die Wand lässt sich bis 32×16 Matrizen (512×256 px) vergrößern: im Panel die Größe wählen und Matrizen ergänzen (Blaupausen → Videowand). Jede Matrix kannst du auch einzeln antippen und bemalen.\n\nTon: Die zwei Lautsprecher unter dem Empfänger spielen den Ton, wenn du beim Teilen „Tab-Audio teilen“ anhakst (Lautstärke am Lautsprecher). Abtastung: Links vom Empfänger läuft ein Band. Der Empfänger legt viermal pro Sekunde ein Teil in der Farbe des gerade abgetasteten Pixels darauf (rote Markierung wandert über die Wand), die Durchlass-Lampen unten flackern in den Videofarben, das Depot sammelt alles. Im Panel kannst du auf Mittelwert oder Bildmitte umstellen. Der Stream bleibt auf deinem Gerät.',
-      en: 'One video receiver and 128 LED matrices of 16×16 LEDs each: 256×128 pixels in 16 million colours. Tap the receiver on the left and pick the source:\n• “Share tab / screen”: open YouTube in a second tab, start the video, share that tab, and it plays on the wall (desktop browsers).\n• “Camera”: you, in LEDs.\n• “Video file”: a file from this device.\nFor a sharp picture put YouTube into full screen (key F) before sharing and use the crop setting in the panel. The wall grows to 32×16 matrices (512×256 px): pick the size in the panel and add matrices (blueprints → video wall). Every matrix can also be tapped and painted by hand.\n\nSound: the two speakers under the receiver play the audio when you tick “Share tab audio” while sharing (volume on the speaker). Sampling: a belt leaves the receiver to the left. Four times a second it drops an item in the colour of the pixel being sampled (the red marker walks across the wall), the pass lamps at the bottom flicker in the video’s colours, the depot collects everything. Switch to Average or Centre in the panel. The stream stays on your device.',
+      de: 'Ein Video-Empfänger und 128 LED-Matrizen mit je 16×16 LEDs: 256×128 Pixel in 16 Millionen Farben. Tippe den Empfänger links an und wähle die Quelle:\n• „Tab / Bildschirm teilen“: Öffne YouTube in einem zweiten Tab, starte das Video, teile diesen Tab, und es läuft auf der Wand (Desktop-Browser).\n• „Kamera“: Du selbst, in LED.\n• „Videodatei“: eine Datei von diesem Gerät.\nTipp für ein scharfes Bild: YouTube vor dem Teilen in den Vollbildmodus (Taste F) schalten und im Panel den Zuschnitt nutzen. Die Wand lässt sich bis 32×16 Matrizen (512×256 px) vergrößern: im Panel die Größe wählen und Matrizen ergänzen (Blaupausen → Videowand). Jede Matrix kannst du auch einzeln antippen und bemalen.\n\nTon: Die zwei Lautsprecher unter dem Empfänger spielen den Ton, wenn du beim Teilen „Tab-Audio teilen“ anhakst (Lautstärke am Lautsprecher). Abtastung: Links vom Empfänger läuft ein Band. Der Empfänger legt viermal pro Sekunde ein Teil in der Farbe des gerade abgetasteten Pixels darauf (rote Markierung wandert über die Wand), die Durchlass-Lampen unten flackern in den Videofarben, das Depot sammelt alles. Im Panel kannst du auf Mittelwert oder Bildmitte umstellen. Der Stream bleibt auf deinem Gerät.\n\nDie Wand ist eine Maschine: Der Empfänger verbraucht Leuchtstoff, jedes gelieferte Teil ist eine Million Pixel. Drei Bohrer auf Kupfererz oben links liefern nach. Die acht Leiterbahnen zwischen Empfänger und Wand sind die Bahnen, der Turbo-Oszillator der Takt: Bahnen × Takt × 64 ist die Bandbreite in Pixeln pro Sekunde, zu wenig davon und die Wand baut das Bild sichtbar zeilenweise auf. Die acht Speicherzellen darüber sind der Bildspeicher, je 4096 Pixel; fehlen welche, bleiben die unteren Zeilen dunkel. Nur Matrizen, die an dieser Platine hängen, leuchten. Alles steht im Panel des Empfängers.',
+      en: 'One video receiver and 128 LED matrices of 16×16 LEDs each: 256×128 pixels in 16 million colours. Tap the receiver on the left and pick the source:\n• “Share tab / screen”: open YouTube in a second tab, start the video, share that tab, and it plays on the wall (desktop browsers).\n• “Camera”: you, in LEDs.\n• “Video file”: a file from this device.\nFor a sharp picture put YouTube into full screen (key F) before sharing and use the crop setting in the panel. The wall grows to 32×16 matrices (512×256 px): pick the size in the panel and add matrices (blueprints → video wall). Every matrix can also be tapped and painted by hand.\n\nSound: the two speakers under the receiver play the audio when you tick “Share tab audio” while sharing (volume on the speaker). Sampling: a belt leaves the receiver to the left. Four times a second it drops an item in the colour of the pixel being sampled (the red marker walks across the wall), the pass lamps at the bottom flicker in the video’s colours, the depot collects everything. Switch to Average or Centre in the panel. The stream stays on your device.\n\nThe wall is a machine: the receiver burns phosphor, every delivered item is a million pixels. Three miners on copper ore top left keep it supplied. The eight bus traces between receiver and wall are the lanes, the turbo oscillator the clock: lanes × clock × 64 is the bandwidth in pixels per second; too little and the wall visibly builds the picture row by row. The eight registers above are the frame buffer, 4096 pixels each; with fewer, the bottom rows stay dark. Only matrices wired to this board light up. The receiver’s panel shows all of it.',
     },
     { x: x0 + 9, y: y0 + 4, zoom: 0.9 },
   );

@@ -80,7 +80,7 @@ for (const ex of EXAMPLES) {
   const m = st.buildings.find((b) => b.type === 'matrix' && b.x === r.x + 15 && b.y === r.y + 7)!;
   const v = m.px![255];
   console.log('video wall: last matrix pixel', '#' + v.toString(16).padStart(6, '0'), 'receiver', rx.status);
-  if (v !== ((255 << 16) | (255 << 8) | 200) || rx.status !== 'ok') throw new Error('frame not applied: ' + v.toString(16));
+  if (v !== 0xffe199 || rx.status !== 'ok') throw new Error('frame not applied: ' + v.toString(16)); // white-yellow pixel tinted by copper wire phosphor
   // speakers wired, colour samples leave on the belt
   const spk = sim.speakersOf(rx);
   for (let i = 0; i < 30; i++) { sim.pushFrame(rx, frame, r.w, r.h); sim.tick(1 / 30); }
@@ -88,5 +88,24 @@ for (const ex of EXAMPLES) {
   const onBelts = st.buildings.filter((b) => b.type === 'conveyor').reduce((a, b) => a + (b.items?.length ?? 0), 0);
   console.log('speakers', spk.length, 'gain', sim.receiverGain(rx), 'samples on belts after 1 s', onBelts, 'scan pos', JSON.stringify(sim.scanPos(rx)));
   if (spk.length !== 2 || sim.receiverGain(rx) !== 0.7 || onBelts < 2 || !belt) throw new Error('sampling or speakers broken');
+  const stats = sim.screenStats(rx);
+  console.log('wall stats: lanes', stats.lanes, 'hz', stats.hz, 'cap', Math.round(stats.capPx), 'need', Math.round(stats.needPx), 'buffer rows', stats.rows, '/', stats.h, 'budget', stats.budget);
+  if (stats.lanes !== 8 || stats.hz !== 6100 || stats.capPx < stats.needPx || stats.rows !== 128) throw new Error('wall wiring wrong');
+  if (stats.budget >= 40e6) throw new Error('phosphor not consumed');
+  // supply arrives: the miners' ore reaches the receiver and refills phosphor
+  const before = rx.budget!;
+  rx.budget = 1;
+  for (let i = 0; i < 30 * 40; i++) sim.tick(1 / 30);
+  console.log('phosphor after 40 s of supply:', rx.budget, 'tint item', rx.recipe, '(was', before, ')');
+  if ((rx.budget ?? 0) < 2e6 || rx.recipe !== 'copper_ore') throw new Error('supply chain broken');
+  // an unwired matrix stays dark: cut the lanes and push a frame
+  const lanes = st.buildings.filter((b) => b.type === 'bus');
+  for (const l of lanes) sim.remove(l);
+  for (const m of st.buildings) if (m.type === 'matrix') { m.px = undefined; }
+  rx.budget = 40e6;
+  for (let i = 0; i < 5; i++) { sim.pushFrame(rx, frame, r.w, r.h); sim.tick(1 / 30); }
+  const litCut = st.buildings.filter((b) => b.type === 'matrix').reduce((a, m) => a + (m.px ?? []).filter((v) => v).length, 0);
+  console.log('lit pixels with the lanes cut:', litCut);
+  if (litCut !== 0) throw new Error('unwired matrices still lit');
 }
 console.log('examples-check OK');

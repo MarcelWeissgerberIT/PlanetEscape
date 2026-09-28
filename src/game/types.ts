@@ -121,6 +121,7 @@ export interface Building {
   store?: Partial<Record<ItemId, number>>;
   // generator fuel buffer
   fuelSeconds?: number;
+  budget?: number; // video receiver: pixel updates it may still draw (items delivered = phosphor)
   // logic modules: mixer side buffers, valve threshold, mixer ratio index, valve open state
   bufL?: ItemId[];
   bufR?: ItemId[];

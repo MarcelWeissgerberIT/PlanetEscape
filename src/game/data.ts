@@ -216,6 +216,12 @@ export const MATRIX_SIZE = 8; // default pixels per side of an LED matrix
 export const MATRIX_SIZES = [4, 8, 16, 32, 64]; // selectable LEDs per side
 export const MATRIX_SAVE_MAX = 16; // pictures of larger matrices are live only (a 64x64 wall would not fit the browser store)
 export const SCREEN_MAX_PX = 1024; // widest frame a receiver samples
+export const SCREEN_PX_PER_ITEM = 1_000_000; // one delivered item = a million pixel updates
+export const SCREEN_BUDGET_MAX = 40 * SCREEN_PX_PER_ITEM;
+export const SCREEN_BASE_HZ = 100; // the receiver's own little clock; oscillators on its board add to it
+export const SCREEN_PX_PER_LANE_TICK = 64; // pixels one bus lane into the wall carries per clock tick
+export const SCREEN_PX_PER_CELL = 4096; // frame buffer a register on the receiver's board provides
+export const SCREEN_TINT = 0.35; // how much the delivered item's colour tints the picture
 export const SCREEN_SAMPLE_RATE = 4; // colour samples per second the receiver puts on the belt to its left
 export const SCREEN_SCAN_STEP = 97; // pixels skipped between two scan samples (prime: walks the whole frame)
 /** Pixels per side of a matrix: 8x8 by default. */

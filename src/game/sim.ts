@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_MAX_PX, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_BASE_HZ, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -551,6 +551,13 @@ export class Sim {
           return true;
         }
         if (b.type === 'bus') return false;
+        if (b.type === 'screen') {
+          // phosphor: every delivered item buys a million pixel updates; its colour tints the picture
+          if ((b.budget ?? 0) >= SCREEN_BUDGET_MAX) return false;
+          b.budget = Math.min(SCREEN_BUDGET_MAX, (b.budget ?? 0) + SCREEN_PX_PER_ITEM);
+          b.recipe = item;
+          return true;
+        }
         if (b.type === 'terminal') {
           // the computer is assembled from delivered parts: circuits become memory banks, quartz/glass become oscillator crystals
           if (item === 'circuit' && (b.ram ?? 0) < TERMINAL_RAM_BANKS) {
@@ -1159,7 +1166,7 @@ export class Sim {
     return { x: b.x + SCREEN_REGION.dx, y: b.y, w: SCREEN_REGION.w * s * k, h: SCREEN_REGION.h * s * k };
   }
 
-  private frames = new Map<number, { rgba: Uint8ClampedArray; w: number; h: number; scan: number }>(); // last frame per receiver
+  private frames = new Map<number, { rgba: Uint8ClampedArray; w: number; h: number; scan: number; row: number; t: number }>(); // last frame per receiver
   private speakerLinks = new Map<number, Building>(); // speaker id -> receiver
 
   /** Speakers wired to a receiver: touching it or reachable through bus traces (and other speakers). */
@@ -1199,10 +1206,95 @@ export class Sim {
     return g;
   }
 
+  private screenBoards = new Map<number, { key: string; tiles: Set<number>; lanes: number; hz: number; bufferPx: number; cells: number; quartz: number; glass: number }>();
+
+  /**
+   * Everything wired to a receiver: matrices, bus traces, speakers, registers and oscillators reachable from it.
+   * Lanes = bus/conductor tiles in the column left of the wall, clock = the receiver's own 100 Hz plus its
+   * oscillators, frame buffer = registers x 4096 px. Only wired matrices show the picture.
+   */
+  screenBoard(b: Building) {
+    const st = this.state;
+    const key = `${st.buildings.length}:${st.nextId}`;
+    const cached = this.screenBoards.get(b.id);
+    if (cached && cached.key === key) return cached;
+    const conduct = new Set<BuildingId>(['bus', 'speaker', 'register', 'oscillator', 'matrix']);
+    const tiles = new Set<number>();
+    const seen = new Set<number>([b.y * st.width + b.x]);
+    const queue = [b.y * st.width + b.x];
+    let cells = 0, quartz = 0, glass = 0;
+    while (queue.length && seen.size < 4096) {
+      const idx = queue.shift()!;
+      const x = idx % st.width, y = Math.floor(idx / st.width);
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DX[d], ny = y + DY[d];
+        if (nx < 0 || ny < 0 || nx >= st.width || ny >= st.height) continue;
+        const ni = ny * st.width + nx;
+        if (seen.has(ni)) continue;
+        seen.add(ni);
+        const p = this.at(nx, ny);
+        if (!p || !conduct.has(p.type)) continue;
+        tiles.add(ni);
+        queue.push(ni);
+        if (p.type === 'register') cells++;
+        else if (p.type === 'oscillator') {
+          quartz += p.clock ?? 0;
+          glass += p.turbo ?? 0;
+        }
+      }
+    }
+    const r = this.screenRect(b);
+    const first = this.at(r.x, r.y);
+    const dens = first?.type === 'matrix' ? matrixSize(first) : MATRIX_SIZE;
+    let lanes = 0;
+    for (let y = r.y; y < r.y + r.h / dens; y++) {
+      const t = this.at(r.x - 1, y);
+      if (t && t.type !== 'matrix' && (tiles.has(y * st.width + r.x - 1) || t === b)) lanes++;
+    }
+    const hz = SCREEN_BASE_HZ + quartz * CRYSTAL_HZ.quartz + glass * CRYSTAL_HZ.glass;
+    const board = { key, tiles, lanes, hz, bufferPx: cells * SCREEN_PX_PER_CELL, cells, quartz, glass };
+    this.screenBoards.set(b.id, board);
+    return board;
+  }
+
+  /** Numbers for the panel: what the wall needs per second and what lanes, clock, memory and phosphor give. */
+  screenStats(b: Building) {
+    const board = this.screenBoard(b);
+    const r = this.screenRect(b);
+    const fps = 1000 / Math.max(40, (r.w * r.h) / 8000);
+    const needPx = r.w * r.h * fps;
+    const capPx = board.lanes * board.hz * SCREEN_PX_PER_LANE_TICK;
+    const rows = Math.min(r.h, Math.floor(board.bufferPx / r.w));
+    return { ...board, w: r.w, h: r.h, fps, needPx, capPx, rows, budget: b.budget ?? 0, budgetMax: SCREEN_BUDGET_MAX };
+  }
+
   private tickScreen(b: Building, dt: number) {
     b.working = this.state.time - (b.progress ?? -10) < 1; // a frame arrived within the last second
-    b.status = b.working ? 'ok' : 'idle';
+    b.status = b.working ? ((b.budget ?? 0) > 0 ? 'ok' : 'starved') : 'idle';
+    b.missing = b.status === 'starved' ? ['copper_wire'] : undefined;
     for (const s of this.speakersOf(b)) this.speakerLinks.set(s.id, b);
+    // out of phosphor: the picture fades, one step per second
+    if (b.working && !(b.budget ?? 0)) {
+      b.fuelSeconds = (b.fuelSeconds ?? 0) + dt;
+      if (b.fuelSeconds >= 1) {
+        b.fuelSeconds = 0;
+        const r = this.screenRect(b);
+        for (let my = 0; my < r.h / 4; my++)
+          for (let mx = 0; mx < r.w / 4; mx++) {
+            const m = this.at(r.x + mx, r.y + my);
+            if (m?.type !== 'matrix' || !m.px) continue;
+            let any = false;
+            for (let i = 0; i < m.px.length; i++) {
+              const v = m.px[i];
+              if (!v) continue;
+              const nr = ((v >> 16) * 0.8) | 0, ng = (((v >> 8) & 255) * 0.8) | 0, nb = ((v & 255) * 0.8) | 0;
+              m.px[i] = nr + ng + nb < 30 ? 0 : (nr << 16) | (ng << 8) | nb;
+              any = true;
+            }
+            if (any) m.acc = (m.acc ?? 0) + 1;
+          }
+      }
+    }
     // sample output: a few items per second in the colour of the picture, onto the belt to the left
     const mode = b.mode ?? 'scan';
     const f = this.frames.get(b.id);
@@ -1215,6 +1307,7 @@ export class Sim {
   }
 
   private sampleOf(b: Building, f: { rgba: Uint8ClampedArray; w: number; h: number; scan: number }, mode: 'avg' | 'centre' | 'scan'): ItemId | null {
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     const { rgba, w, h } = f;
     let r = 0, g = 0, bl = 0;
     if (mode === 'avg') {
@@ -1252,7 +1345,25 @@ export class Sim {
     if (w !== r.w || h !== r.h) return;
     b.progress = this.state.time;
     const prev = this.frames.get(b.id);
-    this.frames.set(b.id, { rgba, w, h, scan: prev && prev.w === w && prev.h === h ? prev.scan : 0 });
+    const frame = { rgba, w, h, scan: prev && prev.w === w && prev.h === h ? prev.scan : 0, row: prev && prev.w === w && prev.h === h ? prev.row : 0, t: this.state.time };
+    this.frames.set(b.id, frame);
+    if (!(b.budget ?? 0)) return; // no phosphor: nothing is drawn (the picture fades in tickScreen)
+    const st = this.state;
+    const board = this.screenBoard(b);
+    // throughput: lanes x clock x 64 px per tick, over the time since the last frame; memory limits the rows
+    const dtF = Math.max(0.02, Math.min(0.5, this.state.time - (prev?.t ?? this.state.time - 0.05)));
+    const capRows = board.lanes ? Math.max(1, Math.floor((board.lanes * board.hz * SCREEN_PX_PER_LANE_TICK * dtF) / w)) : 0;
+    const memRows = Math.min(h, Math.floor(board.bufferPx / w));
+    if (!capRows || !memRows) return;
+    const rowFrom = capRows >= memRows ? 0 : frame.row % memRows;
+    const rowTo = capRows >= memRows ? memRows : Math.min(memRows, rowFrom + capRows);
+    frame.row = rowTo >= memRows ? 0 : rowTo;
+    b.budget = Math.max(0, (b.budget ?? 0) - (rowTo - rowFrom) * w);
+    // tint by the delivered item's colour
+    const tintItem = (b.recipe as ItemId | null) ?? 'copper_wire';
+    const tv = itemRgb(tintItem);
+    const tmax = Math.max(1, tv >> 16, (tv >> 8) & 255, tv & 255);
+    const tr = 1 - SCREEN_TINT + (SCREEN_TINT * (tv >> 16)) / tmax, tg = 1 - SCREEN_TINT + (SCREEN_TINT * ((tv >> 8) & 255)) / tmax, tb = 1 - SCREEN_TINT + (SCREEN_TINT * (tv & 255)) / tmax;
     const tilesW = w / 4, tilesH = h / 4; // upper bound (4 px tiles); denser matrices cover several of these
     for (let my = 0; my < tilesH; my++)
       for (let mx = 0; mx < tilesW; mx++) {
@@ -1260,11 +1371,14 @@ export class Sim {
         if (m?.type !== 'matrix') continue;
         const s = matrixSize(m);
         if (mx * s >= w || my * s >= h) continue;
+        if (!board.tiles.has((r.y + my) * st.width + r.x + mx)) continue; // not wired to the receiver: stays dark
+        const y0 = my * s, y1 = y0 + s;
+        if (y1 <= rowFrom || y0 >= rowTo) continue;
         const px = m.px && m.px.length === s * s ? m.px : new Array<number>(s * s).fill(0);
-        for (let yy = 0; yy < s; yy++)
+        for (let yy = Math.max(0, rowFrom - y0); yy < Math.min(s, rowTo - y0); yy++)
           for (let xx = 0; xx < s; xx++) {
             const i = ((my * s + yy) * w + mx * s + xx) * 4;
-            const rr = rgba[i], gg = rgba[i + 1], bb = rgba[i + 2];
+            const rr = (rgba[i] * tr) | 0, gg = (rgba[i + 1] * tg) | 0, bb = (rgba[i + 2] * tb) | 0;
             px[yy * s + xx] = rr + gg + bb < 45 ? 0 : (rr << 16) | (gg << 8) | bb;
           }
         m.px = px;

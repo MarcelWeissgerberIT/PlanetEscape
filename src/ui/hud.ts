@@ -953,8 +953,10 @@ export class Hud {
     const board: Blueprint = { name: t('preset_ttt'), w: 3, h: 5, items: [...ttt.items.map((i) => ({ ...i, dy: i.dy + 2 })), ...[0, 1, 2].map((x) => ({ type: 'switch' as const, dx: x, dy: 1, dir: 2 as const, recipe: null, open: false })), ...[0, 1, 2].map((x) => ({ type: 'conveyor' as const, dx: x, dy: 0, dir: 2 as const, recipe: null }))] };
     const matrix: Blueprint = { name: t('preset_matrix'), w: 8, h: 4, items: [] };
     for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) matrix.items.push({ type: 'matrix', dx: x, dy: y, dir: 0, recipe: null });
-    const wall: Blueprint = { name: t('preset_wall'), w: 18, h: 8, items: [{ type: 'screen', dx: 0, dy: 0, dir: 0, recipe: null }, { type: 'speaker', dx: 0, dy: 1, dir: 0, recipe: null }, { type: 'speaker', dx: 1, dy: 1, dir: 0, recipe: null }] };
+    const wall: Blueprint = { name: t('preset_wall'), w: 18, h: 9, items: [{ type: 'screen', dx: 0, dy: 0, dir: 0, recipe: null }, { type: 'speaker', dx: 0, dy: 1, dir: 0, recipe: null }, { type: 'speaker', dx: 0, dy: 2, dir: 0, recipe: null }, { type: 'oscillator', dx: 0, dy: 3, dir: 0, recipe: null }] };
+    for (let y = 0; y < 8; y++) wall.items.push({ type: 'bus', dx: 1, dy: y, dir: 0, recipe: null });
     for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) wall.items.push({ type: 'matrix', dx: 2 + x, dy: y, dir: 0, recipe: null, value: 16 });
+    for (let x = 0; x < 8; x++) wall.items.push({ type: 'register', dx: 1 + x, dy: 8, dir: 1, recipe: null });
     return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8), matrix, wall, this.displayBlueprint()];
   }
 
@@ -1318,6 +1320,16 @@ export class Hud {
           <div class="dirs"><span class="lbl">${t('vid_size')}</span>${[1, 2, 3, 4].map((n) => `<button class="chip ${k === n ? 'active' : ''}" data-value="${n}">${8 * n}×${4 * n}</button>`).join('')}<small class="dim"> · ${r.w}×${r.h} px</small></div>
           <div class="dirs"><span class="lbl">${t('vid_crop')}</span>${VIDEO_CROPS.map((c, i) => `<button class="chip ${(b.ratio ?? 0) === i ? 'active' : ''}" data-crop="${i}">${c === 1 ? t('vid_fit') : c + '×'}</button>`).join('')}</div>
           <div class="dirs wrap"><span class="lbl">${t('vid_density')}</span>${MATRIX_SIZES.map((n) => `<button class="chip ${r.w / (SCREEN_REGION.w * k) === n ? 'active' : ''}" data-mxall="${n}">${n}×${n}</button>`).join('')}</div>
+          ${(() => {
+            const s = this.sim.screenStats(b);
+            const k = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + ' M' : n >= 1000 ? (n / 1000).toFixed(0) + ' k' : String(Math.round(n)));
+            const okCap = s.capPx >= s.needPx, okMem = s.rows >= s.h, okBud = s.budget > 0;
+            return `<div class="term-parts">
+              <div class="tp"><span>${itemImg((b.recipe as ItemId | null) ?? 'copper_wire', 'icon xs')} ${t('vid_phosphor')}</span><b class="${okBud ? '' : 'bad'}">${(s.budget / 1e6).toFixed(1)} / ${s.budgetMax / 1e6} M px</b><small>${t('vid_phosphor_hint')}</small></div>
+              <div class="tp"><span>${t('vid_lanes')}</span><b class="${okCap ? '' : 'bad'}">${s.lanes} × ${s.hz >= 1000 ? (s.hz / 1000).toFixed(1) + ' kHz' : s.hz + ' Hz'} = ${k(s.capPx)} px/s</b><small>${t('vid_lanes_hint', { need: k(s.needPx) })}</small></div>
+              <div class="tp"><span>${t('vid_memory')}</span><b class="${okMem ? '' : 'bad'}">${s.cells} × 4096 px = ${s.rows}/${s.h} ${t('vid_rows')}</b><small>${t('vid_memory_hint')}</small></div>
+            </div>`;
+          })()}
           <div class="dirs wrap"><span class="lbl">${t('vid_sample')}</span>${(['scan', 'avg', 'centre', 'off'] as const).map((m) => `<button class="chip ${(b.mode ?? 'scan') === m ? 'active' : ''}" data-smode="${m}">${t(`vid_sample_${m}` as 'vid_sample_scan')}</button>`).join('')}</div>
           <p class="save-hint">${t('vid_sample_hint')}</p>
           <div class="lbl">${(() => { const n = this.sim.speakersOf(b).length; return live ? (this.cb.videoHasAudio(b) ? (n ? `🔊 ${t('vid_sound_on', { n })}` : `🔇 ${t('vid_sound_nospeaker')}`) : `🔇 ${t('vid_sound_none')}`) : `🔈 ${t('vid_sound_idle', { n })}`; })()}</div>

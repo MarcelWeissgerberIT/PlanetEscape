@@ -4,7 +4,7 @@ import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_I
 import { CHIP8_H, CHIP8_W } from './chip8';
 import { audioLevel } from './video';
 import { ARITH } from './sim';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -748,6 +748,13 @@ export class Renderer {
     }
     if (b.type === 'screen') {
       if (b.working && !this.lowDetail) this.animGlow(cx + sz * 0.3, cy - sz * 0.3, 4, '#f43f5e');
+      // phosphor bar
+      const frac = Math.min(1, (b.budget ?? 0) / SCREEN_BUDGET_MAX);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(b.x * TILE + 8, b.y * TILE + sz - 9, sz - 16, 4);
+      ctx.fillStyle = frac > 0.25 ? '#34d399' : '#f59e0b';
+      ctx.fillRect(b.x * TILE + 8, b.y * TILE + sz - 9, (sz - 16) * frac, 4);
+      if (b.status === 'starved') this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, '!', '#f59e0b');
       if (this.overlay || this.selected === b) {
         const r = this.sim.screenRect(b);
         const first = this.sim.at(r.x, r.y);
@@ -758,7 +765,8 @@ export class Renderer {
         ctx.setLineDash([10, 6]);
         ctx.strokeRect(r.x * TILE, r.y * TILE, tw * TILE, th * TILE);
         ctx.setLineDash([]);
-        this.drawTag(r.x * TILE + (tw * TILE) / 2, r.y * TILE - 6, `${tw}×${th} LED matrix · ${r.w}×${r.h} px`, '#f43f5e');
+        const stt = this.sim.screenStats(b);
+        this.drawTag(r.x * TILE + (tw * TILE) / 2, r.y * TILE - 6, `${tw}×${th} LED matrix · ${r.w}×${r.h} px · ${stt.lanes} lanes · ${stt.hz >= 1000 ? (stt.hz / 1000).toFixed(1) + ' kHz' : stt.hz + ' Hz'} · ${stt.cells} cells`, stt.capPx >= stt.needPx && stt.rows >= stt.h ? '#f43f5e' : '#f59e0b');
       }
       return;
     }
