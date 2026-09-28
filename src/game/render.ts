@@ -4,7 +4,7 @@ import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_I
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from './chip8';
 import { audioLevel } from './video';
 import { ARITH } from './sim';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -793,6 +793,52 @@ export class Renderer {
           this.drawTag(r.x * TILE + (tw * TILE) / 2, r.y * TILE + th * TILE + 14, `lanes×clock ${(stt.capPx / 1e6).toFixed(1)}/${(stt.needPx / 1e6).toFixed(1)} M px/s · +${Math.max(1, need)} lanes or a faster clock`, '#f59e0b');
         }
       }
+      return;
+    }
+    if (b.type === 'timer') {
+      // output arrow, open/closed frame and a countdown arc
+      this.drawArrow(b, b.dir, b.open === false ? '#ef4444' : '#22d3ee');
+      const period = b.threshold ?? 3, left = b.timer ?? period;
+      ctx.strokeStyle = b.open !== false ? '#34d399' : 'rgba(255,255,255,0.25)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(cx, cy, sz * 0.3, -Math.PI / 2, -Math.PI / 2 + Math.PI * 2 * (1 - left / period));
+      ctx.stroke();
+      if (!this.lowDetail) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, `${period}s`, '#22d3ee');
+      return;
+    }
+    if (b.type === 'sensor') {
+      this.drawArrow(b, b.dir, '#22d3ee');
+      // the beam across the belt lights up when an item runs through
+      const horiz = b.dir === 1 || b.dir === 3;
+      ctx.strokeStyle = b.working ? '#f43f5e' : 'rgba(244,63,94,0.35)';
+      ctx.lineWidth = b.working ? 3 : 1.5;
+      ctx.beginPath();
+      if (horiz) {
+        ctx.moveTo(cx, b.y * TILE + 4);
+        ctx.lineTo(cx, b.y * TILE + sz - 4);
+      } else {
+        ctx.moveTo(b.x * TILE + 4, cy);
+        ctx.lineTo(b.x * TILE + sz - 4, cy);
+      }
+      ctx.stroke();
+      if (b.working && !this.lowDetail) this.animGlow(cx, cy, 6, '#f43f5e');
+      return;
+    }
+    if (b.type === 'radio') {
+      const rx = b.mode === 'rx';
+      this.drawArrow(b, b.dir, rx ? '#22d3ee' : 'rgba(34,211,238,0.35)');
+      if (b.working && !this.lowDetail) this.animGlow(cx, cy - sz * 0.2, 5 + 3 * Math.sin(this.time * 12), rx ? '#34d399' : '#f59e0b');
+      if (!this.lowDetail) this.drawTag(cx, b.y * TILE - 4, `${rx ? 'RX' : 'TX'} ${b.threshold ?? 1}`, rx ? '#34d399' : '#f59e0b');
+      return;
+    }
+    if (b.type === 'battery') {
+      const frac = Math.min(1, (b.value ?? 0) / BATTERY_CAP);
+      ctx.fillStyle = 'rgba(255,255,255,0.12)';
+      ctx.fillRect(b.x * TILE + 10, b.y * TILE + sz - 12, sz - 20, 6);
+      ctx.fillStyle = frac > 0.3 ? '#34d399' : '#f59e0b';
+      ctx.fillRect(b.x * TILE + 10, b.y * TILE + sz - 12, (sz - 20) * frac, 6);
+      if (b.working && !this.lowDetail) this.animGlow(cx, cy - 6, 4, '#fbbf24');
       return;
     }
     if (b.type === 'keyboard') {

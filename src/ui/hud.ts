@@ -1,6 +1,6 @@
 import { buildingUrl, itemUrl, terrainUrl, uiUrl } from '../game/assets';
 import { EXAMPLES } from '../game/examples';
-import { BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_ORDER, ITEMS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { BATTERY_CAP, BELT_SPACING, BELT_SPEED, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEMS, ITEM_ORDER, LEVELS, MINE_SECONDS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import type { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -87,6 +87,7 @@ export class Hud {
   editor = false;
   private editorTab: 'terrain' | 'build' = 'terrain';
   private paintColor = '#22d3ee'; // LED matrix painter
+  private buildTab: string = (() => { try { return localStorage.getItem('pe_buildtab') ?? 'logistics'; } catch { return 'logistics'; } })();
   private brush = 1;
   private problemSince = new Map<number, number>(); // building id -> game time the problem was first seen
   private powerLowSince = -1;
@@ -737,7 +738,12 @@ export class Hud {
       .join('');
     const tutStep = st.tutorialStep;
     const hint: BuildingId | null = tutStep === 0 ? 'miner' : tutStep === 1 ? 'conveyor' : tutStep === 3 ? 'smelter' : tutStep === 5 ? 'printer' : null;
-    const buildHtml = BUILD_ORDER.map((id) => {
+    // tabs: only groups with something unlocked; the flat list stays when a single group is available
+    const groups = BUILD_GROUPS.filter((g) => g.items.some((id) => this.editor || st.unlockedBuildings.includes(id)));
+    if (!groups.some((g) => g.id === this.buildTab) && groups.length) this.buildTab = groups[0].id;
+    const tabItems = groups.length > 1 ? new Set(groups.find((g) => g.id === this.buildTab)!.items) : null;
+    const tabsHtml = groups.length > 1 ? `<div class="build-tabs">${groups.map((g) => `<button class="chip ${g.id === this.buildTab ? 'active' : ''}" data-btab="${g.id}">${t(`group_${g.id}` as 'group_logistics')}</button>`).join('')}</div>` : '';
+    const buildHtml = BUILD_ORDER.filter((id) => !tabItems || tabItems.has(id)).map((id) => {
       const def = BUILDINGS[id];
       const unlocked = this.editor || st.unlockedBuildings.includes(id);
       const affordable = this.editor || this.sim.canAfford(id);
@@ -767,6 +773,7 @@ export class Hud {
     const bottomHtml = `
       ${editorBar}
       <div class="inv-strip">${this.editor ? `<span class="inv-empty">∞ ${t('ed_free')}</span>` : invHtml || `<span class="inv-empty">${t('inventory')}</span>`}</div>
+      ${this.editor && this.editorTab === 'terrain' ? '' : tabsHtml}
       <div class="build-row">
         <div class="build-bar">${this.editor && this.editorTab === 'terrain' ? paletteHtml : buildHtml}</div>
         <div class="tool-col">
@@ -809,6 +816,13 @@ export class Hud {
       }
       if (target.dataset.act === 'edplay') {
         this.setEditor(false);
+        return;
+      }
+      if (target.dataset.btab) {
+        this.buildTab = target.dataset.btab;
+        try { localStorage.setItem('pe_buildtab', this.buildTab); } catch { /* ignore */ }
+        sfx.select();
+        this.renderBottom();
         return;
       }
       const build = target.dataset.build as BuildingId | undefined;
@@ -1248,6 +1262,9 @@ export class Hud {
         <div class="lbl">${t('filter')}</div>
         <div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('no_filter')}</button>
         ${filterable.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
+    } else if (b.type === 'battery') {
+      const frac = Math.min(1, (b.value ?? 0) / BATTERY_CAP);
+      body = `<div class="lbl">${t('battery_charge')} ${Math.round(b.value ?? 0)} / ${BATTERY_CAP}</div><div class="pbar big"><div class="pfill" style="width:${frac * 100}%"></div></div><p class="save-hint">${t('battery_hint')}</p>`;
     } else if (b.type === 'generator') {
       body = `${statusLine()}<div class="bufs"><span class="lbl">${t('fuel_left')}</span><span class="buf">${itemImg('fuel', 'icon sm')}${b.input?.fuel ?? 0}</span> <span class="buf">${Math.ceil(b.fuelSeconds ?? 0)}s</span></div>${dirPicker}`;
     } else if (b.type === 'core') {
@@ -1344,6 +1361,20 @@ export class Hud {
           <p class="save-hint">${t('vid_sample_hint')}</p>
           <div class="lbl">${(() => { const n = this.sim.speakersOf(b).length; return live ? (this.cb.videoHasAudio(b) ? (n ? `🔊 ${t('vid_sound_on', { n })}` : `🔇 ${t('vid_sound_nospeaker')}`) : `🔇 ${t('vid_sound_none')}`) : `🔈 ${t('vid_sound_idle', { n })}`; })()}</div>
           <p class="save-hint">${t('vid_hint')}</p>`;
+      } else if (b.type === 'timer') {
+        const period = b.threshold ?? 3;
+        body = `<div class="lbl">${b.open !== false ? `<span class="okline">${t('switch_on')}</span>` : t('switch_off')} · ${t('timer_next', { s: Math.max(0, b.timer ?? period).toFixed(1) })}</div>
+          <div class="dirs wrap"><span class="lbl">${t('timer_period')}</span>${TIMER_PERIODS.map((p) => `<button class="chip ${period === p ? 'active' : ''}" data-threshold="${p}">${p} s</button>`).join('')}</div>
+          <p class="save-hint">${t('timer_hint')}</p>${dirPicker}`;
+      } else if (b.type === 'sensor') {
+        body = `${statusLine(` · ${b.acc ?? 0} ${t('sensor_count')}`)}<p class="save-hint">${t('sensor_hint')}</p>${dirPicker}`;
+      } else if (b.type === 'radio') {
+        const ch = b.threshold ?? 1, rx = b.mode === 'rx';
+        const inFlight = this.sim.radioQueue(ch).length;
+        body = `${statusLine(` · ${t('radio_inflight', { n: inFlight })}`)}
+          <div class="dirs"><span class="lbl">${t('radio_mode')}</span><button class="chip ${rx ? '' : 'active'}" data-mode="tx">${t('radio_tx')}</button><button class="chip ${rx ? 'active' : ''}" data-mode="rx">${t('radio_rx')}</button></div>
+          <div class="dirs wrap"><span class="lbl">${t('radio_channel')}</span>${Array.from({ length: RADIO_CHANNELS }, (_, i) => i + 1).map((c) => `<button class="chip ${ch === c ? 'active' : ''}" data-threshold="${c}">${c}</button>`).join('')}</div>
+          <p class="save-hint">${t('radio_hint')}</p>${dirPicker}`;
       } else if (b.type === 'keyboard') {
         const tm = this.sim.keyboardTerminal(b);
         const rows = ['1234567890', 'QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM.:/'];
@@ -1580,7 +1611,7 @@ export class Hud {
         return;
       }
       if (target.dataset.mode !== undefined) {
-        b.mode = target.dataset.mode as 'hold' | 'pass' | 'pulse';
+        b.mode = target.dataset.mode as Building['mode'];
         sfx.select();
         this.showInfo(b);
         return;

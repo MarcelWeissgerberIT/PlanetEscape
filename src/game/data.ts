@@ -64,6 +64,12 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   speaker: { id: 'speaker', kind: 'logic', size: 1, cost: { iron_plate: 4, copper_wire: 4 }, power: 1, rotatable: false },
   // keyboard: typed characters go to the terminal it is wired to (LD Vx, KB in the program)
   keyboard: { id: 'keyboard', kind: 'logic', size: 2, cost: { iron_plate: 6, copper_wire: 8, circuit: 2 }, power: 1, rotatable: false },
+  // circuit helpers: a timer opens every n seconds, a sensor pulses its sides when an item runs through,
+  // a radio carries items over any distance on a channel (tx -> rx), a battery stores surplus power
+  timer: { id: 'timer', kind: 'logic', size: 1, cost: { iron_plate: 4, copper_wire: 2, circuit: 1 }, power: 1, rotatable: true },
+  sensor: { id: 'sensor', kind: 'logic', size: 1, cost: { iron_plate: 3, copper_wire: 2 }, power: 0, rotatable: true },
+  radio: { id: 'radio', kind: 'logic', size: 1, cost: { circuit: 2, copper_wire: 6 }, power: 3, rotatable: true },
+  battery: { id: 'battery', kind: 'power', size: 1, cost: { iron_plate: 6, copper_plate: 4, circuit: 1 }, power: 0, rotatable: false },
   switch: { id: 'switch', kind: 'logic', size: 1, cost: { iron_plate: 3 }, power: 0, rotatable: true },
   // an 8-bit computer (CHIP-8): drives a 64x32 lamp display to its right, reads switches on its rim as keys
   terminal: { id: 'terminal', kind: 'logic', size: 2, cost: { machine_part: 10, steel_frame: 4 }, power: 6, rotatable: false },
@@ -103,6 +109,10 @@ export const BUILD_ORDER: BuildingId[] = [
   'screen',
   'speaker',
   'keyboard',
+  'timer',
+  'sensor',
+  'radio',
+  'battery',
   'switch',
   'terminal',
   'oscillator',
@@ -160,9 +170,9 @@ export const SHIP_TOTAL = Object.values(SHIP_PARTS).reduce((a, c) => a + (c ?? 0
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
   { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
-  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'matrix', 'screen', 'speaker', 'keyboard', 'switch'], unlockRecipes: ['steel_frame'] },
+  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'matrix', 'screen', 'speaker', 'keyboard', 'switch', 'timer', 'sensor', 'battery'], unlockRecipes: ['steel_frame'] },
   { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: [], unlockRecipes: ['circuit', 'glass'] },
-  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
+  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'radio', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
   { id: 'm7', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
 ];
@@ -226,6 +236,21 @@ export const SCREEN_PX_PER_LANE_TICK = 64; // pixels one bus lane into the wall 
 export const SCREEN_PX_PER_CELL = 4096; // frame buffer a register on the receiver's board provides
 export const SCREEN_TINT = 0.35; // how much the delivered item's colour tints the picture
 export const SCREEN_SAMPLE_RATE = 4;
+/** Build menu tabs. */
+export const BUILD_GROUPS: { id: 'logistics' | 'production' | 'energy' | 'circuit' | 'computer'; items: BuildingId[] }[] = [
+  { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'sorter', 'overflow', 'mixer', 'valve', 'storage', 'radio'] },
+  { id: 'production', items: ['miner', 'smelter', 'assembler', 'printer', 'refinery', 'fabricator'] },
+  { id: 'energy', items: ['solar', 'generator', 'battery'] },
+  { id: 'circuit', items: ['lamp', 'matrix', 'switch', 'timer', 'sensor', 'bus', 'register', 'adder', 'subtractor', 'multiplier', 'divider'] },
+  { id: 'computer', items: ['terminal', 'oscillator', 'keyboard', 'screen', 'speaker'] },
+];
+export const TIMER_PERIODS = [1, 2, 3, 5, 10, 30]; // seconds between two openings
+export const TIMER_OPEN = 0.5; // seconds the timer stays open
+export const RADIO_CHANNELS = 8;
+export const RADIO_QUEUE = 8; // items in flight per channel
+export const RADIO_RATE = 2; // items per second a receiver puts out
+export const BATTERY_CAP = 300; // power-seconds one battery stores
+export const BATTERY_RATE = 10; // power one battery can deliver
 /** Program ids a program may start with EXEC n (n = index + 1); KDOS lists them as files. */
 export const EXEC_PROGRAMS = ['pong', 'brix', 'ray', 'blockshd', 'trailer', 'kdos', 'kora']; // colour samples per second the receiver puts on the belt to its left
 export const SCREEN_SCAN_STEP = 97; // pixels skipped between two scan samples (prime: walks the whole frame)

@@ -520,3 +520,7 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 .kb:active { background: rgba(34, 211, 238, 0.35); }
 .kb.wide { min-width: 44px; }
 .kb.space { flex: 1; max-width: 160px; }
+
+.build-tabs { display: flex; gap: 6px; margin: 0 8px 4px; padding: 6px 8px; overflow-x: auto; scrollbar-width: none; background: var(--panel); border: 1px solid var(--line); border-radius: 12px; }
+.build-tabs::-webkit-scrollbar { display: none; }
+.build-tabs .chip { flex: none; }

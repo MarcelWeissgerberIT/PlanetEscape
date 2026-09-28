@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, SCREEN_BASE_HZ, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -595,11 +595,21 @@ export class Sim {
           } else b.open = b.open === false;
           return true;
         }
+        if (b.type === 'radio') {
+          if (b.mode === 'rx' || from !== b.dir) return false;
+          const q = this.radioQueue(b.threshold ?? 1);
+          if (q.length >= RADIO_QUEUE) return false;
+          q.push(item);
+          b.acc = (b.acc ?? 0) + 1;
+          b.working = true;
+          b.timer = 0.3;
+          return true;
+        }
         if (b.type === 'lamp') {
           if (((from + 2) & 3) === b.dir) return false;
           if (b.recipe && b.recipe !== item) return false; // optional colour filter
         } else if (from !== b.dir) return false;
-        if (b.type === 'switch' && b.open === false) return false;
+        if ((b.type === 'switch' || b.type === 'timer') && b.open === false) return false;
         if (b.output && Object.keys(b.output).length) return false;
         if (b.type === 'valve' && !b.recipe) b.recipe = item; // valve watches the first item it sees
         b.output = { [item]: 1 };
@@ -680,6 +690,29 @@ export class Sim {
       } else if (p > 0 && !(b.type === 'miner' && b.status === 'depleted')) demand += p;
     }
     if ((st.boostUntil ?? 0) > st.time) supply *= BOOST_FACTOR; // overclocked after a power surge event
+    // batteries: charge from surplus, deliver up to their rate when the grid falls short
+    let surplus = supply - demand;
+    for (const b of st.buildings) {
+      if (b.type !== 'battery') continue;
+      const charge = b.value ?? 0;
+      if (surplus > 0 && charge < BATTERY_CAP) {
+        const take = Math.min(surplus, BATTERY_RATE);
+        b.value = Math.min(BATTERY_CAP, charge + take * dt);
+        surplus -= take;
+        b.status = 'ok';
+        b.working = true;
+      } else if (surplus < 0 && charge > 0) {
+        const give = Math.min(-surplus, BATTERY_RATE, charge / dt);
+        b.value = Math.max(0, charge - give * dt);
+        supply += give;
+        surplus += give;
+        b.status = 'ok';
+        b.working = true;
+      } else {
+        b.status = charge > 0 ? 'ok' : 'idle';
+        b.working = false;
+      }
+    }
     st.powerSupply = Math.round(supply);
     st.powerDemand = demand;
     const ratio = demand <= supply ? 1 : supply / demand;
@@ -717,6 +750,17 @@ export class Sim {
         case 'switch':
           this.tickLogic(b);
           break;
+        case 'timer':
+          this.tickTimer(b, dt);
+          break;
+        case 'sensor':
+          this.tickSensor(b, dt);
+          break;
+        case 'radio':
+          this.tickRadio(b, dt);
+          break;
+        case 'battery':
+          break; // handled with the power balance
         case 'generator':
           if (b.fuelSeconds! > 0) b.fuelSeconds = Math.max(0, b.fuelSeconds! - dt);
           break;
@@ -964,6 +1008,104 @@ export class Sim {
   traceBytes(cpu: Chip8): number[] {
     const op = (cpu.mem[cpu.pc] << 8) | cpu.mem[cpu.pc + 1];
     return [cpu.pc >> 8, cpu.pc & 0xff, op >> 8, op & 0xff, cpu.i >> 8, cpu.i & 0xff, ...Array.from(cpu.v)];
+  }
+
+  // ---------- Timer, sensor, radio ----------
+
+  private radioQueues = new Map<number, ItemId[]>();
+
+  radioQueue(channel: number): ItemId[] {
+    let q = this.radioQueues.get(channel);
+    if (!q) {
+      q = [];
+      this.radioQueues.set(channel, q);
+    }
+    return q;
+  }
+
+  /** A control pulse without an item, as a side item would do it: flips / holds a switch, releases a register. */
+  signal(target: Building, from: Dir): boolean {
+    if (target.type === 'switch') {
+      if (from === target.dir || from === ((target.dir + 2) & 3)) return false;
+      if (target.mode === 'pulse') {
+        target.timer = (target.timer ?? 0) + SWITCH_PULSE_SECONDS;
+        target.open = true;
+      } else target.open = target.open === false;
+      return true;
+    }
+    if (target.type === 'register') {
+      if (from === target.dir) return false;
+      const n = target.value ?? 0;
+      const what = (target.recipe as ItemId | null) ?? 'copper_wire';
+      for (let k = 0; k < n; k++) target.bufL!.push(what);
+      target.value = 0;
+      target.acc = (target.acc ?? 0) + 1;
+      return n > 0;
+    }
+    if (target.type === 'timer') {
+      // a pulse restarts the cycle and opens the timer right away
+      target.timer = target.threshold ?? 3;
+      target.open = true;
+      target.rateT = TIMER_OPEN;
+      return true;
+    }
+    return false;
+  }
+
+  /** Opens for half a second every `threshold` seconds; items waiting behind it pass while it is open. */
+  private tickTimer(b: Building, dt: number) {
+    const period = b.threshold && TIMER_PERIODS.includes(b.threshold) ? b.threshold : 3;
+    b.threshold = period;
+    b.timer = (b.timer ?? period) - dt;
+    if (b.timer <= 0) {
+      b.timer = period;
+      b.open = true;
+      b.rateT = TIMER_OPEN;
+    }
+    if (b.open !== false) {
+      b.rateT = (b.rateT ?? 0) - dt;
+      if (b.rateT <= 0) b.open = false;
+    }
+    b.status = b.open !== false ? 'ok' : 'closed';
+    const key = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+    if (key && b.open !== false && this.pushDir(b, key, b.dir)) b.output = {};
+  }
+
+  /** Passes items straight through and signals both sides for every item that runs through. */
+  private tickSensor(b: Building, dt: number) {
+    b.status = 'ok';
+    if ((b.timer ?? 0) > 0) b.timer = Math.max(0, b.timer! - dt);
+    b.working = (b.timer ?? 0) > 0;
+    const key = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+    if (key && this.pushDir(b, key, b.dir)) {
+      b.output = {};
+      b.timer = 0.25;
+      b.acc = (b.acc ?? 0) + 1;
+      for (const side of [((b.dir + 1) & 3) as Dir, ((b.dir + 3) & 3) as Dir]) {
+        const t = this.at(b.x + DX[side], b.y + DY[side]);
+        if (t) this.signal(t, side);
+      }
+    }
+  }
+
+  /** tx: items vanish into the channel (see accept); rx: items of the channel appear in front of it. */
+  private tickRadio(b: Building, dt: number) {
+    if ((b.timer ?? 0) > 0) b.timer = Math.max(0, b.timer! - dt);
+    if (b.mode !== 'rx') {
+      b.working = (b.timer ?? 0) > 0;
+      b.status = 'ok';
+      return;
+    }
+    const q = this.radioQueue(b.threshold ?? 1);
+    b.rateT = Math.min(1, (b.rateT ?? 0) + dt * RADIO_RATE);
+    b.status = q.length ? 'ok' : 'idle';
+    b.working = (b.timer ?? 0) > 0;
+    if (q.length && b.rateT >= 1 && this.pushDir(b, q[0], b.dir)) {
+      q.shift();
+      b.rateT -= 1;
+      b.timer = 0.3;
+      b.acc = (b.acc ?? 0) + 1;
+    }
   }
 
   /** The terminal a keyboard is wired to: it touches the terminal or a part of its board. */
@@ -1445,7 +1587,7 @@ export class Sim {
     // sample output: a few items per second in the colour of the picture, onto the belt to the left
     const mode = b.mode ?? 'scan';
     const f = this.frames.get(b.id);
-    if (!b.working || !f || mode === 'off' || mode === 'hold' || mode === 'pass' || mode === 'pulse') return;
+    if (!b.working || !f || mode === 'off' || mode === 'hold' || mode === 'pass' || mode === 'pulse' || mode === 'tx' || mode === 'rx') return;
     b.rateT = Math.min(2, (b.rateT ?? 0) + dt * SCREEN_SAMPLE_RATE);
     if (b.rateT < 1) return;
     const item = this.sampleOf(b, f, mode);
