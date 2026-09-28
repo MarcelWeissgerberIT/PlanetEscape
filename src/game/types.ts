@@ -51,6 +51,8 @@ export type BuildingId =
   | 'lamp'
   | 'switch'
   | 'terminal'
+  | 'oscillator'
+  | 'bus'
   | 'register'
   | 'adder'
   | 'subtractor'

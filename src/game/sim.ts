@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { ORE_PER_TILE, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_HZ, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP_ROM_BYTES, ORE_PER_TILE, OSCILLATOR_CRYSTALS, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_HZ, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -51,6 +51,8 @@ export type SimEvent =
   | { type: 'beep'; b: Building };
 
 export const ARITH = new Set<BuildingId>(['register', 'adder', 'subtractor', 'multiplier', 'divider']);
+/** A terminal's mainboard: connected tiles, its RAM cells in address order and the crystals of its oscillators. */
+export type Board = { key: string; tiles: Set<number>; cells: Building[]; crystals: number };
 
 export interface Problem {
   building: Building;
@@ -505,6 +507,14 @@ export class Sim {
           buf.push(item);
           return true;
         }
+        if (b.type === 'oscillator') {
+          if ((item === 'quartz' || item === 'glass') && (b.clock ?? 0) < OSCILLATOR_CRYSTALS) {
+            b.clock = (b.clock ?? 0) + 1;
+            return true;
+          }
+          return false;
+        }
+        if (b.type === 'bus') return false;
         if (b.type === 'terminal') {
           // the computer is assembled from delivered parts: circuits become memory banks, quartz/glass become oscillator crystals
           if (item === 'circuit' && (b.ram ?? 0) < TERMINAL_RAM_BANKS) {
@@ -660,6 +670,13 @@ export class Sim {
           this.tickArith(b);
           this.pushRegisterLamps(b);
           break;
+        case 'oscillator':
+          b.status = (b.clock ?? 0) ? 'ok' : 'starved';
+          b.missing = (b.clock ?? 0) ? undefined : ['quartz'];
+          break;
+        case 'bus':
+          b.status = 'ok';
+          break;
         case 'adder':
         case 'subtractor':
         case 'multiplier':
@@ -757,17 +774,106 @@ export class Sim {
     return cpu;
   }
 
-  /** Bytes the current program needs (interpreter area + code) and bytes installed. */
-  terminalMemory(b: Building): { need: number; have: number; banksNeeded: number } {
+  // ---------- Mainboard: parts touching the terminal (through bus traces) form its board ----------
+
+  private boards = new Map<number, Board>();
+  private cellShadow = new Map<number, Uint8Array>(); // last synced byte per RAM cell (detects who changed it: CPU or player)
+
+  /** Everything connected to the terminal through 4-neighbourhood over bus traces, registers and oscillators. */
+  board(b: Building): Board {
+    const st = this.state;
+    const key = `${st.buildings.length}:${st.nextId}`;
+    const cached = this.boards.get(b.id);
+    if (cached && cached.key === key) return cached;
+    const s = BUILDINGS[b.type].size;
+    const tiles = new Set<number>();
+    const seen = new Set<number>();
+    const cells: Building[] = [];
+    let crystals = 0;
+    const queue: number[] = [];
+    for (let y = b.y; y < b.y + s; y++) for (let x = b.x; x < b.x + s; x++) seen.add(y * st.width + x);
+    for (let y = b.y; y < b.y + s; y++) for (let x = b.x; x < b.x + s; x++) queue.push(y * st.width + x);
+    while (queue.length && tiles.size < 4096) {
+      const idx = queue.shift()!;
+      const x = idx % st.width, y = Math.floor(idx / st.width);
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DX[d], ny = y + DY[d];
+        if (nx < 0 || ny < 0 || nx >= st.width || ny >= st.height) continue;
+        const ni = ny * st.width + nx;
+        if (seen.has(ni)) continue;
+        seen.add(ni);
+        const p = this.at(nx, ny);
+        if (!p || !BOARD_PARTS.has(p.type)) continue;
+        tiles.add(ni);
+        queue.push(ni);
+        if (p.type === 'register') cells.push(p);
+        else if (p.type === 'oscillator') crystals += p.clock ?? 0;
+      }
+    }
+    cells.sort((p, q) => p.y - q.y || p.x - q.x); // address order: row by row, like reading
+    const board: Board = { key, tiles, cells, crystals };
+    this.boards.set(b.id, board);
+    return board;
+  }
+
+  /** Crystals ticking for a terminal: its own plus the oscillators on its board (capped at full speed). */
+  terminalCrystals(b: Building): number {
+    return Math.min(TERMINAL_CRYSTALS, (b.clock ?? 0) + this.board(b).crystals);
+  }
+
+  /** Bytes the current program needs and bytes installed (RAM cells on the board + circuit banks); the chip carries the first 512 B itself. */
+  terminalMemory(b: Building): { need: number; have: number; cells: number; banks: number; banksNeeded: number } {
     const cpu = this.cpus.get(b.id);
     const romLen = cpu ? cpu.romLength : assemble(b.prog ?? CHIP8_PROGRAMS[0].source).rom.length;
-    const need = 0x200 + romLen;
-    return { need, have: (b.ram ?? 0) * TERMINAL_BANK_BYTES, banksNeeded: Math.ceil(need / TERMINAL_BANK_BYTES) };
+    const cells = this.board(b).cells.length, banks = b.ram ?? 0;
+    return { need: romLen, have: cells + banks * TERMINAL_BANK_BYTES, cells, banks, banksNeeded: Math.ceil(Math.max(0, romLen - cells) / TERMINAL_BANK_BYTES) };
   }
 
   terminalHz(b: Building): number {
-    const full = Math.round((TERMINAL_HZ * (b.clock ?? 0)) / TERMINAL_CRYSTALS);
+    const full = Math.round((TERMINAL_HZ * this.terminalCrystals(b)) / TERMINAL_CRYSTALS);
     return b.trace ? Math.min(full, TERMINAL_TRACE_HZ) : full;
+  }
+
+  /** The RAM cell holding a memory address, if the board has one. */
+  cellAt(b: Building, addr: number): Building | undefined {
+    return this.board(b).cells[addr - CHIP_ROM_BYTES];
+  }
+
+  /**
+   * RAM cells are the memory: cell i holds byte 0x200+i as an item count. Before the CPU runs, a cell the player
+   * changed (items delivered, side pulse, cleared) is written into memory; afterwards bytes the CPU changed are
+   * written into the cells. New or re-ordered cells are flashed with the current memory image.
+   */
+  private syncCells(b: Building, cpu: Chip8, after: boolean) {
+    const cells = this.board(b).cells;
+    let shadow = this.cellShadow.get(b.id);
+    if (!shadow || shadow.length !== cells.length) {
+      shadow = new Uint8Array(cells.length);
+      for (let i = 0; i < cells.length; i++) {
+        shadow[i] = cpu.mem[CHIP_ROM_BYTES + i];
+        cells[i].value = shadow[i];
+        if (!cells[i].recipe) cells[i].recipe = 'circuit';
+      }
+      this.cellShadow.set(b.id, shadow);
+      return;
+    }
+    for (let i = 0; i < cells.length; i++) {
+      const a = CHIP_ROM_BYTES + i;
+      if (after) {
+        const m = cpu.mem[a];
+        if (m !== shadow[i]) {
+          shadow[i] = m;
+          cells[i].value = m;
+          if (!cells[i].recipe) cells[i].recipe = 'circuit';
+        }
+      } else {
+        const v = Math.min(255, cells[i].value ?? 0);
+        if (v !== shadow[i]) {
+          shadow[i] = v;
+          cpu.mem[a] = v;
+        }
+      }
+    }
   }
 
   /** The 8x22 tile block above the terminal where lamps show PC, opcode, I and V0-VF as bits. */
@@ -785,9 +891,12 @@ export class Sim {
   stepTerminal(b: Building) {
     const cpu = this.cpu(b);
     if (!cpu || cpu.halted) return;
+    this.syncCells(b, cpu, false);
+    this.applyMemory(b);
     cpu.step();
     this.pushDisplay(b, cpu, true);
     this.pushTrace(b, cpu);
+    this.syncCells(b, cpu, true);
   }
 
   private pushTrace(b: Building, cpu: Chip8) {
@@ -811,8 +920,11 @@ export class Sim {
   private applyMemory(b: Building) {
     const cpu = this.cpus.get(b.id);
     if (!cpu) return;
-    cpu.memLimit = Math.min(4096, (b.ram ?? 0) * TERMINAL_BANK_BYTES);
-    if (cpu.halted?.startsWith('memory bank')) cpu.halted = null; // continues once the bank arrived
+    const limit = Math.min(4096, CHIP_ROM_BYTES + this.board(b).cells.length + (b.ram ?? 0) * TERMINAL_BANK_BYTES);
+    if (limit !== cpu.memLimit) {
+      cpu.memLimit = limit;
+      if (cpu.halted?.startsWith('memory')) cpu.halted = null; // continues once the memory arrived
+    }
   }
 
   /** Creative / editor helper: install every part at once. */
@@ -923,6 +1035,8 @@ export class Sim {
     if (!cpu) return this.cpuErrorsOf(b);
     b.run = true;
     this.clearTerminalDisplay(b);
+    this.cellShadow.delete(b.id);
+    this.syncCells(b, cpu, true);
     return [];
   }
 
@@ -930,7 +1044,11 @@ export class Sim {
     const cpu = this.cpu(b);
     cpu?.reset();
     this.clearTerminalDisplay(b);
-    if (cpu) this.pushDisplay(b, cpu, true);
+    this.cellShadow.delete(b.id); // flash the RAM cells with the fresh image
+    if (cpu) {
+      this.pushDisplay(b, cpu, true);
+      this.syncCells(b, cpu, true);
+    }
   }
 
   terminalKey(b: Building, key: number, down: boolean) {
@@ -1019,11 +1137,15 @@ export class Sim {
         }
       }
     }
+    // the board: RAM cells mirror memory both ways, crystals come from oscillators too
+    this.syncCells(b, cpu, false);
+    this.applyMemory(b);
     // parts first: no crystal = no clock, too little memory = the program does not fit
     const mem = this.terminalMemory(b);
-    if (!(b.clock ?? 0) || mem.have < mem.need) {
+    const crystals = this.terminalCrystals(b);
+    if (!crystals || mem.have < mem.need) {
       b.status = 'starved';
-      b.missing = [...(!(b.clock ?? 0) ? (['quartz'] as ItemId[]) : []), ...(mem.have < mem.need ? (['circuit'] as ItemId[]) : [])];
+      b.missing = [...(!crystals ? (['quartz'] as ItemId[]) : []), ...(mem.have < mem.need ? (['circuit'] as ItemId[]) : [])];
       b.working = false;
       return;
     }
@@ -1054,7 +1176,10 @@ export class Sim {
       this.events.push({ type: 'beep', b });
     } else if (!beep) this.cpuBeeping.delete(b.id);
     this.pushDisplay(b, cpu, !!b.trace && n > 0);
-    if (n > 0) this.pushTrace(b, cpu); // register lamps above the terminal follow every tick (a real CPU run to watch)
+    if (n > 0) {
+      this.pushTrace(b, cpu); // register lamps above the terminal follow every tick (a real CPU run to watch)
+      this.syncCells(b, cpu, true);
+    } // register lamps above the terminal follow every tick (a real CPU run to watch)
   }
 
   // ---------- Events ----------

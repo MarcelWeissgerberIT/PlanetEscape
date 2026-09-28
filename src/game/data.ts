@@ -61,7 +61,10 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   terminal: { id: 'terminal', kind: 'logic', size: 2, cost: { machine_part: 10, steel_frame: 4 }, power: 6, rotatable: false },
   // arithmetic in items: a number is a count of items. register stores a count and releases it on a signal;
   // adder merges (a+b), subtractor cancels (a-b), multiplier emits k per item (a*k), divider emits 1 per k items (a/k)
-  register: { id: 'register', kind: 'logic', size: 1, cost: { iron_plate: 6, circuit: 1 }, power: 1, rotatable: true },
+  register: { id: 'register', kind: 'logic', size: 1, cost: { iron_plate: 6, circuit: 1 }, power: 0, rotatable: true },
+  // mainboard parts: an oscillator holds crystals (clock), a bus trace connects parts; registers touching the board are RAM cells (1 byte each)
+  oscillator: { id: 'oscillator', kind: 'logic', size: 1, cost: { iron_plate: 4, copper_wire: 2 }, power: 1, rotatable: false },
+  bus: { id: 'bus', kind: 'logic', size: 1, cost: { copper_wire: 1 }, power: 0, rotatable: false },
   adder: { id: 'adder', kind: 'logic', size: 1, cost: { iron_plate: 6, copper_wire: 4 }, power: 1, rotatable: true },
   subtractor: { id: 'subtractor', kind: 'logic', size: 1, cost: { iron_plate: 6, copper_wire: 4 }, power: 1, rotatable: true },
   multiplier: { id: 'multiplier', kind: 'logic', size: 1, cost: { iron_plate: 8, circuit: 1 }, power: 1, rotatable: true },
@@ -90,6 +93,8 @@ export const BUILD_ORDER: BuildingId[] = [
   'lamp',
   'switch',
   'terminal',
+  'oscillator',
+  'bus',
   'register',
   'adder',
   'subtractor',
@@ -145,7 +150,7 @@ export const MISSIONS: MissionDef[] = [
   { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
   { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'switch'], unlockRecipes: ['steel_frame'] },
   { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: [], unlockRecipes: ['circuit', 'glass'] },
-  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
+  { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
   { id: 'm7', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
 ];
@@ -198,6 +203,9 @@ export const TERMINAL_RAM_BANKS = 16; // circuits -> 256 B each = 4 KB
 export const TERMINAL_BANK_BYTES = 256;
 export const TERMINAL_CRYSTALS = 6; // quartz / glass -> 100 Hz each
 export const REGISTER_MAX = 255;
+export const OSCILLATOR_CRYSTALS = 3; // crystals one oscillator holds, 100 Hz each
+export const CHIP_ROM_BYTES = 0x200; // interpreter area + font live on the chip itself; every program byte needs a RAM cell or a bank
+export const BOARD_PARTS: Set<BuildingId> = new Set(['bus', 'register', 'oscillator']);
 export const TERMINAL_DISPLAY = { dx: 3, dy: 0, w: 64, h: 32 }; // lamp display region relative to the terminal
 export const TERMINAL_TRACE = { dx: 0, dy: -23, w: 8, h: 22 }; // register lamps above the terminal: PC, opcode, I, V0-VF (one byte per row)
 export const TERMINAL_TRACE_HZ = 2;

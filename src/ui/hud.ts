@@ -12,7 +12,7 @@ import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 import { CHIP8_H, CHIP8_W, disasm } from '../game/chip8';
-import { TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from '../game/data';
+import { OSCILLATOR_CRYSTALS, TERMINAL_CRYSTALS } from '../game/data';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
 export interface HudCallbacks {
@@ -1219,10 +1219,10 @@ export class Hud {
       const switches = this.sim.terminalSwitches(b);
       const items: ItemId[] = ['copper_wire', 'iron_plate', 'copper_plate', 'glass', 'circuit', 'quartz'];
       const mem = this.sim.terminalMemory(b);
-      const ram = b.ram ?? 0, clock = b.clock ?? 0;
+      const crystals = this.sim.terminalCrystals(b);
       const parts = `<div class="term-parts">
-          <div class="tp"><span>${itemImg('circuit', 'icon xs')} ${t('term_ram')}</span><b class="${mem.have < mem.need ? 'bad' : ''}">${ram}/${TERMINAL_RAM_BANKS} · ${ram * TERMINAL_BANK_BYTES} B</b><small>${t('term_ram_need', { n: mem.banksNeeded, b: mem.need })}</small></div>
-          <div class="tp"><span>${itemImg('quartz', 'icon xs')} ${t('term_clock')}</span><b class="${clock ? '' : 'bad'}">${clock}/${TERMINAL_CRYSTALS} · ${this.sim.terminalHz(b)} Hz</b><small>${t('term_clock_hint')}</small></div>
+          <div class="tp"><span>${itemImg('circuit', 'icon xs')} ${t('term_ram')}</span><b class="${mem.have < mem.need ? 'bad' : ''}">${mem.have} B</b><small>${t('term_ram_detail', { c: mem.cells, k: mem.banks, b: mem.need })}</small></div>
+          <div class="tp"><span>${itemImg('quartz', 'icon xs')} ${t('term_clock')}</span><b class="${crystals ? '' : 'bad'}">${crystals}/${TERMINAL_CRYSTALS} · ${this.sim.terminalHz(b)} Hz</b><small>${t('term_clock_hint')}</small></div>
           ${this.editor ? `<button class="btn small" data-act="term-install">${t('term_install')}</button>` : ''}
         </div>`;
       body = `<canvas class="term-screen" id="term-screen" width="${CHIP8_W * 4}" height="${CHIP8_H * 4}"></canvas>
@@ -1244,7 +1244,9 @@ export class Hud {
     } else if (b.type === 'register' || b.type === 'adder' || b.type === 'subtractor' || b.type === 'multiplier' || b.type === 'divider') {
       const val = b.value ?? 0;
       const held = b.recipe ? itemImg(b.recipe as ItemId, 'icon xs') : '';
-      const big = b.type === 'register' ? `${held} <b class="num">${val}</b>` : b.type === 'multiplier' ? `<b class="num">× ${val}</b>` : b.type === 'divider' ? `<b class="num">÷ ${val}</b>` : b.type === 'subtractor' ? `<b class="num">−${b.debt ?? 0}</b> <small>${t('arith_pending')}</small>` : `<b class="num">${b.acc ?? 0}</b> <small>${t('arith_total')}</small>`;
+      const cellOf = b.type === 'register' ? st.buildings.map((tb) => (tb.type === 'terminal' ? { tb, i: this.sim.board(tb).cells.indexOf(b) } : null)).find((c) => c && c.i >= 0) : null;
+      const addr = cellOf ? ` <small>· ${t('ram_cell', { a: '0x' + (0x200 + cellOf.i).toString(16).toUpperCase() })}</small>` : '';
+      const big = b.type === 'register' ? `${held} <b class="num">${val}</b>${addr}` : b.type === 'multiplier' ? `<b class="num">× ${val}</b>` : b.type === 'divider' ? `<b class="num">÷ ${val}</b>` : b.type === 'subtractor' ? `<b class="num">−${b.debt ?? 0}</b> <small>${t('arith_pending')}</small>` : `<b class="num">${b.acc ?? 0}</b> <small>${t('arith_total')}</small>`;
       const factor = b.type === 'multiplier' || b.type === 'divider' ? `<div class="dirs wrap"><span class="lbl">${t('arith_factor')}</span>${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<button class="chip ${val === k ? 'active' : ''}" data-value="${k}">${k}</button>`).join('')}</div>` : '';
       body = `<div class="arith-val">${big}${b.bufL?.length ? ` <small>· ${t('arith_queue', { n: b.bufL.length })}</small>` : ''}</div>
         <p class="save-hint">${t(`arith_${b.type}` as 'arith_register')}</p>${factor}
@@ -1260,6 +1262,11 @@ export class Hud {
         body = `<div class="lbl">${t('lamp_state')}</div><div class="bufs">${item ? `${itemImg(item, 'icon')} <b>${tItem(item)}</b> <button class="btn small" data-act="clear">${t('lamp_clear')}</button>` : `<span class="dim">${t('lamp_off')}</span>`}</div>
           <div class="dirs"><span class="lbl">${t('lamp_mode')}</span><button class="chip ${(b.mode ?? 'hold') === 'hold' ? 'active' : ''}" data-mode="hold">${t('lamp_hold')}</button><button class="chip ${b.mode === 'pass' ? 'active' : ''}" data-mode="pass">${t('lamp_pass')}</button></div>
           ${b.mode === 'pass' ? dirPicker : ''}${picker(t('lamp_filter'))}`;
+      } else if (b.type === 'oscillator') {
+        const n = b.clock ?? 0;
+        body = `${statusLine()}<div class="arith-val">${itemImg('quartz', 'icon xs')} <b class="num">${n}/${OSCILLATOR_CRYSTALS}</b> <small>· ${n * 100} Hz</small></div><p class="save-hint">${t('oscillator_hint')}</p>`;
+      } else if (b.type === 'bus') {
+        body = `<p class="save-hint">${t('bus_hint')}</p>`;
       } else if (b.type === 'switch') {
         body = `<div class="lbl">${b.open === false ? t('switch_off') : t('switch_on')}</div><div class="dirs"><span class="lbl">${t('switch_state')}</span><button class="chip ${b.open !== false ? 'active' : ''}" data-open="1">${t('switch_on')}</button><button class="chip ${b.open === false ? 'active' : ''}" data-open="0">${t('switch_off')}</button></div>
           <div class="dirs"><span class="lbl">${t('switch_pulse')}</span><button class="chip ${b.mode === 'pulse' ? 'active' : ''}" data-mode="pulse">${t('on')}</button><button class="chip ${b.mode !== 'pulse' ? 'active' : ''}" data-mode="hold">${t('off')}</button></div>

@@ -119,7 +119,7 @@ export class Chip8 {
       return;
     }
     if (pc + 1 >= this.memLimit) {
-      this.halted = `memory bank ${Math.floor(pc / 256) + 1} not installed`;
+      this.halted = `memory at 0x${pc.toString(16).toUpperCase()} missing`;
       return;
     }
     const op = (this.mem[pc] << 8) | this.mem[pc + 1];
@@ -231,7 +231,7 @@ export class Chip8 {
         break;
       case 0xd: {
         if (this.i + n > this.memLimit) {
-          this.halted = `memory bank ${Math.floor((this.i + n) / 256) + 1} not installed`;
+          this.halted = `memory at 0x${(this.i + n).toString(16).toUpperCase()} missing`;
           return;
         }
         // sprite: n rows of 8 pixels at (Vx, Vy), XOR drawn, VF = collision, wraps around the edges
@@ -283,7 +283,7 @@ export class Chip8 {
           case 0x55:
           case 0x65:
             if (this.i + x >= this.memLimit) {
-              this.halted = `memory bank ${Math.floor((this.i + x) / 256) + 1} not installed`;
+              this.halted = `memory at 0x${(this.i + x).toString(16).toUpperCase()} missing`;
               return;
             }
             if (nn === 0x55) for (let k = 0; k <= x; k++) this.mem[(this.i + k) & 0xfff] = v[k];

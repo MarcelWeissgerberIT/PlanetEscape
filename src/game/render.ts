@@ -3,7 +3,7 @@ import { Camera, TILE } from './camera';
 import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W } from './chip8';
 import { ARITH } from './sim';
-import { TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { BOARD_PARTS, CHIP_ROM_BYTES, OSCILLATOR_CRYSTALS, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -338,6 +338,7 @@ export class Renderer {
       if (b.x + sz <= x0 || b.x > x1 || b.y + sz <= y0 || b.y > y1) continue;
       visible.push(b);
     }
+    this.drawBoards(x0, y0, x1, y1);
     for (const b of visible) if (b.type === 'conveyor' || b.type === 'tunnel') this.drawBelt(b);
     if (!this.lowDetail) for (const b of visible) if (b.type === 'conveyor' || (b.type === 'tunnel' && b.exit)) this.drawBeltItems(b);
     for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel') this.drawBuilding(b);
@@ -629,6 +630,10 @@ export class Renderer {
     const def = BUILDINGS[b.type];
     const sz = def.size * TILE;
     const cx = b.x * TILE + sz / 2, cy = b.y * TILE + sz / 2;
+    if (b.type === 'bus' && alpha === 1) {
+      this.drawBus(b);
+      return;
+    }
     let img = buildingSprite(b.type);
     if (b.type === 'core') {
       const p = this.sim.shipProgress();
@@ -732,7 +737,26 @@ export class Renderer {
       }
       return;
     }
+    if (b.type === 'oscillator') {
+      const n = b.clock ?? 0;
+      for (let i = 0; i < OSCILLATOR_CRYSTALS; i++) {
+        ctx.fillStyle = i < n ? '#22d3ee' : 'rgba(255,255,255,0.14)';
+        ctx.fillRect(b.x * TILE + 9 + i * 11, b.y * TILE + sz - 11, 8, 5);
+      }
+      if (n && !this.lowDetail) {
+        const k = 0.5 + 0.5 * Math.sin(this.time * n * 4);
+        this.animGlow(cx, cy - 3, 4 + 3 * k, '#22d3ee');
+      }
+      this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 11, `${n * 100}`, n ? '#22d3ee' : '#f59e0b');
+      return;
+    }
     if (ARITH.has(b.type)) {
+      const mark = this.cellMark.get(b.id);
+      if (mark) {
+        ctx.strokeStyle = mark;
+        ctx.lineWidth = 3;
+        ctx.strokeRect(b.x * TILE + 2, b.y * TILE + 2, TILE - 4, TILE - 4);
+      }
       // arithmetic modules: output arrow, side inputs, and the number they hold
       this.drawArrow(b, b.dir, '#22d3ee');
       const back = ((b.dir + 2) & 3) as Dir;
@@ -1026,6 +1050,62 @@ export class Renderer {
     ctx.strokeStyle = '#c084fc';
     ctx.lineWidth = 2;
     ctx.strokeRect(g.x * TILE, g.y * TILE, g.bp.w * TILE, g.bp.h * TILE);
+  }
+
+  // ---------- Mainboards: green plate under everything wired to a terminal, PC / I markers on the RAM cells ----------
+
+  private cellMark = new Map<number, string>(); // building id -> colour of the marker (PC amber, I cyan)
+
+  private drawBoards(x0: number, y0: number, x1: number, y1: number) {
+    const { ctx } = this;
+    const s = this.sim.state;
+    this.cellMark.clear();
+    for (const t of s.buildings) {
+      if (t.type !== 'terminal') continue;
+      const board = this.sim.board(t);
+      if (!board.tiles.size) continue;
+      ctx.fillStyle = 'rgba(20,92,64,0.55)';
+      const plate = (x: number, y: number) => {
+        if (x < x0 - 1 || x > x1 + 1 || y < y0 - 1 || y > y1 + 1) return;
+        ctx.fillRect(x * TILE - 2, y * TILE - 2, TILE + 4, TILE + 4);
+      };
+      for (let y = t.y - 0; y < t.y + 2; y++) for (let x = t.x; x < t.x + 2; x++) plate(x, y);
+      for (const idx of board.tiles) plate(idx % s.width, Math.floor(idx / s.width));
+      const cpu = this.sim.cpu(t);
+      if (cpu) {
+        const pc = board.cells[cpu.pc - CHIP_ROM_BYTES], pc2 = board.cells[cpu.pc + 1 - CHIP_ROM_BYTES], ir = board.cells[cpu.i - CHIP_ROM_BYTES];
+        if (pc) this.cellMark.set(pc.id, '#f59e0b');
+        if (pc2) this.cellMark.set(pc2.id, '#f59e0b');
+        if (ir && !this.cellMark.has(ir.id)) this.cellMark.set(ir.id, '#22d3ee');
+      }
+    }
+  }
+
+  /** Copper trace from a bus tile to each neighbouring board part (or terminal). */
+  private drawBus(b: Building) {
+    const { ctx } = this;
+    const cx = b.x * TILE + TILE / 2, cy = b.y * TILE + TILE / 2;
+    ctx.strokeStyle = '#d98b45';
+    ctx.lineWidth = 6;
+    ctx.lineCap = 'round';
+    let links = 0;
+    for (let d = 0; d < 4; d++) {
+      const n = this.sim.at(b.x + DX[d], b.y + DY[d]);
+      if (!n || (!BOARD_PARTS.has(n.type) && n.type !== 'terminal')) continue;
+      links++;
+      ctx.beginPath();
+      ctx.moveTo(cx, cy);
+      ctx.lineTo(cx + DX[d] * TILE * 0.5, cy + DY[d] * TILE * 0.5);
+      ctx.stroke();
+    }
+    ctx.fillStyle = '#e8a25a';
+    ctx.beginPath();
+    ctx.arc(cx, cy, links ? 5 : 7, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#7a4a22';
+    ctx.beginPath();
+    ctx.arc(cx, cy, 2.2, 0, Math.PI * 2);
+    ctx.fill();
   }
 
   // ---------- Overlay (scan mode) ----------

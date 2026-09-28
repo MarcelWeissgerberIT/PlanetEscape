@@ -149,7 +149,7 @@ function depositClusters() {
 }
 
 const TERRAIN_CHAR: Record<TerrainId, string> = { ground: '.', rock: '#', iron_ore: 'I', copper_ore: 'C', quartz: 'Q', ice: 'W', oil: 'O' };
-const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L', lamp: 'o', switch: '=', terminal: 'Z', register: 'r', adder: '+', subtractor: '-', multiplier: '*', divider: '/' };
+const BUILDING_CHAR: Partial<Record<BuildingId, string>> = { core: 'K', conveyor: '', miner: 'M', smelter: 'S', assembler: 'A', printer: 'P', refinery: 'R', fabricator: 'F', solar: 's', generator: 'G', storage: 'D', splitter: 'Y', tunnel: 'T', sorter: 'X', overflow: 'V', mixer: 'N', valve: 'L', lamp: 'o', switch: '=', terminal: 'Z', oscillator: 'q', bus: '~', register: 'r', adder: '+', subtractor: '-', multiplier: '*', divider: '/' };
 const ARROWS = ['^', '>', 'v', '<'];
 
 function asciiMap(x0: number, y0: number, w: number, h: number): string {
@@ -239,7 +239,7 @@ server.registerTool(
   'pe_map',
   {
     title: 'ASCII map',
-    description: `ASCII view of a map region plus the deposit clusters (nearest first). Legend: '.' ground, '#' rock, I iron ore, C copper ore, Q quartz, W ice, O oil, K core, M miner, S smelter, P printer, A assembler, R refinery, F fabricator, s solar, G generator, D depot, Y splitter, T tunnel, X sorter, V overflow, N mixer, L valve, ^>v< belts.
+    description: `ASCII view of a map region plus the deposit clusters (nearest first). Legend: '.' ground, '#' rock, I iron ore, C copper ore, Q quartz, W ice, O oil, K core, M miner, S smelter, P printer, A assembler, R refinery, F fabricator, s solar, G generator, D depot, Y splitter, T tunnel, X sorter, V overflow, N mixer, L valve, o/* lamp off/on, = switch, Z terminal, q oscillator, ~ bus trace, r register (RAM cell when wired to a terminal), + - * / arithmetic, ^>v< belts.
 Args: x, y, w, h (default: 40x24 around the core). Set w/h up to 120.`,
     inputSchema: {
       x: z.number().int().optional(),
