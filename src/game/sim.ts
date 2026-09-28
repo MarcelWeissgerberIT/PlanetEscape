@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_REGION, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_MAX_PX, SCREEN_REGION, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -1147,9 +1147,10 @@ export class Sim {
 
   /** Pixel region a receiver drives: 64x32 px (8x4 matrices) per scale step, right of the building. */
   screenRect(b: Building): { x: number; y: number; w: number; h: number } {
-    const k = Math.max(1, Math.min(4, b.value ?? 1));
+    let k = Math.max(1, Math.min(4, b.value ?? 1));
     const first = this.at(b.x + SCREEN_REGION.dx, b.y);
     const s = first?.type === 'matrix' ? matrixSize(first) : MATRIX_SIZE; // pixel density follows the first matrix
+    while (k > 1 && SCREEN_REGION.w * s * k > SCREEN_MAX_PX) k--; // dense walls are capped at 1024 px wide
     return { x: b.x + SCREEN_REGION.dx, y: b.y, w: SCREEN_REGION.w * s * k, h: SCREEN_REGION.h * s * k };
   }
 
@@ -1158,7 +1159,7 @@ export class Sim {
     const r = this.screenRect(b);
     if (w !== r.w || h !== r.h) return;
     b.progress = this.state.time;
-    const tilesW = w / MATRIX_SIZE, tilesH = h / MATRIX_SIZE; // upper bound (8 px tiles); a 16 px matrix covers 2x2 of these
+    const tilesW = w / 4, tilesH = h / 4; // upper bound (4 px tiles); denser matrices cover several of these
     for (let my = 0; my < tilesH; my++)
       for (let mx = 0; mx < tilesW; mx++) {
         const m = this.at(r.x + mx, r.y + my);
@@ -1222,8 +1223,8 @@ export class Sim {
         else if (!want && cur) l.output = {};
       }
     // LED matrices in the top-left 8x4 tiles of the region show 8x8 pixel blocks each (64 pixels per tile)
-    for (let my = 0; my < r.h / MATRIX_SIZE; my++)
-      for (let mx = 0; mx < r.w / MATRIX_SIZE; mx++) {
+    for (let my = 0; my < r.h / 4; my++)
+      for (let mx = 0; mx < r.w / 4; mx++) {
         const m = this.at(r.x + mx, r.y + my);
         if (m?.type !== 'matrix') continue;
         const s = matrixSize(m);

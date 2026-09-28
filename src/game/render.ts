@@ -1154,7 +1154,7 @@ export class Renderer {
     ctx.imageSmoothingEnabled = false;
     ctx.drawImage(cache.canvas, x0 + 2, y0 + 2, TILE - 4, TILE - 4);
     ctx.imageSmoothingEnabled = true;
-    if (!this.lowDetail) ctx.drawImage(this.matrixMask(s), x0, y0);
+    if (!this.lowDetail && s <= 16) ctx.drawImage(this.matrixMask(s), x0, y0);
     else {
       ctx.strokeStyle = '#070a0e';
       ctx.lineWidth = 2;

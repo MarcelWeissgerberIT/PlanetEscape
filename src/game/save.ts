@@ -1,6 +1,6 @@
 import type { GameState } from './types';
 import { SAVE_VERSION } from './world';
-import { BUILDINGS, UPGRADE_DEFAULTS } from './data';
+import { BUILDINGS, MATRIX_SAVE_MAX, UPGRADE_DEFAULTS } from './data';
 
 const KEY = 'pe_save_v1';
 /** buildings the last load had to drop because this build does not know them (save from a newer version) */
@@ -8,7 +8,7 @@ export let lastDropped = 0;
 
 /** JSON for storage: LED matrix pixels travel as base64 (3 bytes per pixel) instead of number arrays. */
 export function serialize(state: GameState): string {
-  return JSON.stringify(state, (key, value) => (key === 'px' && Array.isArray(value) ? packPixels(value as number[]) : value));
+  return JSON.stringify(state, (key, value) => (key === 'px' && Array.isArray(value) ? (value.length > MATRIX_SAVE_MAX * MATRIX_SAVE_MAX ? undefined : packPixels(value as number[])) : value));
 }
 
 function packPixels(px: number[]): string {

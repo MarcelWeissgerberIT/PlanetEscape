@@ -13,7 +13,7 @@ import { SAVE_VERSION } from '../game/world';
 import { chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 import { CHIP8_H, CHIP8_W, disasm } from '../game/chip8';
-import { CHIP8_PALETTE, CRYSTAL_HZ, OSCILLATOR_CRYSTALS, matrixSize } from '../game/data';
+import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize } from '../game/data';
 import { VIDEO_CROPS } from '../game/video';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
@@ -1316,14 +1316,17 @@ export class Hud {
           </div>
           <div class="dirs"><span class="lbl">${t('vid_size')}</span>${[1, 2, 3, 4].map((n) => `<button class="chip ${k === n ? 'active' : ''}" data-value="${n}">${8 * n}×${4 * n}</button>`).join('')}<small class="dim"> · ${r.w}×${r.h} px</small></div>
           <div class="dirs"><span class="lbl">${t('vid_crop')}</span>${VIDEO_CROPS.map((c, i) => `<button class="chip ${(b.ratio ?? 0) === i ? 'active' : ''}" data-crop="${i}">${c === 1 ? t('vid_fit') : c + '×'}</button>`).join('')}</div>
+          <div class="dirs wrap"><span class="lbl">${t('vid_density')}</span>${MATRIX_SIZES.map((n) => `<button class="chip ${r.w / (SCREEN_REGION.w * k) === n ? 'active' : ''}" data-mxall="${n}">${n}×${n}</button>`).join('')}</div>
           <p class="save-hint">${t('vid_hint')}</p>`;
       } else if (b.type === 'matrix') {
         const s = matrixSize(b);
         const px = b.px ?? [];
-        const cells = Array.from({ length: s * s }, (_, i) => `<button class="mx-cell" data-px="${i}" style="background:${px[i] ? '#' + px[i].toString(16).padStart(6, '0') : 'rgba(255,255,255,0.08)'}"></button>`).join('');
-        body = `<div class="mx-grid" style="grid-template-columns:repeat(${s},1fr);gap:${s > 8 ? 2 : 3}px">${cells}</div>
-          <div class="dirs"><span class="lbl">${t('mx_size')}</span><button class="chip ${s === 8 ? 'active' : ''}" data-mxsize="8">8×8</button><button class="chip ${s === 16 ? 'active' : ''}" data-mxsize="16">16×16</button></div>
-          <div class="dirs"><span class="lbl">${t('mx_color')}</span><input type="color" id="mxcolor" value="${this.paintColor}"><button class="chip" data-act="mx-fill">${t('mx_fill')}</button><button class="chip" data-act="clear">${t('lamp_clear')}</button></div>
+        const painter = s <= 16
+          ? `<div class="mx-grid" style="grid-template-columns:repeat(${s},1fr);gap:${s > 8 ? 2 : 3}px">${Array.from({ length: s * s }, (_, i) => `<button class="mx-cell" data-px="${i}" style="background:${px[i] ? '#' + px[i].toString(16).padStart(6, '0') : 'rgba(255,255,255,0.08)'}"></button>`).join('')}</div>
+          <div class="dirs"><span class="lbl">${t('mx_color')}</span><input type="color" id="mxcolor" value="${this.paintColor}"><button class="chip" data-act="mx-fill">${t('mx_fill')}</button><button class="chip" data-act="clear">${t('lamp_clear')}</button></div>`
+          : `<p class="save-hint">${t('mx_big')}</p><div class="term-btns"><button class="btn small" data-act="clear">${t('lamp_clear')}</button></div>`;
+        body = `<div class="dirs wrap"><span class="lbl">${t('mx_size')}</span>${MATRIX_SIZES.map((n) => `<button class="chip ${s === n ? 'active' : ''}" data-mxsize="${n}">${n}×${n}</button>`).join('')}</div>
+          ${painter}
           <p class="save-hint">${t('matrix_hint')}</p>`;
       } else if (b.type === 'oscillator') {
         const q = b.clock ?? 0, g = b.turbo ?? 0;
@@ -1602,6 +1605,22 @@ export class Hud {
         sfx.select();
         return;
       }
+      if (b.type === 'screen' && target.dataset.mxall !== undefined) {
+        // switch every matrix of the wall to this resolution
+        const n = Number(target.dataset.mxall);
+        const k = Math.max(1, Math.min(4, b.value ?? 1));
+        for (let my = 0; my < SCREEN_REGION.h * k; my++)
+          for (let mx = 0; mx < SCREEN_REGION.w * k; mx++) {
+            const m = this.sim.at(b.x + SCREEN_REGION.dx + mx, b.y + my);
+            if (m?.type !== 'matrix') continue;
+            m.value = n === 8 ? undefined : n;
+            m.px = undefined;
+            m.acc = (m.acc ?? 0) + 1;
+          }
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
       if (b.type === 'screen' && target.dataset.crop !== undefined) {
         b.ratio = Number(target.dataset.crop);
         sfx.select();
@@ -1621,7 +1640,7 @@ export class Hud {
         return;
       }
       if (b.type === 'matrix' && target.dataset.mxsize !== undefined) {
-        b.value = Number(target.dataset.mxsize) === 16 ? 16 : undefined;
+        b.value = Number(target.dataset.mxsize) === 8 ? undefined : Number(target.dataset.mxsize);
         b.px = undefined;
         b.acc = (b.acc ?? 0) + 1;
         sfx.select();

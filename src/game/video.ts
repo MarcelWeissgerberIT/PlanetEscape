@@ -112,9 +112,10 @@ export function tickVideo(sim: Sim, now: number) {
       feeds.delete(id);
       continue;
     }
-    if (!f.live || now - f.lastT < 40) continue;
-    f.lastT = now;
     const r = sim.screenRect(b);
+    const interval = Math.max(40, (r.w * r.h) / 8000); // 25 fps for small walls, ~15 fps at 1024x512
+    if (!f.live || now - f.lastT < interval) continue;
+    f.lastT = now;
     const data = f.sample(r.w, r.h, VIDEO_CROPS[b.ratio ?? 0] ?? 1);
     if (data) sim.pushFrame(b, data, r.w, r.h);
   }
