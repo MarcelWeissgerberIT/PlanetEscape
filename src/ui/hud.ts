@@ -171,7 +171,7 @@ export class Hud {
       if (!img) return;
       if (img.closest('.build-btn, .inv-item')) return;
       if (img.closest('.recipe') && !img.closest('.r-in')) return; // the output icon selects the recipe
-      if (img.closest('button:not(.recipe)') && !img.closest('.tip')) return; // an icon inside an action button is its label
+      if (img.closest('button:not(.recipe):not(.kora-card)') && !img.closest('.tip')) return; // an icon inside an action button is its label (the mission card links its items)
       e.stopPropagation();
       this.hideTip(true);
       this.showChain(img.dataset.item as ItemId);
@@ -2121,33 +2121,26 @@ export class Hud {
     });
     this.bottom.addEventListener('pointerover', (e) => {
       const b = target(e);
-      if (!b || e.pointerType !== 'mouse') return;
-      clear();
-      this.keepTip();
-      this.tipTimer = window.setTimeout(() => this.showTip(b), this.tipOpen() ? 120 : 450);
+      if (b && e.pointerType === 'mouse') this.hoverTip(b);
     });
     this.bottom.addEventListener('pointerout', (e) => {
-      if (e.pointerType !== 'mouse' || !target(e)) return;
-      clear();
-      this.hideTip();
+      if (e.pointerType === 'mouse' && target(e)) this.hideTip();
     });
     // any other material or building icon (mission card, costs, panels, dialogs) explains itself on hover
     const iconOf = (e: Event) => {
       const img = (e.target as HTMLElement).closest('img[data-item], img[data-building]') as HTMLElement | null;
       return img && !img.closest('.tip, .build-btn, .inv-item, .title') ? img : null;
     };
+    // panels re-render while the pointer rests on them: the tip looks up whatever icon is under the pointer when it opens
+    this.root.addEventListener('pointermove', (e) => {
+      if (e.pointerType === 'mouse') this.tipPointer = { x: e.clientX, y: e.clientY };
+    }, true);
     this.root.addEventListener('pointerover', (e) => {
-      if (e.pointerType !== 'mouse') return;
-      const img = iconOf(e);
-      if (!img) return;
-      clear();
-      this.keepTip();
-      this.tipTimer = window.setTimeout(() => this.showTip(img), this.tipOpen() ? 120 : 450);
+      const img = e.pointerType === 'mouse' ? iconOf(e) : null;
+      if (img) this.hoverTip(img);
     });
     this.root.addEventListener('pointerout', (e) => {
-      if (e.pointerType !== 'mouse' || !iconOf(e)) return;
-      clear();
-      this.hideTip();
+      if (e.pointerType === 'mouse' && iconOf(e)) this.hideTip();
     });
     // the pointer may travel from the icon into the tip (to press its buttons or follow a link)
     this.tip.addEventListener('pointerenter', () => this.keepTip());
@@ -2181,6 +2174,14 @@ export class Hud {
   }
 
   private tipHideTimer: number | null = null;
+  private tipPointer: { x: number; y: number } | null = null;
+
+  /** The icon under the pointer now (the one the tip was scheduled for may have been re-rendered away). */
+  private underPointer(fallback: HTMLElement): HTMLElement | null {
+    if (fallback.isConnected || !this.tipPointer) return fallback;
+    const hit = document.elementFromPoint(this.tipPointer.x, this.tipPointer.y) as HTMLElement | null;
+    return (hit?.closest('img[data-item], img[data-building], .build-btn, .inv-item') as HTMLElement | null) ?? null;
+  }
   private tipFor: HTMLElement | null = null;
 
   private tipOpen(): boolean {
@@ -2197,9 +2198,10 @@ export class Hud {
     const build = (src.dataset.build ?? src.dataset.building) as BuildingId | undefined;
     const item = (src.dataset.chain ?? src.dataset.item) as ItemId | undefined;
     const html = build && BUILDINGS[build] ? this.buildingTipHtml(build) : item ? this.itemTipHtml(item) : '';
-    if (!html) return;
+    if (!html || !src.isConnected) return;
     this.keepTip();
-    if (this.tipFor !== src || !this.tipOpen()) this.tip.innerHTML = html;
+    if (this.tipKeyOf(src) !== this.tipKeyOf(this.tipFor ?? src) || this.tipFor === null || !this.tipOpen()) this.tip.innerHTML = html;
+    this.tipKey = this.tipKeyOf(src);
     this.tipFor = src;
     this.tip.classList.remove('hidden');
     const r = src.getBoundingClientRect();
@@ -2219,18 +2221,47 @@ export class Hud {
     }
   }
 
+  private tipKey = '';
+
+  /** What an element explains (a re-rendered copy of the same icon counts as the same). */
+  private tipKeyOf(el: HTMLElement): string {
+    return el.dataset.build ?? el.dataset.building ?? el.dataset.chain ?? el.dataset.item ?? '';
+  }
+
+  /** The mouse rests on an explainable element: open its tip after a short delay (at once when a tip is open). */
+  private hoverTip(el: HTMLElement) {
+    const key = this.tipKeyOf(el);
+    this.keepTip();
+    if (key === this.tipKey && (this.tipTimer || this.tipOpen())) {
+      if (this.tipOpen()) this.tipFor = el; // a re-render replaced the icon: keep the open tip as it is
+      return;
+    }
+    if (this.tipTimer) clearTimeout(this.tipTimer);
+    this.tipKey = key;
+    this.tipTimer = window.setTimeout(() => {
+      this.tipTimer = null;
+      const cur = this.underPointer(el);
+      if (cur) this.showTip(cur);
+    }, this.tipOpen() ? 120 : 450);
+  }
+
   /** Hide the tip, by default after a short grace time so the pointer can move into it. */
   hideTip(now = false) {
     this.keepTip();
-    if (now) {
+    const close = () => {
+      if (this.tipTimer) clearTimeout(this.tipTimer);
+      this.tipTimer = null;
+      this.tipKey = '';
       this.tip.classList.add('hidden');
       this.tipFor = null;
+    };
+    if (now) {
+      close();
       return;
     }
     this.tipHideTimer = window.setTimeout(() => {
       this.tipHideTimer = null;
-      this.tip.classList.add('hidden');
-      this.tipFor = null;
+      close();
     }, 380);
   }
 
