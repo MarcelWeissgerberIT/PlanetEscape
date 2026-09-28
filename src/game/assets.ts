@@ -15,29 +15,32 @@ function load(key: string, url: string): HTMLImageElement {
 // sub pages (e.g. /ai/) set window.__PE_BASE so relative asset paths still point at the site root
 const base = ((window as unknown as { __PE_BASE?: string }).__PE_BASE ?? import.meta.env.BASE_URL).replace(/\/$/, '');
 
+/** Per-build query on every sprite URL: redrawn art is never served from an old cache. */
+const V = `?v=${encodeURIComponent(__BUILD__)}`;
+
 export function buildingSprite(id: BuildingId | 'core_0' | 'core_1' | 'core_2'): HTMLImageElement {
-  return load(`b:${id}`, `${base}/assets/buildings/${id}.webp`);
+  return load(`b:${id}`, `${base}/assets/buildings/${id}.webp${V}`);
 }
 
 export function terrainSprite(id: TerrainId): HTMLImageElement {
-  return load(`t:${id}`, `${base}/assets/terrain/${id}.webp`);
+  return load(`t:${id}`, `${base}/assets/terrain/${id}.webp${V}`);
 }
 
 export function itemSprite(id: ItemId): HTMLImageElement {
   const key = id.startsWith('crate:') ? 'crate' : id;
-  return load(`i:${key}`, `${base}/assets/items/${key}.webp`);
+  return load(`i:${key}`, `${base}/assets/items/${key}.webp${V}`);
 }
 
 export function terrainUrl(id: TerrainId): string {
-  return `${base}/assets/terrain/${id}.webp`;
+  return `${base}/assets/terrain/${id}.webp${V}`;
 }
 
 export function itemUrl(id: ItemId): string {
-  return `${base}/assets/items/${id.startsWith('crate:') ? 'crate' : id}.webp`;
+  return `${base}/assets/items/${id.startsWith('crate:') ? 'crate' : id}.webp${V}`;
 }
 
 export function buildingUrl(id: BuildingId): string {
-  return `${base}/assets/buildings/${id}.webp`;
+  return `${base}/assets/buildings/${id}.webp${V}`;
 }
 
 export function uiUrl(name: string): string {

@@ -244,6 +244,6 @@ void preloadAll(BUILD_ORDER.concat('core'), ['iron_ore', 'copper_ore', 'quartz',
 
 if ('serviceWorker' in navigator && import.meta.env.PROD) {
   window.addEventListener('load', () => {
-    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js`).catch(() => undefined);
+    navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(__BUILD__)}`).catch(() => undefined);
   });
 }

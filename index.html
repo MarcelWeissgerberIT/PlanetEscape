@@ -14,19 +14,34 @@
     <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
     <title>Planet Escape</title>
     <script>
-      // A deploy replaces every bundle; a page loaded in that moment may ask for a file that is gone. Reload once.
+      // A deploy replaces every bundle; a page loaded in that moment may ask for a file that is gone. Reload, at most once a minute.
       window.addEventListener('error', function (e) {
         var t = e.target;
-        if (!t || t.tagName !== 'SCRIPT' && t.tagName !== 'LINK') return;
+        if (!t || (t.tagName !== 'SCRIPT' && !(t.tagName === 'LINK' && /stylesheet|modulepreload/.test(t.rel)))) return;
         try {
-          if (sessionStorage.getItem('pe_reloaded')) return;
-          sessionStorage.setItem('pe_reloaded', '1');
+          var last = +sessionStorage.getItem('pe_reload_at') || 0;
+          if (Date.now() - last < 60000) return;
+          sessionStorage.setItem('pe_reload_at', String(Date.now()));
         } catch (_) {}
         setTimeout(function () { location.reload(); }, 1500);
       }, true);
-      window.addEventListener('load', function () {
-        setTimeout(function () { try { sessionStorage.removeItem('pe_reloaded'); } catch (_) {} }, 10000);
-      });
+      // Rescue: if the game has not drawn its interface after 8 s, offer to clear the offline cache (the save stays).
+      function peReset() {
+        var jobs = [];
+        if (navigator.serviceWorker) jobs.push(navigator.serviceWorker.getRegistrations().then(function (rs) { return Promise.all(rs.map(function (r) { return r.unregister(); })); }));
+        if (window.caches) jobs.push(caches.keys().then(function (ks) { return Promise.all(ks.map(function (k) { return caches.delete(k); })); }));
+        Promise.all(jobs).catch(function () {}).then(function () { location.reload(); });
+      }
+      setTimeout(function () {
+        var ui = document.getElementById('ui');
+        if (!ui || ui.children.length) return;
+        var box = document.createElement('div');
+        box.id = 'pe-rescue';
+        box.style.cssText = 'position:fixed;inset:0;display:flex;align-items:center;justify-content:center;background:#15171c;color:#e2e8f0;font:15px system-ui,sans-serif;z-index:99;text-align:center;padding:16px';
+        box.innerHTML = '<div style="max-width:420px"><h2 style="margin:0 0 8px">Planet Escape</h2><p>Das Spiel lädt nicht? Oft hilft es, den Offline-Speicher zu leeren. Dein Spielstand bleibt erhalten.<br><small style="opacity:.7">Not loading? Clearing the offline cache usually helps. Your save is kept.</small></p><button style="margin-top:12px;padding:12px 18px;border:0;border-radius:10px;background:#22d3ee;color:#0b0e12;font-weight:700;font-size:15px;cursor:pointer">Cache leeren und neu laden</button></div>';
+        box.querySelector('button').onclick = peReset;
+        document.body.appendChild(box);
+      }, 8000);
     </script>
   </head>
   <body>
