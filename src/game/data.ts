@@ -306,6 +306,30 @@ export const CHALLENGES: ChallengeDef[] = [
     medals: [300, 450, 720],
   },
 ];
+CHALLENGES.push(
+  {
+    id: 'c_robots', icon: 'depot', seed: 2505, size: 44, rocks: 2,
+    basics: [{ type: 'iron_ore', dist: 9, r: 2.6 }, { type: 'copper_ore', dist: 10, r: 2.4 }],
+    inventory: { iron_plate: 40, copper_plate: 20, robot: 3 },
+    kits: { miner: 4, smelter: 2, road: 50, dock: 3, depot: 1, solar: 3 },
+    noPrint: ['dock', 'depot'],
+    buildings: ['miner', 'smelter', 'road', 'dock', 'depot', 'solar', 'storage'],
+    recipes: ['iron_plate', 'copper_plate'],
+    deliver: { iron_plate: 60, copper_plate: 30 },
+    medals: [240, 360, 600],
+  },
+  {
+    id: 'c_radio', icon: 'radio', seed: 2606, size: 56, rocks: 4,
+    basics: [{ type: 'iron_ore', dist: 25, r: 2.6 }, { type: 'copper_ore', dist: 25, r: 2.4 }],
+    inventory: { iron_plate: 40, copper_plate: 20 },
+    kits: { miner: 4, smelter: 2, radio: 3, mast: 1, conveyor: 8, solar: 4 },
+    noPrint: ['conveyor', 'radio', 'mast'],
+    buildings: ['miner', 'smelter', 'conveyor', 'radio', 'mast', 'solar', 'storage'],
+    recipes: ['iron_plate', 'copper_plate'],
+    deliver: { iron_plate: 50, copper_plate: 25 },
+    medals: [180, 300, 480],
+  },
+);
 export const CHALLENGE_BY_ID: Record<string, ChallengeDef> = Object.fromEntries(CHALLENGES.map((c) => [c.id, c]));
 /** Medal for a finish time: 3 gold, 2 silver, 1 bronze, 0 finished without a medal. */
 export function challengeMedal(id: string, seconds: number): number {

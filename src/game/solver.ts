@@ -349,7 +349,7 @@ function dirTowards(from: { x: number; y: number }, to: { x: number; y: number }
 }
 
 /** Deposit tiles of a type with a free neighbour, sorted by distance to `near`. */
-function depositEdges(sim: Sim, terrain: TerrainId, near: { x: number; y: number }): { x: number; y: number; dir: Dir; d: number }[] {
+export function depositEdges(sim: Sim, terrain: TerrainId, near: { x: number; y: number }): { x: number; y: number; dir: Dir; d: number }[] {
   const st = sim.state;
   const out: { x: number; y: number; dir: Dir; d: number }[] = [];
   for (let y = 0; y < st.height; y++) {
