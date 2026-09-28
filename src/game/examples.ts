@@ -232,11 +232,25 @@ export function buildPongMatrix(): GameState {
 export function buildVideoWall(): GameState {
   const c = ctx(80087, 80, 60);
   const { core, place } = c;
-  const x0 = core.x - 9, y0 = core.y - 12;
+  const x0 = core.x - 8, y0 = core.y - 14;
   const rx = place('screen', x0, y0);
   rx.value = 2; // 16x8 matrices of 16x16 = 256x128 px
+  rx.mode = 'scan';
   for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) place('matrix', x0 + 2 + x, y0 + y).value = 16;
+  place('speaker', x0, y0 + 1);
+  place('speaker', x0 + 1, y0 + 1);
   place('solar', x0, y0 + 3);
+  place('solar', x0 + 1, y0 + 3);
+  // the sampling made visible: colour samples leave the receiver to the left, run down a belt and through a row of
+  // pass lamps (the video as a stream of parts), then into a depot
+  c.belt(x0 - 1, y0, 2);
+  for (let y = y0 + 1; y < y0 + 9; y++) c.belt(x0 - 1, y, 2);
+  c.belt(x0 - 1, y0 + 9, 1);
+  for (let x = 0; x < 14; x++) {
+    const l = place('lamp', x0 + x, y0 + 9, 1);
+    l.mode = 'pass';
+  }
+  place('storage', x0 + 14, y0 + 9, 1);
   // a welcome picture until a stream arrives: "PE" in two colours
   const glyph = ['11101110', '10101010', '11101110', '10001010', '10001010'];
   const mid = c.st.buildings.filter((b) => b.type === 'matrix');
@@ -252,8 +266,8 @@ export function buildVideoWall(): GameState {
     c,
     {
       title: 'Videowand · Video wall',
-      de: 'Ein Video-Empfänger und 128 LED-Matrizen mit je 16×16 LEDs: 256×128 Pixel in 16 Millionen Farben. Tippe den Empfänger links an und wähle die Quelle:\n• „Tab / Bildschirm teilen“: Öffne YouTube in einem zweiten Tab, starte das Video, teile diesen Tab, und es läuft auf der Wand (Desktop-Browser).\n• „Kamera“: Du selbst, in LED.\n• „Videodatei“: eine Datei von diesem Gerät.\nTipp für ein scharfes Bild: YouTube vor dem Teilen in den Vollbildmodus (Taste F) schalten und im Panel den Zuschnitt nutzen. Die Wand lässt sich bis 32×16 Matrizen (512×256 px) vergrößern: im Panel die Größe wählen und Matrizen ergänzen (Blaupausen → Videowand). Jede Matrix kannst du auch einzeln antippen und bemalen. Der Stream bleibt auf deinem Gerät.',
-      en: 'One video receiver and 128 LED matrices of 16×16 LEDs each: 256×128 pixels in 16 million colours. Tap the receiver on the left and pick the source:\n• “Share tab / screen”: open YouTube in a second tab, start the video, share that tab, and it plays on the wall (desktop browsers).\n• “Camera”: you, in LEDs.\n• “Video file”: a file from this device.\nFor a sharp picture put YouTube into full screen (key F) before sharing and use the crop setting in the panel. The wall grows to 32×16 matrices (512×256 px): pick the size in the panel and add matrices (blueprints → video wall). Every matrix can also be tapped and painted by hand. The stream stays on your device.',
+      de: 'Ein Video-Empfänger und 128 LED-Matrizen mit je 16×16 LEDs: 256×128 Pixel in 16 Millionen Farben. Tippe den Empfänger links an und wähle die Quelle:\n• „Tab / Bildschirm teilen“: Öffne YouTube in einem zweiten Tab, starte das Video, teile diesen Tab, und es läuft auf der Wand (Desktop-Browser).\n• „Kamera“: Du selbst, in LED.\n• „Videodatei“: eine Datei von diesem Gerät.\nTipp für ein scharfes Bild: YouTube vor dem Teilen in den Vollbildmodus (Taste F) schalten und im Panel den Zuschnitt nutzen. Die Wand lässt sich bis 32×16 Matrizen (512×256 px) vergrößern: im Panel die Größe wählen und Matrizen ergänzen (Blaupausen → Videowand). Jede Matrix kannst du auch einzeln antippen und bemalen.\n\nTon: Die zwei Lautsprecher unter dem Empfänger spielen den Ton, wenn du beim Teilen „Tab-Audio teilen“ anhakst (Lautstärke am Lautsprecher). Abtastung: Links vom Empfänger läuft ein Band. Der Empfänger legt viermal pro Sekunde ein Teil in der Farbe des gerade abgetasteten Pixels darauf (rote Markierung wandert über die Wand), die Durchlass-Lampen unten flackern in den Videofarben, das Depot sammelt alles. Im Panel kannst du auf Mittelwert oder Bildmitte umstellen. Der Stream bleibt auf deinem Gerät.',
+      en: 'One video receiver and 128 LED matrices of 16×16 LEDs each: 256×128 pixels in 16 million colours. Tap the receiver on the left and pick the source:\n• “Share tab / screen”: open YouTube in a second tab, start the video, share that tab, and it plays on the wall (desktop browsers).\n• “Camera”: you, in LEDs.\n• “Video file”: a file from this device.\nFor a sharp picture put YouTube into full screen (key F) before sharing and use the crop setting in the panel. The wall grows to 32×16 matrices (512×256 px): pick the size in the panel and add matrices (blueprints → video wall). Every matrix can also be tapped and painted by hand.\n\nSound: the two speakers under the receiver play the audio when you tick “Share tab audio” while sharing (volume on the speaker). Sampling: a belt leaves the receiver to the left. Four times a second it drops an item in the colour of the pixel being sampled (the red marker walks across the wall), the pass lamps at the bottom flicker in the video’s colours, the depot collects everything. Switch to Average or Centre in the panel. The stream stays on your device.',
     },
     { x: x0 + 9, y: y0 + 4, zoom: 0.9 },
   );
@@ -481,7 +495,7 @@ export function buildAdder(): GameState {
 export const EXAMPLES: Example[] = [
   { id: 'pong', title: 'KORA Terminal · PONG', icon: 'terminal', de: 'CPU aus Bauteilen, RAM aus Speicherzellen, Bausteinspieler drücken die Tasten.', en: 'CPU from parts, RAM from registers, block players press the keys.', build: buildPongBoard },
   { id: 'pongmini', title: 'PONG · LED-Matrix', icon: 'matrix', de: 'Dasselbe Spiel auf 32 LED-Matrizen statt 2048 Lampen.', en: 'The same game on 32 LED matrices instead of 2048 lamps.', build: buildPongMatrix },
-  { id: 'video', title: 'Videowand · Video wall', icon: 'screen', de: 'YouTube-Tab, Kamera oder Datei auf 128 LED-Matrizen.', en: 'A YouTube tab, camera or file on 128 LED matrices.', build: buildVideoWall },
+  { id: 'video', title: 'Videowand · Video wall', icon: 'screen', de: 'YouTube-Tab, Kamera oder Datei auf 128 LED-Matrizen, mit Ton und Abtast-Band.', en: 'A YouTube tab, camera or file on 128 LED matrices, with sound and a sampling belt.', build: buildVideoWall },
   { id: 'ray', title: 'KORA RAY', icon: 'oscillator', de: 'Doom-artiges Ego-Labyrinth mit 60 kHz Turbo-Takt.', en: 'Doom-style first-person maze on a 60 kHz turbo clock.', build: buildRay },
   { id: 'blocks', title: 'KORA BLOCKS', icon: 'register', de: 'Bunte 2D-Blockwelt, die Karte liegt als Zahlen im RAM.', en: 'Colour 2D block world, the map sits in RAM as numbers.', build: buildBlocks },
   { id: 'ttt', title: 'Tic Tac Toe', icon: 'lamp', de: 'Neun Lampen, Depots unter Druck, Züge per Schalter.', en: 'Nine lamps, pressurised depots, moves by switch.', build: buildTicTacToe },

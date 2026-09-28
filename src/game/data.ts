@@ -60,6 +60,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   matrix: { id: 'matrix', kind: 'logic', size: 1, cost: { iron_plate: 4, circuit: 2, glass: 1 }, power: 0, rotatable: false },
   // video receiver: streams a shared browser tab, the camera or a video file onto the matrices / lamps right of it
   screen: { id: 'screen', kind: 'logic', size: 1, cost: { circuit: 4, glass: 4, copper_wire: 6 }, power: 2, rotatable: false },
+  // speaker: plays the receiver's sound when wired to it (touching or via bus traces), shows a VU meter
+  speaker: { id: 'speaker', kind: 'logic', size: 1, cost: { iron_plate: 4, copper_wire: 4 }, power: 1, rotatable: false },
   switch: { id: 'switch', kind: 'logic', size: 1, cost: { iron_plate: 3 }, power: 0, rotatable: true },
   // an 8-bit computer (CHIP-8): drives a 64x32 lamp display to its right, reads switches on its rim as keys
   terminal: { id: 'terminal', kind: 'logic', size: 2, cost: { machine_part: 10, steel_frame: 4 }, power: 6, rotatable: false },
@@ -97,6 +99,7 @@ export const BUILD_ORDER: BuildingId[] = [
   'lamp',
   'matrix',
   'screen',
+  'speaker',
   'switch',
   'terminal',
   'oscillator',
@@ -154,7 +157,7 @@ export const SHIP_TOTAL = Object.values(SHIP_PARTS).reduce((a, c) => a + (c ?? 0
 export const MISSIONS: MissionDef[] = [
   { id: 'm1', deliver: { iron_ore: 10 }, unlocks: ['smelter'], unlockRecipes: ['iron_plate', 'copper_plate'] },
   { id: 'm2', deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
-  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'matrix', 'screen', 'switch'], unlockRecipes: ['steel_frame'] },
+  { id: 'm3', deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'splitter', 'tunnel', 'sorter', 'overflow', 'lamp', 'matrix', 'screen', 'speaker', 'switch'], unlockRecipes: ['steel_frame'] },
   { id: 'm4', deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: [], unlockRecipes: ['circuit', 'glass'] },
   { id: 'm5', deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
@@ -213,6 +216,8 @@ export const MATRIX_SIZE = 8; // default pixels per side of an LED matrix
 export const MATRIX_SIZES = [4, 8, 16, 32, 64]; // selectable LEDs per side
 export const MATRIX_SAVE_MAX = 16; // pictures of larger matrices are live only (a 64x64 wall would not fit the browser store)
 export const SCREEN_MAX_PX = 1024; // widest frame a receiver samples
+export const SCREEN_SAMPLE_RATE = 4; // colour samples per second the receiver puts on the belt to its left
+export const SCREEN_SCAN_STEP = 97; // pixels skipped between two scan samples (prime: walks the whole frame)
 /** Pixels per side of a matrix: 8x8 by default. */
 export function matrixSize(b: { value?: number }): number {
   return b.value && MATRIX_SIZES.includes(b.value) ? b.value : MATRIX_SIZE;

@@ -51,6 +51,7 @@ export type BuildingId =
   | 'lamp'
   | 'matrix'
   | 'screen'
+  | 'speaker'
   | 'switch'
   | 'terminal'
   | 'oscillator'
@@ -124,7 +125,7 @@ export interface Building {
   bufL?: ItemId[];
   bufR?: ItemId[];
   threshold?: number;
-  mode?: 'hold' | 'pass' | 'pulse'; // lamp: hold keeps the item lit, pass forwards it; switch: pulse closes itself after one item
+  mode?: 'hold' | 'pass' | 'pulse' | 'off' | 'avg' | 'centre' | 'scan'; // lamp: hold keeps the item lit, pass forwards it; switch: pulse closes itself after one item; screen: sample output
   ratio?: number;
   open?: boolean;
   // terminal: program source and run flag (the CPU itself lives in the Sim and is rebuilt on load)
@@ -241,7 +242,7 @@ export interface BlueprintItem {
   recipe?: string | null;
   threshold?: number;
   ratio?: number;
-  mode?: 'hold' | 'pass' | 'pulse';
+  mode?: 'hold' | 'pass' | 'pulse' | 'off' | 'avg' | 'centre' | 'scan';
   open?: boolean;
   value?: number;
 }

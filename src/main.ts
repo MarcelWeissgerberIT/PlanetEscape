@@ -2,7 +2,7 @@ import './style.css';
 import { preloadAll } from './game/assets';
 import { BUILD_ORDER, ITEM_ORDER } from './game/data';
 import { EXAMPLES } from './game/examples';
-import { startVideo, stopVideo, tickVideo, videoLive } from './game/video';
+import { startVideo, stopVideo, tickVideo, videoHasAudio, videoLive } from './game/video';
 import { Input } from './game/input';
 import { Renderer } from './game/render';
 import * as Save from './game/save';
@@ -110,6 +110,7 @@ const hud = new Hud(sim, input, renderer, {
   },
   onVideoStop: (b) => stopVideo(b.id),
   videoLive: (b) => videoLive(b.id),
+  videoHasAudio: (b) => videoHasAudio(b.id),
   onLoadExample: (id: string) => {
     const ex = EXAMPLES.find((e) => e.id === id);
     if (!ex) return;

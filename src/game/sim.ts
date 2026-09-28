@@ -31,7 +31,7 @@ import {
 } from './data';
 import type { Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_MAX_PX, SCREEN_REGION, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, ITEMS, MATRIX_SIZE, SCREEN_MAX_PX, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -715,9 +715,14 @@ export class Sim {
           b.status = 'ok';
           break;
         case 'screen':
-          b.working = this.state.time - (b.progress ?? -10) < 1; // a frame arrived within the last second
-          b.status = b.working ? 'ok' : 'idle';
+          this.tickScreen(b, dt);
           break;
+        case 'speaker': {
+          const rx = this.linkedReceiver(b);
+          b.working = !!rx?.working;
+          b.status = rx ? 'ok' : 'unpaired';
+          break;
+        }
         case 'adder':
         case 'subtractor':
         case 'multiplier':
@@ -1154,11 +1159,100 @@ export class Sim {
     return { x: b.x + SCREEN_REGION.dx, y: b.y, w: SCREEN_REGION.w * s * k, h: SCREEN_REGION.h * s * k };
   }
 
+  private frames = new Map<number, { rgba: Uint8ClampedArray; w: number; h: number; scan: number }>(); // last frame per receiver
+  private speakerLinks = new Map<number, Building>(); // speaker id -> receiver
+
+  /** Speakers wired to a receiver: touching it or reachable through bus traces (and other speakers). */
+  speakersOf(b: Building): Building[] {
+    const st = this.state;
+    const seen = new Set<number>([b.y * st.width + b.x]);
+    const queue = [b.y * st.width + b.x];
+    const out: Building[] = [];
+    while (queue.length && seen.size < 512) {
+      const idx = queue.shift()!;
+      const x = idx % st.width, y = Math.floor(idx / st.width);
+      for (let d = 0; d < 4; d++) {
+        const nx = x + DX[d], ny = y + DY[d];
+        if (nx < 0 || ny < 0 || nx >= st.width || ny >= st.height) continue;
+        const ni = ny * st.width + nx;
+        if (seen.has(ni)) continue;
+        seen.add(ni);
+        const p = this.at(nx, ny);
+        if (!p || (p.type !== 'bus' && p.type !== 'speaker')) continue;
+        if (p.type === 'speaker') out.push(p);
+        queue.push(ni);
+      }
+    }
+    return out;
+  }
+
+  /** The receiver a speaker is wired to (looked up by the receivers' ticks). */
+  linkedReceiver(speaker: Building): Building | null {
+    const rx = this.speakerLinks.get(speaker.id);
+    return rx && this.state.buildings.includes(rx) ? rx : null;
+  }
+
+  /** Loudness 0..1 the receiver should play with: the loudest wired speaker, silence without one. */
+  receiverGain(b: Building): number {
+    let g = 0;
+    for (const s of this.speakersOf(b)) g = Math.max(g, Math.min(10, s.value ?? 7) / 10);
+    return g;
+  }
+
+  private tickScreen(b: Building, dt: number) {
+    b.working = this.state.time - (b.progress ?? -10) < 1; // a frame arrived within the last second
+    b.status = b.working ? 'ok' : 'idle';
+    for (const s of this.speakersOf(b)) this.speakerLinks.set(s.id, b);
+    // sample output: a few items per second in the colour of the picture, onto the belt to the left
+    const mode = b.mode ?? 'scan';
+    const f = this.frames.get(b.id);
+    if (!b.working || !f || mode === 'off' || mode === 'hold' || mode === 'pass' || mode === 'pulse') return;
+    b.rateT = Math.min(2, (b.rateT ?? 0) + dt * SCREEN_SAMPLE_RATE);
+    if (b.rateT < 1) return;
+    const item = this.sampleOf(b, f, mode);
+    if (item && this.pushDir(b, item, 3)) b.rateT -= 1;
+    else if (!item) b.rateT -= 1; // dark pixel: nothing to send, the slot passes
+  }
+
+  private sampleOf(b: Building, f: { rgba: Uint8ClampedArray; w: number; h: number; scan: number }, mode: 'avg' | 'centre' | 'scan'): ItemId | null {
+    const { rgba, w, h } = f;
+    let r = 0, g = 0, bl = 0;
+    if (mode === 'avg') {
+      let n = 0;
+      for (let i = 0; i < w * h; i += 7) {
+        r += rgba[i * 4];
+        g += rgba[i * 4 + 1];
+        bl += rgba[i * 4 + 2];
+        n++;
+      }
+      r /= n;
+      g /= n;
+      bl /= n;
+    } else {
+      const i = mode === 'centre' ? (h >> 1) * w + (w >> 1) : f.scan;
+      if (mode === 'scan') f.scan = (f.scan + SCREEN_SCAN_STEP) % (w * h);
+      r = rgba[i * 4];
+      g = rgba[i * 4 + 1];
+      bl = rgba[i * 4 + 2];
+    }
+    void b;
+    return nearestItem(r, g, bl);
+  }
+
+  /** Where the scan sample currently sits (pixel index), for the renderer's scan marker. */
+  scanPos(b: Building): { x: number; y: number; w: number; h: number } | null {
+    const f = this.frames.get(b.id);
+    if (!f || !b.working) return null;
+    return { x: f.scan % f.w, y: Math.floor(f.scan / f.w), w: f.w, h: f.h };
+  }
+
   /** Write an RGBA frame (w x h, the receiver's resolution) onto matrices (8x8 blocks) and lamps (one pixel per tile). */
   pushFrame(b: Building, rgba: Uint8ClampedArray, w: number, h: number) {
     const r = this.screenRect(b);
     if (w !== r.w || h !== r.h) return;
     b.progress = this.state.time;
+    const prev = this.frames.get(b.id);
+    this.frames.set(b.id, { rgba, w, h, scan: prev && prev.w === w && prev.h === h ? prev.scan : 0 });
     const tilesW = w / 4, tilesH = h / 4; // upper bound (4 px tiles); denser matrices cover several of these
     for (let my = 0; my < tilesH; my++)
       for (let mx = 0; mx < tilesW; mx++) {
@@ -1782,7 +1876,7 @@ export class Sim {
       if (i.ratio !== undefined) b.ratio = i.ratio;
       if (i.mode !== undefined) b.mode = i.mode;
       if (i.open !== undefined) b.open = i.open;
-      if (i.value !== undefined && (b.type === 'multiplier' || b.type === 'divider' || b.type === 'matrix' || b.type === 'screen')) b.value = i.value;
+      if (i.value !== undefined && (b.type === 'multiplier' || b.type === 'divider' || b.type === 'matrix' || b.type === 'screen' || b.type === 'speaker')) b.value = i.value;
       placed.push(b);
     }
     return { placed, skipped, reason };

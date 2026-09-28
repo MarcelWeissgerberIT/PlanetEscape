@@ -32,6 +32,7 @@ export interface HudCallbacks {
   onVideo: (b: Building, kind: 'screen' | 'camera' | 'file', file?: File) => Promise<string | null>; // resolves with an error message or null
   onVideoStop: (b: Building) => void;
   videoLive: (b: Building) => 'screen' | 'camera' | 'file' | null;
+  videoHasAudio: (b: Building) => boolean;
 }
 
 function el<K extends keyof HTMLElementTagNameMap>(tag: K, cls?: string, html?: string): HTMLElementTagNameMap[K] {
@@ -952,7 +953,7 @@ export class Hud {
     const board: Blueprint = { name: t('preset_ttt'), w: 3, h: 5, items: [...ttt.items.map((i) => ({ ...i, dy: i.dy + 2 })), ...[0, 1, 2].map((x) => ({ type: 'switch' as const, dx: x, dy: 1, dir: 2 as const, recipe: null, open: false })), ...[0, 1, 2].map((x) => ({ type: 'conveyor' as const, dx: x, dy: 0, dir: 2 as const, recipe: null }))] };
     const matrix: Blueprint = { name: t('preset_matrix'), w: 8, h: 4, items: [] };
     for (let y = 0; y < 4; y++) for (let x = 0; x < 8; x++) matrix.items.push({ type: 'matrix', dx: x, dy: y, dir: 0, recipe: null });
-    const wall: Blueprint = { name: t('preset_wall'), w: 18, h: 8, items: [{ type: 'screen', dx: 0, dy: 0, dir: 0, recipe: null }] };
+    const wall: Blueprint = { name: t('preset_wall'), w: 18, h: 8, items: [{ type: 'screen', dx: 0, dy: 0, dir: 0, recipe: null }, { type: 'speaker', dx: 0, dy: 1, dir: 0, recipe: null }, { type: 'speaker', dx: 1, dy: 1, dir: 0, recipe: null }] };
     for (let y = 0; y < 8; y++) for (let x = 0; x < 16; x++) wall.items.push({ type: 'matrix', dx: 2 + x, dy: y, dir: 0, recipe: null, value: 16 });
     return [board, grid(t('preset_display', { w: 5, h: 7 }), 5, 7), grid(t('preset_display', { w: 8, h: 8 }), 8, 8), matrix, wall, this.displayBlueprint()];
   }
@@ -1317,7 +1318,16 @@ export class Hud {
           <div class="dirs"><span class="lbl">${t('vid_size')}</span>${[1, 2, 3, 4].map((n) => `<button class="chip ${k === n ? 'active' : ''}" data-value="${n}">${8 * n}×${4 * n}</button>`).join('')}<small class="dim"> · ${r.w}×${r.h} px</small></div>
           <div class="dirs"><span class="lbl">${t('vid_crop')}</span>${VIDEO_CROPS.map((c, i) => `<button class="chip ${(b.ratio ?? 0) === i ? 'active' : ''}" data-crop="${i}">${c === 1 ? t('vid_fit') : c + '×'}</button>`).join('')}</div>
           <div class="dirs wrap"><span class="lbl">${t('vid_density')}</span>${MATRIX_SIZES.map((n) => `<button class="chip ${r.w / (SCREEN_REGION.w * k) === n ? 'active' : ''}" data-mxall="${n}">${n}×${n}</button>`).join('')}</div>
+          <div class="dirs wrap"><span class="lbl">${t('vid_sample')}</span>${(['scan', 'avg', 'centre', 'off'] as const).map((m) => `<button class="chip ${(b.mode ?? 'scan') === m ? 'active' : ''}" data-smode="${m}">${t(`vid_sample_${m}` as 'vid_sample_scan')}</button>`).join('')}</div>
+          <p class="save-hint">${t('vid_sample_hint')}</p>
+          <div class="lbl">${(() => { const n = this.sim.speakersOf(b).length; return live ? (this.cb.videoHasAudio(b) ? (n ? `🔊 ${t('vid_sound_on', { n })}` : `🔇 ${t('vid_sound_nospeaker')}`) : `🔇 ${t('vid_sound_none')}`) : `🔈 ${t('vid_sound_idle', { n })}`; })()}</div>
           <p class="save-hint">${t('vid_hint')}</p>`;
+      } else if (b.type === 'speaker') {
+        const rx = this.sim.linkedReceiver(b);
+        const vol = b.value ?? 7;
+        body = `<div class="lbl">${rx ? `<span class="okline">● ${t('spk_linked')}</span>` : `<span class="bad">○ ${t('spk_unlinked')}</span>`}</div>
+          <div class="dirs wrap"><span class="lbl">${t('spk_volume')}</span>${[0, 2, 4, 6, 8, 10].map((v) => `<button class="chip ${vol === v ? 'active' : ''}" data-value="${v}">${v === 0 ? t('off') : v * 10 + '%'}</button>`).join('')}</div>
+          <p class="save-hint">${t('spk_hint')}</p>`;
       } else if (b.type === 'matrix') {
         const s = matrixSize(b);
         const px = b.px ?? [];
@@ -1603,6 +1613,18 @@ export class Hud {
           void this.cb.onVideo(b, act as 'screen' | 'camera').then((err) => (err ? this.toast(`⚠ ${err}`, 5000, 'error') : this.showInfo(b)));
         }
         sfx.select();
+        return;
+      }
+      if (b.type === 'screen' && target.dataset.smode !== undefined) {
+        b.mode = target.dataset.smode as Building['mode'];
+        sfx.select();
+        this.showInfo(b);
+        return;
+      }
+      if (b.type === 'speaker' && target.dataset.value !== undefined) {
+        b.value = Number(target.dataset.value);
+        sfx.select();
+        this.showInfo(b);
         return;
       }
       if (b.type === 'screen' && target.dataset.mxall !== undefined) {

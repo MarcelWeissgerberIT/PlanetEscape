@@ -2,6 +2,7 @@ import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Camera, TILE } from './camera';
 import { BELT_SPACING, BUILDINGS, ITEMS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W } from './chip8';
+import { audioLevel } from './video';
 import { ARITH } from './sim';
 import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
@@ -343,6 +344,7 @@ export class Renderer {
     if (!this.lowDetail) for (const b of visible) if (b.type === 'conveyor' || (b.type === 'tunnel' && b.exit)) this.drawBeltItems(b);
     for (const b of visible) if (b.type !== 'conveyor' && b.type !== 'tunnel') this.drawBuilding(b);
 
+    this.drawScanlines(visible);
     if (this.overlay) this.drawOverlay(visible, dt);
 
     this.drawParticles(dt);
@@ -760,6 +762,19 @@ export class Renderer {
       }
       return;
     }
+    if (b.type === 'speaker') {
+      const rx = this.sim.linkedReceiver(b);
+      const level = rx ? audioLevel(rx.id) : 0;
+      const bars = 6;
+      for (let i = 0; i < bars; i++) {
+        const on = level * bars > i;
+        ctx.fillStyle = on ? (i < 4 ? '#34d399' : '#f59e0b') : 'rgba(255,255,255,0.12)';
+        ctx.fillRect(b.x * TILE + 10 + i * 8, b.y * TILE + sz - 12, 6, 6);
+      }
+      if (!rx) this.drawBadge(b.x * TILE + sz - 13, b.y * TILE + 13, '!', '#f59e0b');
+      else if (level > 0.05 && !this.lowDetail) this.animGlow(cx, cy - 4, 4 + level * 10, '#34d399');
+      return;
+    }
     if (b.type === 'oscillator') {
       const q = b.clock ?? 0, g = b.turbo ?? 0;
       for (let i = 0; i < OSCILLATOR_CRYSTALS; i++) {
@@ -1159,6 +1174,29 @@ export class Renderer {
       ctx.strokeStyle = '#070a0e';
       ctx.lineWidth = 2;
       ctx.strokeRect(x0 + 1, y0 + 1, TILE - 2, TILE - 2);
+    }
+  }
+
+  /** A sweeping line over each live video wall plus the scan sample marker: the sampling made visible. */
+  private drawScanlines(visible: Building[]) {
+    const { ctx } = this;
+    for (const b of visible) {
+      if (b.type !== 'screen' || !b.working) continue;
+      const r = this.sim.screenRect(b);
+      const first = this.sim.at(r.x, r.y);
+      const dens = first?.type === 'matrix' ? matrixSize(first) : MATRIX_SIZE;
+      const tw = r.w / dens, th = r.h / dens;
+      const sweep = (this.time * 0.6) % 1;
+      const y = r.y * TILE + sweep * th * TILE;
+      ctx.fillStyle = 'rgba(255,255,255,0.10)';
+      ctx.fillRect(r.x * TILE, y - 3, tw * TILE, 6);
+      const p = this.sim.scanPos(b);
+      if (p && (b.mode ?? 'scan') === 'scan' && !this.lowDetail) {
+        const px = r.x * TILE + (p.x / p.w) * tw * TILE, py = r.y * TILE + (p.y / p.h) * th * TILE;
+        ctx.strokeStyle = '#f43f5e';
+        ctx.lineWidth = 2;
+        ctx.strokeRect(px - 4, py - 4, 8, 8);
+      }
     }
   }
 

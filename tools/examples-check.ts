@@ -81,5 +81,12 @@ for (const ex of EXAMPLES) {
   const v = m.px![255];
   console.log('video wall: last matrix pixel', '#' + v.toString(16).padStart(6, '0'), 'receiver', rx.status);
   if (v !== ((255 << 16) | (255 << 8) | 200) || rx.status !== 'ok') throw new Error('frame not applied: ' + v.toString(16));
+  // speakers wired, colour samples leave on the belt
+  const spk = sim.speakersOf(rx);
+  for (let i = 0; i < 30; i++) { sim.pushFrame(rx, frame, r.w, r.h); sim.tick(1 / 30); }
+  const belt = st.buildings.find((b) => b.type === 'conveyor' && b.x === rx.x - 1 && b.y === rx.y)!;
+  const onBelts = st.buildings.filter((b) => b.type === 'conveyor').reduce((a, b) => a + (b.items?.length ?? 0), 0);
+  console.log('speakers', spk.length, 'gain', sim.receiverGain(rx), 'samples on belts after 1 s', onBelts, 'scan pos', JSON.stringify(sim.scanPos(rx)));
+  if (spk.length !== 2 || sim.receiverGain(rx) !== 0.7 || onBelts < 2 || !belt) throw new Error('sampling or speakers broken');
 }
 console.log('examples-check OK');
