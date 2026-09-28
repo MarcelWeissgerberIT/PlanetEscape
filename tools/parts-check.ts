@@ -96,6 +96,13 @@ function world() {
   rx.threshold = 3;
   w.place('conveyor', 41, 40, 1);
   const sink = w.place('storage', 42, 40, 1);
+  // 39 tiles apart: out of radio range, a mast in the middle links them
+  const lone = w.place('radio', 40, 10, 1);
+  lone.mode = 'rx';
+  lone.threshold = 3;
+  w.place('conveyor', 41, 10, 1);
+  const loneSink = w.place('storage', 42, 10, 1);
+  w.place('mast', 23, 30);
   const other = w.place('radio', 40, 30, 1);
   other.mode = 'rx';
   other.threshold = 4;
@@ -107,6 +114,8 @@ function world() {
   if ((rx.acc ?? 0) < 15 || w.count(sink) < (rx.acc ?? 0) - 2) throw new Error('receiver does not deliver');
   if ((tx.acc ?? 0) !== (rx.acc ?? 0) + q || q > RADIO_QUEUE) throw new Error('channel accounting off');
   if (w.count(otherSink) !== 0) throw new Error('channels leak');
+  console.log('radio out of range (no mast):', w.count(loneSink));
+  if (w.count(loneSink) !== 0) throw new Error('a receiver out of range got items');
 }
 
 // battery: two solars (plus the core's base power) charge it at the rate cap, then the solars go and four radios overload the grid

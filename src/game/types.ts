@@ -60,6 +60,7 @@ export type BuildingId =
   | 'road'
   | 'dock'
   | 'kitport'
+  | 'mast'
   | 'depot'
   | 'stacker'
   | 'hall4'

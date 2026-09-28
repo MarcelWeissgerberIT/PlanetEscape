@@ -89,6 +89,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   reactor: { id: 'reactor', kind: 'power', size: 3, cost: { steel_frame: 20, circuit: 10, precision_part: 6, glass: 10 }, power: -60, rotatable: false },
   // puts the kits of far construction sites on a belt (must stand within the core's reach)
   kitport: { id: 'kitport', kind: 'logic', size: 1, cost: { iron_plate: 6, copper_wire: 4 }, power: 1, rotatable: true },
+  // radio mast: relays radio bridges (tx -> rx) beyond their own range
+  mast: { id: 'mast', kind: 'logic', size: 1, cost: { iron_plate: 4, copper_wire: 4, circuit: 1 }, power: 1, rotatable: false },
   timer: { id: 'timer', kind: 'logic', size: 1, cost: { iron_plate: 4, copper_wire: 2, circuit: 1 }, power: 1, rotatable: true },
   sensor: { id: 'sensor', kind: 'logic', size: 1, cost: { iron_plate: 3, copper_wire: 2 }, power: 0, rotatable: true },
   radio: { id: 'radio', kind: 'logic', size: 1, cost: { circuit: 2, copper_wire: 6, cell: 1 }, power: 3, rotatable: true },
@@ -144,6 +146,7 @@ export const BUILD_ORDER: BuildingId[] = [
   'road',
   'dock',
   'kitport',
+  'mast',
   'depot',
   'stacker',
   'lamp',
@@ -221,7 +224,7 @@ export const MISSIONS: MissionDef[] = [
   { id: 'm2', rate: { iron_plate: 10 }, rateHold: 45, deliver: { iron_plate: 20, copper_plate: 10 }, unlocks: ['assembler', 'printer', 'storage', 'kitport'], unlockRecipes: ['copper_wire', 'machine_part'], reward: { machine_part: 8 } },
   { id: 'm3', rate: { machine_part: 4 }, rateHold: 45, deliver: { machine_part: 6 }, build: { printer: 1 }, unlocks: ['solar', 'wind', 'splitter', 'tunnel', 'sorter', 'overflow', 'picker', 'lamp', 'speaker', 'switch', 'sensor'], unlockRecipes: ['steel_frame', 'motor'] },
   { id: 'm4', rate: { copper_wire: 8, steel_frame: 3 }, rateHold: 45, deliver: { copper_wire: 10, steel_frame: 6 }, unlocks: ['road', 'dock', 'depot', 'battery', 'hall4', 'hall8', 'matrix', 'screen', 'keyboard', 'timer'], unlockRecipes: ['circuit', 'glass', 'cell', 'robot'] },
-  { id: 'm5', rate: { circuit: 4 }, rateHold: 45, deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'radio', 'stacker', 'hall12', 'hall16', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
+  { id: 'm5', rate: { circuit: 4 }, rateHold: 45, deliver: { circuit: 8, glass: 6 }, unlocks: ['refinery', 'mixer', 'valve', 'terminal', 'oscillator', 'bus', 'radio', 'mast', 'stacker', 'hall12', 'hall16', 'register', 'adder', 'subtractor', 'multiplier', 'divider'], unlockRecipes: ['water', 'fuel', 'precision_part'] },
   { id: 'm6', rate: { precision_part: 2 }, rateHold: 45, deliver: { water: 10, fuel: 6, precision_part: 6 }, unlocks: ['generator', 'reactor', 'fabricator'], unlockRecipes: ['silicon', 'hull_plate', 'life_support', 'engine', 'nav_computer', 'fuel_cell'] },
   { id: 'm7', deliver: { ...SHIP_PARTS }, unlocks: [], unlockRecipes: [] },
 ];
@@ -235,7 +238,13 @@ export const STARTING_BUILDINGS: BuildingId[] = ['conveyor', 'miner'];
 export const STARTING_RECIPES: string[] = [];
 
 export const BELT_SPEED = 1.6; // tiles per second
-export const BELT_SPACING = 0.28; // min distance between items on a belt
+export const BELT_SPACING = 0.35; // min distance between items on a belt (about 270 items per minute)
+export const ORE_BULK = 1.8; // raw materials (ores, ice, oil) are bulky: they need this much more belt space
+/** Belt space an item needs: raw materials are bulky, crates and everything made are compact. */
+export function itemSpacing(id: string): number {
+  if (id.startsWith('crate:') || id.startsWith('kit:')) return BELT_SPACING;
+  return ITEMS[id as ItemId]?.tier === 0 ? BELT_SPACING * ORE_BULK : BELT_SPACING;
+}
 export const BUFFER_CAP = 6; // max per input item in a machine
 export const OUTPUT_CAP = 6;
 export const STORAGE_CAP = 120;
@@ -289,7 +298,7 @@ export const SCREEN_TINT = 0.35; // how much the delivered item's colour tints t
 export const SCREEN_SAMPLE_RATE = 4;
 /** Build menu tabs. */
 export const BUILD_GROUPS: { id: 'logistics' | 'storage' | 'production' | 'energy' | 'circuit' | 'computer'; items: BuildingId[] }[] = [
-  { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'sorter', 'overflow', 'mixer', 'valve', 'picker', 'kitport', 'road', 'dock', 'depot', 'radio'] },
+  { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'sorter', 'overflow', 'mixer', 'valve', 'picker', 'kitport', 'road', 'dock', 'depot', 'radio', 'mast'] },
   { id: 'storage', items: ['storage', 'hall4', 'hall8', 'hall12', 'hall16', 'stacker'] },
   { id: 'production', items: ['miner', 'smelter', 'assembler', 'printer', 'refinery', 'fabricator'] },
   { id: 'energy', items: ['solar', 'wind', 'battery', 'generator', 'reactor'] },
@@ -337,6 +346,7 @@ export const TIMER_OPEN = 0.5; // seconds the timer stays open
 export const RADIO_CHANNELS = 8;
 export const RADIO_QUEUE = 8; // items in flight per channel
 export const RADIO_RATE = 2; // items per second a receiver puts out
+export const RADIO_RANGE = 20; // tiles a radio bridge or mast reaches (masts relay further)
 export const BATTERY_CAP = 300; // power-seconds one battery stores
 export const BATTERY_RATE = 10; // power one battery can deliver
 /** Program ids a program may start with EXEC n (n = index + 1); KDOS lists them as files. */

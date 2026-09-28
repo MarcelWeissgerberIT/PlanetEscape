@@ -1293,6 +1293,10 @@ export class Hud {
         <div class="lbl">${t('filter')}</div>
         <div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('no_filter')}</button>
         ${filterable.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
+    } else if (b.type === 'mast') {
+      const net = this.sim.radioNet();
+      const n = this.sim.state.buildings.filter((x) => (x.type === 'radio' || x.type === 'mast') && x !== b && net.get(x.id) === net.get(b.id)).length;
+      body = `${statusLine(` · ${t('mast_links', { n })}`)}<p class="save-hint">${t('mast_hint')}</p>`;
     } else if (b.type === 'battery') {
       const frac = Math.min(1, (b.value ?? 0) / BATTERY_CAP);
       body = `<div class="lbl">${t('battery_charge')} ${Math.round(b.value ?? 0)} / ${BATTERY_CAP}</div><div class="pbar big"><div class="pfill" style="width:${frac * 100}%"></div></div><p class="save-hint">${t('battery_hint')}</p>`;
@@ -1439,7 +1443,9 @@ export class Hud {
       } else if (b.type === 'radio') {
         const ch = b.threshold ?? 1, rx = b.mode === 'rx';
         const inFlight = this.sim.radioQueue(ch).length;
-        body = `${statusLine(` · ${t('radio_inflight', { n: inFlight })}`)}
+        const net = this.sim.radioNet();
+        const peers = this.sim.state.buildings.filter((x) => x.type === 'radio' && x !== b && !x.site && (x.threshold ?? 1) === ch && x.mode !== b.mode && net.get(x.id) === net.get(b.id)).length;
+        body = `${statusLine(` · ${t('radio_inflight', { n: inFlight })} · ${t(rx ? 'radio_hears' : 'radio_reaches', { n: peers })}`)}
           <div class="dirs"><span class="lbl">${t('radio_mode')}</span><button class="chip ${rx ? '' : 'active'}" data-mode="tx">${t('radio_tx')}</button><button class="chip ${rx ? 'active' : ''}" data-mode="rx">${t('radio_rx')}</button></div>
           <div class="dirs wrap"><span class="lbl">${t('radio_channel')}</span>${Array.from({ length: RADIO_CHANNELS }, (_, i) => i + 1).map((c) => `<button class="chip ${ch === c ? 'active' : ''}" data-threshold="${c}">${c}</button>`).join('')}</div>
           <p class="save-hint">${t('radio_hint')}</p>${dirPicker}`;
@@ -2289,6 +2295,7 @@ export class Hud {
     const rate = this.chainRate;
     const minerPerMin = (60 / MINE_SECONDS) * sim.factor('miner') * sim.factor('yield');
     const beltPerMin = sim.beltCapacity();
+    void beltPerMin;
     const deposits = (id: ItemId) => (Object.keys(TERRAIN_ITEM) as TerrainId[]).find((k) => TERRAIN_ITEM[k] === id);
     // qty mode (buildings): amounts instead of rates
     const node = (id: ItemId, amount: number, qty: boolean, depth: number, seen: Set<ItemId>, per: number | null): string => {
@@ -2315,7 +2322,7 @@ export class Hud {
           <span>${t('bp_mine', { m: tBuilding('miner') })}</span>
           <em>${qty ? t('bp_mine_qty', { s: Math.round((amount * MINE_SECONDS) / sim.factor('miner')) }) : `${Math.ceil(miners)}× (${miners.toFixed(2)}) · ${built} ${t('built')}`}</em></div>`;
       }
-      if (!qty && amount > beltPerMin) body += `<div class="bp-warn">⚠ ${t('belt_limit', { n: beltPerMin.toFixed(0) })}</div>`;
+      if (!qty && amount > sim.beltCapacity(id)) body += `<div class="bp-warn">⚠ ${t('belt_limit', { n: sim.beltCapacity(id).toFixed(0) })}</div>`;
       body += `</div>`;
       let kids = '';
       if (r && !seen.has(id) && depth < 7) {

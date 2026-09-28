@@ -34,7 +34,7 @@ import {
 } from './data';
 import type { Drone, PrintJob, Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, CORE_REACH, CORE_DRONES, DRONE_SPEED, DRONE_DELAY, KITPORT_RATE, KIT_TRANSIT_TIMEOUT, isKit, kitOf, kitId, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, itemSpacing, RADIO_RANGE, CORE_REACH, CORE_DRONES, DRONE_SPEED, DRONE_DELAY, KITPORT_RATE, KIT_TRANSIT_TIMEOUT, isKit, kitOf, kitId, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -543,7 +543,7 @@ export class Sim {
         if (ARITH.has(b.type)) return from === b.dir || from === ((b.dir + 1) & 3) || from === ((b.dir + 3) & 3); // back = main input, sides = second operand / signal
         if (b.type === 'switch' || b.type === 'timer') return from !== ((b.dir + 2) & 3); // behind = items to gate, sides = control pulses
         if (b.type === 'sensor') return from !== ((b.dir + 2) & 3); // takes the belt from behind or from a side, like a corner
-        if (b.type === 'picker' || b.type === 'kitport') return false; // they fetch their items themselves
+        if (b.type === 'picker' || b.type === 'kitport' || b.type === 'mast') return false; // they fetch their items themselves
         if (b.type === 'dock') return b.mode !== 'unload'; // a loading dock is filled from any side
         if (b.type === 'depot') return true; // robots are delivered from any side
         return from === b.dir;
@@ -585,7 +585,8 @@ export class Sim {
         if (((from + 2) & 3) === b.dir) return false; // never head-on
         const items = b.items!;
         const entry = from === b.dir ? 0 : 0.5; // from behind -> start, from the side -> merge in the middle
-        for (const it of items) if (Math.abs(it.pos - entry) < BELT_SPACING) return false;
+        const sp = itemSpacing(item);
+        for (const it of items) if (Math.abs(it.pos - entry) < (sp + itemSpacing(it.item)) / 2) return false;
         items.push({ item, pos: entry });
         items.sort((a, c) => a.pos - c.pos);
         return true;
@@ -595,7 +596,7 @@ export class Sim {
           if (!viaTunnel) return false;
         } else if (from !== b.dir || b.pair == null) return false;
         const items = b.items!;
-        for (const it of items) if (it.pos < BELT_SPACING) return false;
+        for (const it of items) if (it.pos < (itemSpacing(item) + itemSpacing(it.item)) / 2) return false;
         items.push({ item, pos: 0 });
         items.sort((a, c) => a.pos - c.pos);
         return true;
@@ -705,7 +706,7 @@ export class Sim {
           } else b.open = b.open === false;
           return true;
         }
-        if (b.type === 'picker' || b.type === 'kitport') return false;
+        if (b.type === 'picker' || b.type === 'kitport' || b.type === 'mast') return false;
         if (b.type === 'depot') {
           // the fleet is built elsewhere: every delivered robot joins the depot
           if (item !== 'robot' || (b.value ?? 0) >= DEPOT_ROBOTS_MAX) return false;
@@ -741,7 +742,7 @@ export class Sim {
           if (b.mode === 'rx' || from !== b.dir) return false;
           const q = this.radioQueue(b.threshold ?? 1);
           if (q.length >= RADIO_QUEUE) return false;
-          q.push(item);
+          q.push({ item, tx: b.id });
           b.acc = (b.acc ?? 0) + 1;
           b.working = true;
           b.timer = 0.3;
@@ -915,6 +916,10 @@ export class Sim {
           break;
         case 'kitport':
           this.tickKitport(b, dt);
+          break;
+        case 'mast':
+          b.status = 'ok';
+          b.working = true;
           break;
         case 'road':
           break;
@@ -1813,9 +1818,9 @@ export class Sim {
 
   // ---------- Timer, sensor, radio ----------
 
-  private radioQueues = new Map<number, ItemId[]>();
+  private radioQueues = new Map<number, { item: ItemId; tx: number }[]>();
 
-  radioQueue(channel: number): ItemId[] {
+  radioQueue(channel: number): { item: ItemId; tx: number }[] {
     let q = this.radioQueues.get(channel);
     if (!q) {
       q = [];
@@ -1899,14 +1904,57 @@ export class Sim {
     }
     const q = this.radioQueue(b.threshold ?? 1);
     b.rateT = Math.min(1, (b.rateT ?? 0) + dt * RADIO_RATE);
-    b.status = q.length ? 'ok' : 'idle';
+    // only items from transmitters this receiver can hear (directly or over masts)
+    const net = this.radioNet();
+    const mine = net.get(b.id);
+    const k = q.findIndex((e) => net.get(e.tx) === mine);
+    b.status = k >= 0 ? 'ok' : q.length ? 'waiting' : 'idle';
     b.working = (b.timer ?? 0) > 0;
-    if (q.length && b.rateT >= 1 && this.pushDir(b, q[0], b.dir)) {
-      q.shift();
+    if (k >= 0 && b.rateT >= 1 && this.pushDir(b, q[k].item, b.dir)) {
+      q.splice(k, 1);
       b.rateT -= 1;
       b.timer = 0.3;
       b.acc = (b.acc ?? 0) + 1;
     }
+  }
+
+  /** Radio network: radios and masts within RADIO_RANGE of each other (or linked over masts) share a group id. */
+  private netCache: { t: number; n: number; map: Map<number, number> } | null = null;
+  radioNet(): Map<number, number> {
+    const st = this.state;
+    const nodes = st.buildings.filter((b) => (b.type === 'radio' || b.type === 'mast') && !b.site);
+    if (this.netCache && this.netCache.t === st.time && this.netCache.n === nodes.length) return this.netCache.map;
+    const parent = new Map<number, number>(nodes.map((b) => [b.id, b.id]));
+    const find = (x: number): number => {
+      while (parent.get(x) !== x) {
+        parent.set(x, parent.get(parent.get(x)!)!);
+        x = parent.get(x)!;
+      }
+      return x;
+    };
+    for (let i = 0; i < nodes.length; i++)
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], c = nodes[j];
+        // two radios only hear each other directly; masts connect to everything in range
+        if (a.type === 'radio' && c.type === 'radio' && (a.threshold ?? 1) !== (c.threshold ?? 1)) continue;
+        if (Math.hypot(a.x - c.x, a.y - c.y) <= RADIO_RANGE) parent.set(find(a.id), find(c.id));
+      }
+    const map = new Map<number, number>(nodes.map((b) => [b.id, find(b.id)]));
+    this.netCache = { t: st.time, n: nodes.length, map };
+    return map;
+  }
+
+  /** Links to draw: pairs of radios / masts within range that belong to one network. */
+  radioLinks(): [Building, Building][] {
+    const nodes = this.state.buildings.filter((b) => (b.type === 'radio' || b.type === 'mast') && !b.site);
+    const out: [Building, Building][] = [];
+    for (let i = 0; i < nodes.length; i++)
+      for (let j = i + 1; j < nodes.length; j++) {
+        const a = nodes[i], c = nodes[j];
+        if (a.type === 'radio' && c.type === 'radio' && (a.threshold ?? 1) !== (c.threshold ?? 1)) continue;
+        if (Math.hypot(a.x - c.x, a.y - c.y) <= RADIO_RANGE) out.push([a, c]);
+      }
+    return out;
   }
 
   /** The terminal a keyboard is wired to: it touches the terminal or a part of its board. */
@@ -2736,7 +2784,7 @@ export class Sim {
     let blocked = false;
     for (let i = items.length - 1; i >= 0; i--) {
       const it = items[i];
-      const ahead = i < items.length - 1 ? items[i + 1].pos - BELT_SPACING : Infinity;
+      const ahead = i < items.length - 1 ? items[i + 1].pos - (itemSpacing(items[i + 1].item) + itemSpacing(it.item)) / 2 : Infinity;
       let target = Math.min(it.pos + step, ahead);
       if (target >= 1) {
         if (deliver(it.item)) {
@@ -2772,8 +2820,8 @@ export class Sim {
   }
 
   /** Items per minute a belt can carry at the current upgrade level. */
-  beltCapacity(): number {
-    return ((BELT_SPEED * this.factor('belt')) / BELT_SPACING) * 60;
+  beltCapacity(item?: ItemId): number {
+    return ((BELT_SPEED * this.factor('belt')) / (item ? itemSpacing(item) : BELT_SPACING)) * 60;
   }
 
   private tickTunnel(b: Building, dt: number) {

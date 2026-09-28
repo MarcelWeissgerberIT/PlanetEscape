@@ -4,7 +4,7 @@ import { BELT_SPACING, BUILDINGS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERR
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from './chip8';
 import { audioLevel } from './video';
 import { ARITH } from './sim';
-import { CORE_REACH, kitOf, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, crateOf, itemColor, DOCK_CAP, BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
+import { RADIO_RANGE, CORE_REACH, kitOf, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, crateOf, itemColor, DOCK_CAP, BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
 import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
 import { DX, DY } from './types';
@@ -350,6 +350,7 @@ export class Renderer {
     for (const b of visible) if (b.site) this.drawSite(b);
     this.drawRobots(x0, y0, x1, y1);
     this.drawDrones();
+    if (this.overlay || this.selected?.type === 'radio' || this.selected?.type === 'mast') this.drawRadioLinks();
 
     this.drawScanlines(visible);
     if (this.overlay) this.drawOverlay(visible, dt);
@@ -501,6 +502,31 @@ export class Renderer {
       ctx.arc(cx, cy, 3, 0, Math.PI * 2);
       ctx.fill();
     }
+  }
+
+  /** Radio links: dashed beams between radios and masts that hear each other; the range of the selected one. */
+  private drawRadioLinks() {
+    const { ctx } = this;
+    ctx.save();
+    ctx.strokeStyle = 'rgba(245,158,11,0.75)';
+    ctx.lineWidth = 2;
+    ctx.setLineDash([8, 6]);
+    ctx.lineDashOffset = -this.time * 20;
+    for (const [a, c] of this.sim.radioLinks()) {
+      ctx.beginPath();
+      ctx.moveTo(a.x * TILE + TILE / 2, a.y * TILE + TILE / 2);
+      ctx.lineTo(c.x * TILE + TILE / 2, c.y * TILE + TILE / 2);
+      ctx.stroke();
+    }
+    const s = this.selected;
+    if (s && (s.type === 'radio' || s.type === 'mast')) {
+      ctx.strokeStyle = 'rgba(245,158,11,0.35)';
+      ctx.setLineDash([4, 6]);
+      ctx.beginPath();
+      ctx.arc(s.x * TILE + TILE / 2, s.y * TILE + TILE / 2, RADIO_RANGE * TILE, 0, Math.PI * 2);
+      ctx.stroke();
+    }
+    ctx.restore();
   }
 
   /** While building: the square the core builds in directly (farther sites need their kit delivered). */
@@ -1168,6 +1194,10 @@ export class Renderer {
         if (n) this.drawItem(b.bufL![0], b.x * TILE + 13, b.y * TILE + sz - 13, 16);
         this.drawTag(cx, b.y * TILE - 4, unpack ? 'UNPACK' : `PACK ${n}/${CRATE_SIZE}`, unpack ? '#f59e0b' : '#22d3ee');
       }
+      return;
+    }
+    if (b.type === 'mast') {
+      if (!this.lowDetail && Math.sin(this.time * 4 + b.id) > 0.3) this.animGlow(cx, cy - sz * 0.3, 4, '#ef4444');
       return;
     }
     if (b.type === 'wind') {
@@ -1883,7 +1913,7 @@ export class Renderer {
       ctx.fillText(text, cx - tw / 2 + (item ? 25 : 4), top - 10);
     }
     // belts: tint by utilisation (how full the belt is), item colour on the edge
-    const perTile = 1 / BELT_SPACING; // items a tile can hold
+    const perTile = 1 / BELT_SPACING; // items a tile can hold (compact items; bulky ores fill it sooner)
     for (const b of visible) {
       if (b.type !== 'conveyor') continue;
       const n = b.items?.length ?? 0;

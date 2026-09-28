@@ -213,6 +213,15 @@ S.kitport = `${housing()}
   ${plate(58, 210, 70, 13, 'KIT-OUT')}${ledRow(160, 216, [GREEN, CYAN], 11)}
   ${strip(36, 120, 5, 84)}${strip(215, 120, 5, 84)}`;
 
+S.mast = `<g filter="url(#shadow)">
+  <path d="${oct(58, 58, 140, 140, 24)}" fill="url(#steel)" stroke="#12161b" stroke-width="4"/>
+  ${[[128, 128, 60, 60], [128, 128, 196, 60], [128, 128, 60, 196], [128, 128, 196, 196]].map(([x1, y1, x2, y2]) => `<line x1="${x1}" y1="${y1}" x2="${x2}" y2="${y2}" stroke="url(#chrome)" stroke-width="9" stroke-linecap="round"/>`).join('')}
+  <rect x="100" y="100" width="56" height="56" fill="none" stroke="#9aa6b5" stroke-width="5"/>
+  <path d="M100 100L156 156M156 100L100 156" stroke="#64748b" stroke-width="3"/>
+  <circle cx="128" cy="128" r="18" fill="url(#chrome)" stroke="#12161b" stroke-width="3"/></g>
+  <g fill="none" stroke="${AMBER}" stroke-width="5" stroke-linecap="round" filter="url(#glow)"><path d="M100 70a40 40 0 0 1 56 0"/><path d="M84 52a64 64 0 0 1 88 0"/></g>
+  ${led(128, 128, RED, 6)}${plate(96, 206, 64, 14, 'RLY')}`;
+
 S.drone = `<g filter="url(#shadow)">
   ${[[64, 64], [192, 64], [64, 176], [192, 176]].map(([x, y]) => `<line x1="128" y1="120" x2="${x}" y2="${y}" stroke="#12161b" stroke-width="16" stroke-linecap="round"/><line x1="128" y1="120" x2="${x}" y2="${y}" stroke="url(#chrome)" stroke-width="10" stroke-linecap="round"/><circle cx="${x}" cy="${y}" r="30" fill="#0b0e12" opacity="0.55"/><circle cx="${x}" cy="${y}" r="30" fill="none" stroke="#94a3b8" stroke-width="3"/><circle cx="${x}" cy="${y}" r="9" fill="url(#chrome)" stroke="#0b0e12" stroke-width="2"/>`).join('')}
   <path d="${oct(92, 84, 72, 72, 16)}" fill="url(#steel)" stroke="#12161b" stroke-width="4"/>
