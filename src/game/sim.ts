@@ -1596,7 +1596,9 @@ export class Sim {
         if (d === undefined) continue;
         // spread the fleet: a dock another robot is already heading for counts as farther away
         const busy = this.robots().filter((o) => o !== r && o.target === dock.id).length;
-        const score = d + busy * 6;
+        // fuller loading docks first (a full one stops its line), so a far dock is not left waiting forever
+        const fill = kind === 'load' ? dock.bufL!.length / DOCK_CAP : 0;
+        const score = d + busy * 6 - fill * 14 - (fill >= 1 ? 16 : 0);
         if (!best || score < best.d) best = { dock, tile, d: score };
       }
     }

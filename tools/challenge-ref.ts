@@ -80,7 +80,10 @@ const around = (x: number, y: number) => [0, 1, 2, 3].map((d) => ({ x: x + DX[d]
   unload.mode = 'unload';
   let roads: { x: number; y: number }[] = [{ x: core.x + 1, y: core.y - 2 }];
   place('road', core.x + 1, core.y - 2);
-  for (const ore of ['iron_ore', 'copper_ore'] as TerrainId[]) {
+  // the third smelter and one more panel come out of the printer
+  if (sim.queuePrint('smelter', 1) !== 1 || sim.queuePrint('solar', 1) !== 1) throw new Error('c_robots: cannot print');
+  c.run(6);
+  for (const ore of ['iron_ore', 'iron_ore', 'copper_ore'] as TerrainId[]) {
     const e = c.line(ore, 3);
     place('miner', e.x, e.y, e.dir);
     place('smelter', e.x + DX[e.dir], e.y + DY[e.dir], e.dir);
@@ -101,12 +104,17 @@ const around = (x: number, y: number) => [0, 1, 2, 3].map((d) => ({ x: x + DX[d]
     if (depot) break;
   }
   if (!depot) throw new Error('c_robots: no depot spot');
-  c.solars(3);
+  c.solars(4);
   c.run(30); // the depot kit may still be on its way
   while (sim.depotAddFromStock(depot));
+  depot.threshold = 3; // all three robots out
+  if (process.env.PE_DEBUG) for (let k = 0; k < 8; k++) {
+    c.run(40);
+    console.log('robots', Math.round(c.st.time), 'rates', sim.deliveryRate('iron_plate'), sim.deliveryRate('copper_plate'), 'robots', sim.robots().map((r) => `${r.state}/${r.items.length}/${Math.round((r.charge ?? 1) * 100)}`).join(' '), 'docks', c.st.buildings.filter((b) => b.type === 'dock').map((b) => `${b.mode ?? 'load'}:${b.bufL?.length}:${b.status}`).join(' '), 'smelters', c.st.buildings.filter((b) => b.type === 'smelter').map((b) => b.status).join(','));
+  }
   const t = c.run(1500);
   const m = CHALLENGE_BY_ID.c_robots.medals;
-  console.log('c_robots reference:', t === undefined ? 'NOT DONE' : `${Math.round(t)} s`, `(medals ${m.join('/')})`, 'robots', sim.robots().length, 'delivered', JSON.stringify(c.st.delivered));
+  console.log('c_robots reference:', t === undefined ? 'NOT DONE' : `${Math.round(t)} s`, `(medals ${m.join('/')})`, 'rates', sim.deliveryRate('iron_plate'), sim.deliveryRate('copper_plate'), 'power', `${c.st.powerDemand}/${c.st.powerSupply}`, 'robots', sim.robots().length, 'delivered', JSON.stringify(c.st.delivered));
   if (t === undefined) throw new Error('c_robots reference solution failed');
 }
 
@@ -118,7 +126,9 @@ const around = (x: number, y: number) => [0, 1, 2, 3].map((d) => ({ x: x + DX[d]
   rx.mode = 'rx';
   rx.threshold = 1;
   const txs: Building[] = [];
-  for (const ore of ['iron_ore', 'copper_ore'] as TerrainId[]) {
+  if (sim.queuePrint('smelter', 1) !== 1 || sim.queuePrint('solar', 1) !== 1) throw new Error('c_radio: cannot print');
+  c.run(6);
+  for (const ore of ['iron_ore', 'iron_ore', 'copper_ore'] as TerrainId[]) {
     const e = c.line(ore, 3);
     place('miner', e.x, e.y, e.dir);
     place('smelter', e.x + DX[e.dir], e.y + DY[e.dir], e.dir);
@@ -135,10 +145,10 @@ const around = (x: number, y: number) => [0, 1, 2, 3].map((d) => ({ x: x + DX[d]
     for (let r = 0; r < 6 && !placed; r++) for (let dx = -r; dx <= r && !placed; dx++) for (let dy = -r; dy <= r && !placed; dy++) if (isFree(sim, mx + dx, my + dy)) { place('mast', mx + dx, my + dy); placed = true; }
     void spot;
   }
-  c.solars(4);
+  c.solars(5);
   const t = c.run(1500);
   const m = CHALLENGE_BY_ID.c_radio.medals;
-  console.log('c_radio reference:', t === undefined ? 'NOT DONE' : `${Math.round(t)} s`, `(medals ${m.join('/')})`, 'distances', txs.map((tx) => Math.round(Math.hypot(tx.x - rx.x, tx.y - rx.y))).join('/'), 'delivered', JSON.stringify(c.st.delivered));
+  console.log('c_radio reference:', t === undefined ? 'NOT DONE' : `${Math.round(t)} s`, `(medals ${m.join('/')})`, 'distances', txs.map((tx) => Math.round(Math.hypot(tx.x - rx.x, tx.y - rx.y))).join('/'), 'rates', sim.deliveryRate('iron_plate'), sim.deliveryRate('copper_plate'), 'power', `${c.st.powerDemand}/${c.st.powerSupply}`, 'delivered', JSON.stringify(c.st.delivered));
   if (t === undefined) throw new Error('c_radio reference solution failed');
 }
 // ---------- Four drills: three chained iron drills -> splitter -> three smelters -> merger -> core, the fourth drill on copper ----------
