@@ -10,8 +10,9 @@ import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave, migrate as migrateSave, lastDropped, serialize } from '../game/save';
 import { SAVE_VERSION } from '../game/world';
-import { MEDALS, challengeBest, recordChallenge, chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
+import { MEDALS, challengeBest, challengeRival, playerName, recordRival, setPlayerName, recordChallenge, chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
+import { cleanName, decodeResult, encodeResult, resultMedal, shareLink } from '../game/share';
 import { DIR_ARROWS, costHtml, el, fmtTime, itemImg } from './dom';
 import { buildingTipHtml, itemTipHtml } from './tips';
 import { siteLine, printerHtml } from './printer';
@@ -225,9 +226,10 @@ export class Hud {
             ${CHALLENGES.map((c) => {
               const best = challengeBest(c.id);
               const medal = best !== undefined ? MEDALS[challengeMedal(c.id, best)] || '✓' : '';
-              return `<button class="btn mode example" data-challenge="${c.id}"><img class="icon" src="${buildingUrl(c.icon)}" alt=""><span><b>${medal} ${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</small><small class="ch-meta">${challengeRules(c.id)}${best !== undefined ? ` · ${t('ch_best')} ${fmtTime(best)}` : ''}</small></span></button>`;
+              return `<button class="btn mode example" data-challenge="${c.id}"><img class="icon" src="${buildingUrl(c.icon)}" alt=""><span><b>${medal} ${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</small><small class="ch-meta">${challengeRules(c.id)}${best !== undefined ? ` · ${t('ch_best')} ${fmtTime(best)}` : ''}</small>${this.rivalLine(c.id)}</span></button>`;
             }).join('')}
           </div>
+          <button class="btn" data-act="ch-code">⚔ ${t('ch_enter_code')}</button>
           <button class="btn ghost" data-act="back">${t('back')}</button>
         </div>`;
     const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
@@ -295,6 +297,8 @@ export class Hud {
       } else if (act === 'freeview') {
         this.titleView = 'free';
         this.renderTitle();
+      } else if (act === 'ch-code') {
+        this.showChallengeCode();
       } else if (act === 'challview') {
         this.titleView = 'challenges';
         this.renderTitle();
@@ -352,10 +356,14 @@ export class Hud {
       <p>${t('ch_time', { time: fmtTime(seconds) })}${r.improved ? ` <span class="rec">${t('new_record')}</span>` : ''}</p>
       <div class="medal-row">${c.medals.map((s, i) => `<span>${MEDALS[3 - i]} ${fmtTime(s)}</span>`).join('')}</div>
       <p class="save-hint">${t('ch_best')} ${fmtTime(r.best)}</p>
-      <button class="btn primary" data-act="ch-again">${t('ch_again')}</button>
+      ${this.rivalLine(c.id, seconds)}
+      <button class="btn primary" data-act="ch-share">🔗 ${t('ch_share')}</button>
+      <button class="btn" data-act="ch-again">${t('ch_again')}</button>
       <button class="btn" data-act="ch-list">${t('ch_list')}</button>
       <button class="btn ghost" data-act="close">${t('keep_playing')}</button></div>`, (target) => {
-      if (target.dataset.act === 'ch-again') {
+      if (target.dataset.act === 'ch-share') {
+        void this.shareChallenge(c.id, seconds);
+      } else if (target.dataset.act === 'ch-again') {
         this.closeModal();
         this.cb.onPlayChallenge(c.id);
       } else if (target.dataset.act === 'ch-list') {
@@ -364,6 +372,79 @@ export class Hud {
         this.showTitle();
       }
     });
+  }
+
+  /** "Anna: 2:14 🥇 · you are 0:26 faster" under a result, when someone shared a time for this challenge. */
+  private rivalLine(id: string, mine?: number): string {
+    const rv = challengeRival(id);
+    if (!rv) return '';
+    const medal = MEDALS[challengeMedal(id, rv.time)] || '✓';
+    const who = rv.name || t('ch_someone');
+    if (mine === undefined) return `<small class="ch-rival">⚔ ${who} ${fmtTime(rv.time)} ${medal}</small>`;
+    const d = Math.round(mine - rv.time);
+    const cmp = d < 0 ? t('ch_faster', { d: fmtTime(-d) }) : d > 0 ? t('ch_slower', { d: fmtTime(d) }) : t('ch_tie');
+    return `<p class="ch-rival">⚔ ${who}: ${fmtTime(rv.time)} ${medal} · ${cmp}</p>`;
+  }
+
+  /** Share window: the code, a link and copy / share buttons; asks for a name once. */
+  private async shareChallenge(id: string, seconds: number) {
+    let name = playerName();
+    if (!name) {
+      const typed = await this.promptModal(t('ch_name_prompt'), '');
+      if (typed === null) return;
+      name = cleanName(typed);
+      setPlayerName(name);
+    }
+    const res = { id, time: Math.round(seconds), name };
+    const code = encodeResult(res);
+    const link = shareLink(res, location.href);
+    const text = t('ch_share_text', { c: t(`ch_${id}` as 'ch_c_drills'), time: fmtTime(seconds), m: MEDALS[challengeMedal(id, seconds)] || '✓' });
+    this.openModal(`<h2>🔗 ${t('ch_share')}</h2><p>${text}</p>
+      <div class="lbl">${t('ch_code')}</div><input class="text-input mono" id="ch-code" readonly value="${code}">
+      <div class="lbl">${t('ch_link')}</div><input class="text-input mono" id="ch-link" readonly value="${link}">
+      <div class="row2"><button class="btn primary" data-act="copy-link">${t('ch_copy_link')}</button>${typeof navigator.share === 'function' ? `<button class="btn" data-act="native-share">${t('ch_share_more')}</button>` : `<button class="btn" data-act="copy-code">${t('ch_copy_code')}</button>`}</div>
+      <p class="save-hint">${t('ch_share_hint')}</p>
+      <button class="btn ghost" data-act="close">${t('close')}</button>`, (target) => {
+      const act = target.dataset.act;
+      const copy = (s: string) => {
+        void navigator.clipboard?.writeText(s).then(() => this.toast(`✓ ${t('ch_copied')}`, 1600, 'success'), () => undefined);
+        (this.modal.querySelector(act === 'copy-link' ? '#ch-link' : '#ch-code') as HTMLInputElement | null)?.select();
+      };
+      if (act === 'copy-link') copy(`${text} ${link}`);
+      else if (act === 'copy-code') copy(code);
+      else if (act === 'native-share') void navigator.share({ title: 'Planet Escape', text, url: link }).catch(() => undefined);
+    });
+  }
+
+  /** A pasted code or an opened link: show who played what, keep the best rival time, offer to play it. */
+  showChallengeCode(input?: string) {
+    const open = (code: string) => {
+      const r = decodeResult(code);
+      if (!r) {
+        this.toast(t('ch_code_bad'), 2500, 'error');
+        return;
+      }
+      const isNew = recordRival(r.id, r.name, r.time);
+      const best = challengeBest(r.id);
+      const medal = MEDALS[resultMedal(r)] || '✓';
+      const who = r.name || t('ch_someone');
+      const vs = best === undefined ? t('ch_not_played') : best < r.time ? t('ch_you_ahead', { d: fmtTime(r.time - best) }) : best > r.time ? t('ch_you_behind', { d: fmtTime(best - r.time) }) : t('ch_tie');
+      this.openModal(`<div class="launch"><h2>⚔ ${t('ch_challenge_from', { n: who })}</h2>
+        <p><b>${t(`ch_${r.id}` as 'ch_c_drills')}</b></p>
+        <p class="medal-big">${medal}</p>
+        <p>${t('ch_time', { time: fmtTime(r.time) })}</p>
+        <p class="save-hint">${vs}${isNew ? '' : ` · ${t('ch_rival_kept')}`}</p>
+        <button class="btn primary" data-act="ch-play">${t('ch_beat_it')}</button>
+        <button class="btn ghost" data-act="close">${t('close')}</button></div>`, (target) => {
+        if (target.dataset.act === 'ch-play') {
+          this.closeModal();
+          void this.confirmNewGame().then((yes) => yes && this.cb.onPlayChallenge(r.id));
+        }
+      });
+      if (this.titleView === 'challenges') this.renderTitle();
+    };
+    if (input) open(input);
+    else void this.promptModal(t('ch_enter_code'), '').then((v) => v && open(v));
   }
 
   private starsSummary(): string {

@@ -255,6 +255,14 @@ renderer.resize();
 renderer.centerOnCore();
 exposeDebug();
 hud.showTitle();
+// a shared challenge link (?ch=PE-C1-…): show the comparison over the title screen, then drop it from the address
+{
+  const code = new URLSearchParams(location.search).get('ch');
+  if (code) {
+    setTimeout(() => hud.showChallengeCode(code), 300);
+    history.replaceState(null, '', location.pathname + location.hash);
+  }
+}
 requestAnimationFrame(frame);
 
 void preloadAll(BUILD_ORDER.concat('core'), ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'rock'] as TerrainId[], ITEM_ORDER);

@@ -742,3 +742,7 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 .mini-tree .mt-node img:hover { outline: 1px solid var(--accent); }
 
 img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-select: none; user-select: none; }
+
+.ch-rival { color: #f59e0b; display: block; }
+.text-input.mono { font-family: ui-monospace, monospace; font-size: 12px; width: 100%; }
+.launch .medal-big, .modal-card .medal-big { font-size: 56px; line-height: 1.1; margin: 4px 0; }

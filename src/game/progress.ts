@@ -7,6 +7,8 @@ export interface Progress {
   bestScore: { normal: number; hard: number };
   lastChapter?: number; // 1-based chapter the player was in most recently
   challenges?: Record<string, number>; // challenge id -> best seconds
+  rivals?: Record<string, { name: string; time: number }>; // challenge id -> best time from a pasted share code
+  playerName?: string; // name that goes into share codes
 }
 
 const KEY = 'pe_progress_v1';
@@ -16,7 +18,7 @@ export function loadProgress(): Progress {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<Progress>;
-      return { stars: p.stars ?? {}, best: p.best ?? {}, bestScore: { normal: p.bestScore?.normal ?? 0, hard: p.bestScore?.hard ?? 0 }, lastChapter: p.lastChapter, challenges: p.challenges ?? {} };
+      return { stars: p.stars ?? {}, best: p.best ?? {}, bestScore: { normal: p.bestScore?.normal ?? 0, hard: p.bestScore?.hard ?? 0 }, lastChapter: p.lastChapter, challenges: p.challenges ?? {}, rivals: p.rivals ?? {}, playerName: p.playerName };
     }
   } catch {
     /* ignore */
@@ -103,3 +105,28 @@ export function challengeBest(id: string): number | undefined {
 }
 
 export const MEDALS = ['', '🥉', '🥈', '🥇'];
+
+/** Keep the best time someone else shared for a challenge (from a pasted code). Returns true when it is new or better. */
+export function recordRival(id: string, name: string, time: number): boolean {
+  const p = loadProgress();
+  const map = (p.rivals ??= {});
+  const prev = map[id];
+  if (prev && prev.time <= time) return false;
+  map[id] = { name, time: Math.round(time) };
+  store(p);
+  return true;
+}
+
+export function challengeRival(id: string): { name: string; time: number } | undefined {
+  return loadProgress().rivals?.[id];
+}
+
+export function playerName(): string {
+  return loadProgress().playerName ?? '';
+}
+
+export function setPlayerName(name: string) {
+  const p = loadProgress();
+  p.playerName = name;
+  store(p);
+}

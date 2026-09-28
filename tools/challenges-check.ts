@@ -1,6 +1,7 @@
 // Headless check for challenges: kit quota, locked printing, goal and medals.
 import { CHALLENGES, challengeMedal } from '../src/game/data';
 import { Sim } from '../src/game/sim';
+import { decodeResult, encodeResult, resultMedal, shareLink } from '../src/game/share';
 import type { ItemId } from '../src/game/types';
 import { challengeState } from '../src/game/world';
 
@@ -45,4 +46,19 @@ for (const c of CHALLENGES) {
   if (sim.wearOn() || st.autoPrint !== false) throw new Error(`${c.id}: wear or auto print on`);
 }
 if (challengeMedal('c_drills', 100) !== 3 || challengeMedal('c_drills', 300) !== 2 || challengeMedal('c_drills', 5000) !== 0) throw new Error('medals wrong');
+// share codes: round trip (with umlauts), links, typos and unknown challenges are refused
+{
+  const r = { id: 'c_drills', time: 187, name: 'Jürgen Ö.' };
+  const code = encodeResult(r);
+  const back = decodeResult(code);
+  console.log('share code', code, '->', JSON.stringify(back));
+  if (!back || back.id !== r.id || back.time !== r.time || back.name !== r.name) throw new Error('share code round trip failed');
+  const link = shareLink(r, 'https://planet-escape.dev/?x=1#top');
+  if (!link.startsWith('https://planet-escape.dev/?ch=PE-C1-') || decodeResult(link)?.time !== 187) throw new Error('share link wrong');
+  const typo = code.slice(0, 10) + (code[10] === 'A' ? 'B' : 'A') + code.slice(11);
+  if (decodeResult(typo) !== null) throw new Error('a mistyped code was accepted');
+  if (decodeResult(encodeResult({ id: 'c_nope', time: 10, name: '' })) !== null) throw new Error('unknown challenge accepted');
+  if (decodeResult('hello') !== null || decodeResult('') !== null) throw new Error('garbage accepted');
+  if (resultMedal(back) !== 3) throw new Error('medal of a shared time wrong');
+}
 console.log('challenges check ok');
