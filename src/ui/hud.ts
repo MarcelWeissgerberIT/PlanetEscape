@@ -112,7 +112,7 @@ export class Hud {
     window.addEventListener(
       'keydown',
       (e) => {
-        if (e.key === 'Escape' && this.modal.classList.contains('page') && !this.modal.classList.contains('hidden')) {
+        if (e.key === 'Escape' && this.modal.classList.contains('page') && !this.modal.classList.contains('locked') && !this.modal.classList.contains('hidden')) {
           e.stopPropagation();
           this.closeModal();
           return;
@@ -486,6 +486,7 @@ export class Hud {
     if (!c) return;
     const r = recordChallenge(c.id, seconds);
     sfx.medal(r.medal);
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(`<div class="launch"><h2>🏁 ${t('ch_done')}</h2>
       <p class="medal-big">${MEDALS[r.medal] || '✓'}</p>
       <p>${t('ch_time', { time: fmtTime(seconds) })}${r.improved ? ` <span class="rec">${t('new_record')}</span>` : ''}</p>
@@ -571,6 +572,7 @@ export class Hud {
     const carry = IS_DESKTOP
       ? `<p>${t('demo_carry_desktop')}</p>`
       : `<p>${t('demo_carry_web')}</p><div class="row2"><button class="btn" data-act="progress-copy">${icon('copy', 'sm')} ${t('progress_copy')}</button><button class="btn" data-act="progress-file">${icon('download', 'sm')} ${t('progress_file')}</button></div>`;
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(`<div class="launch">${finished ? storyVideoHtml(finished, 'done') : ''}<h2>${t('demo_end_title')}</h2><p>${t('demo_end_text', { n: DEMO_CHAPTERS })}</p>${carry}
       ${STORE_URL ? `<button class="btn primary" data-act="store">${t('demo_store')}</button>` : `<p><b>${t('demo_soon')}</b></p>`}
       ${CAN_UNLOCK ? `<button class="btn" data-act="unlock">🔑 ${t('unlock_full')}</button>` : ''}
@@ -696,6 +698,7 @@ export class Hud {
       const medal = MEDALS[resultMedal(r)] || '✓';
       const who = r.name || t('ch_someone');
       const vs = best === undefined ? t('ch_not_played') : best < r.time ? t('ch_you_ahead', { d: fmtTime(r.time - best) }) : best > r.time ? t('ch_you_behind', { d: fmtTime(best - r.time) }) : t('ch_tie');
+      this.pageNext = true; // opens as a full page in the menu style
       this.openModal(`<div class="launch"><h2>⚔ ${t('ch_challenge_from', { n: who })}</h2>
         <p><b>${t(`ch_${r.id}` as 'ch_c_drills')}</b></p>
         <p class="medal-big">${medal}</p>
@@ -726,6 +729,7 @@ export class Hud {
   showEditorSetup() {
     let random = false;
     const render = () => {
+      this.pageNext = true; // opens as a full page in the menu style
       this.openModal(
         `<h2>✎ ${t('pg_empty')}</h2><p>${t('editor_desc')}</p>
         <div class="menu-row"><span>${t('ed_width')}</span><input id="edw" class="text-input num" type="number" min="24" max="320" value="96"></div>
@@ -2833,10 +2837,13 @@ export class Hud {
     const page = this.pageNext;
     this.pageNext = false;
     this.modal.classList.toggle('page', page);
+    // a page without a close button (chapter complete) must be answered: no back link, no Esc
+    const closable = html.includes('data-act="close"');
+    this.modal.classList.toggle('locked', !closable);
     this.root.classList.toggle('ui-page', page); // the HUD steps back behind a page
     this.modal.innerHTML = page
       ? `<div class="title-frame" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
-        <div class="modal-card page-card"><button class="page-back" data-act="close">‹ ${t('back')} <kbd>Esc</kbd></button>${html}</div>`
+        <div class="modal-card page-card">${closable ? `<button class="page-back" data-act="close">‹ ${t('back')} <kbd>Esc</kbd></button>` : ''}${html}</div>`
       : `<div class="modal-card">${html}</div>`;
     this.modal.classList.remove('hidden');
     wireStoryVideos(this.modal);
@@ -3349,6 +3356,7 @@ export class Hud {
     if (st.options.mode === 'story') recordChapter(MISSIONS.length - 1, st.time - (st.chapterStart ?? 0));
     const best = loadProgress().bestScore[sc.hard ? 'hard' : 'normal'];
     const line = (label: string, v: number) => `<div class="menu-row"><span>${label}</span><span class="mono">${v}</span></div>`;
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<div class="launch">
       ${st.options.mode === 'story' ? storyVideoHtml(MISSIONS.length, 'done') : `<img class="ship" src="${uiUrl('ship.webp')}" alt="">`}
@@ -3425,6 +3433,7 @@ export class Hud {
       const seconds = st.time - (st.chapterStart ?? 0);
       const eff = this.sim.efficiency();
       const rec = recordChapter(index, seconds, eff);
+      this.pageNext = true; // opens as a full page in the menu style
       this.openModal(
         `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('chapter_done', { n: index + 1 })}</small></div></div>
         ${storyVideoHtml(index + 1, 'done')}
@@ -3471,6 +3480,7 @@ export class Hud {
     const m = MISSIONS[i];
     if (!m) return;
     const mt = tMission(m.id);
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('chapter')} ${i + 1}/${MISSIONS.length}</small></div></div>
       ${storyVideoHtml(i + 1, 'intro')}
@@ -3506,6 +3516,7 @@ export class Hud {
     const item = ev.terrain ? tItem(TERRAIN_ITEM[ev.terrain]!) : '';
     const text = t(`event_${ev.kind}_text` as 'event_wreck_text', { item });
     const aOk = this.sim.eventOptionAvailable(ev, 'a');
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('event_title')}</small></div></div>
       <p>${text}</p>
