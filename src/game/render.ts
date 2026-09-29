@@ -371,6 +371,7 @@ export class Renderer {
         }
         ctx.globalAlpha = 1;
         if (!this.lowDetail && (t === 'oil' || t === 'ice')) this.liquid(t, x, y, frac);
+        else if (!this.lowDetail && ready(img) && (t === 'iron_ore' || t === 'copper_ore' || t === 'quartz')) this.oreLife(t, img, x, y, frac);
       }
     }
 
@@ -493,6 +494,51 @@ export class Renderer {
   }
 
   /** Oil shimmers in moving rainbow colours, ice glints here and there. */
+  /** Deposits breathe: the veins brighten in a slow wave across the field, now and then a glint flashes. */
+  private oreLife(t: 'iron_ore' | 'copper_ore' | 'quartz', img: HTMLImageElement, x: number, y: number, frac: number) {
+    const { ctx } = this;
+    const px = x * TILE, py = y * TILE;
+    const wave = Math.sin(this.time * 1.1 - x * 0.45 - y * 0.3 + hash(x, y, 1) * 1.5) * 0.5 + 0.5;
+    ctx.globalCompositeOperation = 'lighter';
+    ctx.globalAlpha = (t === 'quartz' ? 0.16 : 0.11) * wave * frac;
+    ctx.drawImage(img, px, py, TILE, TILE);
+    ctx.globalAlpha = 1;
+    ctx.globalCompositeOperation = 'source-over';
+    this.glints(x, y, t === 'quartz' ? 2 : 1, t === 'iron_ore' ? '#fdba74' : t === 'copper_ore' ? '#5eead4' : '#f5f3ff', t === 'quartz' ? 7 : 5);
+  }
+
+  /** Little four-point stars that flash on their own beat at fixed spots of a tile. */
+  private glints(x: number, y: number, n: number, color: string, size: number) {
+    const { ctx } = this;
+    const px = x * TILE, py = y * TILE;
+    ctx.fillStyle = color;
+    for (let k = 0; k < n; k++) {
+      const tw = Math.sin(this.time * (1.6 + hash(x, y, k + 21)) + hash(x, y, k) * 40);
+      if (tw < 0.86) continue;
+      const a = (tw - 0.86) / 0.14;
+      const gx = px + 12 + hash(x, y, k + 3) * (TILE - 24), gy = py + 12 + hash(x, y, k + 5) * (TILE - 24);
+      const r = size * a;
+      ctx.globalAlpha = a;
+      ctx.fillRect(gx - r, gy - 0.7, r * 2, 1.4);
+      ctx.fillRect(gx - 0.7, gy - r, 1.4, r * 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /** One glint at a world position (decorations). */
+  private glintAt(gxW: number, gyW: number, a: number, b: number, color: string) {
+    const tw = Math.sin(this.time * 2.1 + hash(a, b, 9) * 40);
+    if (tw < 0.8) return;
+    const k = (tw - 0.8) / 0.2;
+    const r = 8 * k;
+    const { ctx } = this;
+    ctx.fillStyle = color;
+    ctx.globalAlpha = k;
+    ctx.fillRect(gxW - r, gyW - 0.8, r * 2, 1.6);
+    ctx.fillRect(gxW - 0.8, gyW - r, 1.6, r * 2);
+    ctx.globalAlpha = 1;
+  }
+
   private liquid(t: 'oil' | 'ice', x: number, y: number, frac: number) {
     const { ctx } = this;
     const px = x * TILE, py = y * TILE;
@@ -2316,7 +2362,16 @@ export class Renderer {
       const px = d.cx * TILE, py = d.cy * TILE, sz = d.size * TILE;
       ctx.setTransform(this.worldT!);
       const flows = !this.lowDetail && (d.kind === 'lava' || d.kind === 'volcano');
-      if (d.flip) {
+      const sways = !this.lowDetail && (d.kind === 'plants' || d.kind === 'tree');
+      if (sways) {
+        // plants and trees lean in the wind, anchored at their foot; gusts roll across the map
+        const seed = d.tx * 1.7 + d.ty * 0.9;
+        const lean = (Math.sin(this.time * (d.kind === 'tree' ? 0.9 : 1.6) + seed) * 0.6 + Math.sin(this.time * 0.37 + d.tx * 0.2) * 0.4) * (d.kind === 'tree' ? 0.05 : 0.08);
+        ctx.translate(px, py + sz / 2);
+        ctx.transform(1, 0, lean, 1, 0, 0);
+        if (d.flip) ctx.scale(-1, 1);
+        ctx.drawImage(img, -sz / 2, -sz, sz, sz);
+      } else if (d.flip) {
         ctx.translate(px, py);
         ctx.scale(-1, 1);
         ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
@@ -2339,7 +2394,40 @@ export class Renderer {
         ctx.fillRect(px - r, gy - r, r * 2, r * 2);
         ctx.globalCompositeOperation = 'source-over';
       }
+      const glow = DECO_GLOW[d.kind];
+      if (glow && !this.lowDetail) {
+        ctx.setTransform(this.worldT!);
+        const pulse = 0.5 + 0.5 * Math.sin(this.time * glow.speed + d.tx * 1.9 + d.ty * 0.7);
+        const gy = py + sz * glow.dy;
+        const r = sz * glow.r;
+        const g = ctx.createRadialGradient(px, gy, 0, px, gy, r);
+        g.addColorStop(0, glow.color.replace('A', String((glow.a * (0.4 + 0.6 * pulse)).toFixed(3))));
+        g.addColorStop(1, glow.color.replace('A', '0'));
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = g;
+        ctx.fillRect(px - r, gy - r, r * 2, r * 2);
+        ctx.globalCompositeOperation = 'source-over';
+        if (glow.glint) this.glintAt(px + (hash(d.tx, d.ty, 2) - 0.5) * sz * 0.4, gy - sz * 0.1, d.tx, d.ty, glow.glint);
+      }
       if (!live) continue;
+      if (d.kind === 'wreck' || d.kind === 'scrap') {
+        // a loose cable still sparks now and then; the wreck smoulders
+        if (Math.random() < dt * (d.kind === 'wreck' ? 0.7 : 0.35)) {
+          const sx = px + (hash(d.tx, d.ty, 4) - 0.5) * sz * 0.5, sy = py - sz * 0.05;
+          for (let k = 0; k < 5; k++) this.particles.push({ x: sx, y: sy, vx: (Math.random() - 0.5) * 70, vy: -30 - Math.random() * 50, life: 0.5, max: 0.5, size: 1.4, color: k % 2 ? '#fde68a' : '#fb923c', grav: 160 });
+        }
+        if (d.kind === 'wreck' && Math.random() < dt * 0.9) this.particles.push({ x: px + (Math.random() - 0.5) * sz * 0.3, y: py - sz * 0.15, vx: 3 + Math.random() * 5, vy: -10 - Math.random() * 6, life: 3, max: 3, size: 4 + Math.random() * 4, color: 'rgba(90,90,96,0.3)' });
+      } else if (d.kind === 'meteor' && Math.random() < dt * 0.8) {
+        this.particles.push({ x: px + (Math.random() - 0.5) * sz * 0.3, y: py - sz * 0.1, vx: 2 + Math.random() * 4, vy: -8 - Math.random() * 6, life: 2.6, max: 2.6, size: 3 + Math.random() * 3, color: 'rgba(120,110,100,0.28)' });
+      } else if (d.kind === 'bones' && Math.random() < dt * 0.35) {
+        // fireflies around old bones
+        this.particles.push({ x: px + (Math.random() - 0.5) * sz, y: py + (Math.random() - 0.5) * sz * 0.6, vx: (Math.random() - 0.5) * 10, vy: -4 - Math.random() * 6, life: 3, max: 3, size: 1.8, color: '#bef264' });
+      } else if (d.kind === 'crater' && Math.random() < dt * 0.25) {
+        this.particles.push({ x: px + (Math.random() - 0.5) * sz * 0.5, y: py, vx: (Math.random() - 0.5) * 8, vy: -5 - Math.random() * 4, life: 2.2, max: 2.2, size: 5 + Math.random() * 4, color: 'rgba(160,140,120,0.18)' });
+      } else if ((d.kind === 'crystals' || d.kind === 'icespire' || d.kind === 'obelisk') && Math.random() < dt * 0.3) {
+        // a mote of light drifts up
+        this.particles.push({ x: px + (Math.random() - 0.5) * sz * 0.4, y: py - sz * 0.2, vx: (Math.random() - 0.5) * 4, vy: -8 - Math.random() * 6, life: 2.4, max: 2.4, size: 1.6, color: d.kind === 'crystals' ? '#e9d5ff' : d.kind === 'obelisk' ? '#67e8f9' : '#f0f9ff' });
+      }
       if (d.kind === 'volcano') {
         const top = py - sz * 0.36;
         if (Math.random() < dt * 2.2) this.particles.push({ x: px + (Math.random() - 0.5) * 8, y: top, vx: (Math.random() - 0.3) * 10, vy: -16 - Math.random() * 14, life: 2.6, max: 2.6, size: 5 + Math.random() * 6, color: 'rgba(70,66,70,0.45)' });
@@ -2524,3 +2612,13 @@ function hexRgb(hex: string): string {
 
 const LIQUID_FLAT: Record<LiquidKind, string> = { lava: '#d9531a', metal: '#6b7682', water: '#236a86' };
 const LIQUID_BANK: Record<LiquidKind, string> = { lava: '#1e1512', metal: '#343a42', water: '#26303a' };
+
+/** Decorations that glow: colour (A = alpha), strength, radius and height of the glow (share of the sprite), pulse speed, glint colour. */
+const DECO_GLOW: Partial<Record<string, { color: string; a: number; r: number; dy: number; speed: number; glint?: string }>> = {
+  crystals: { color: 'rgba(192,132,252,A)', a: 0.32, r: 0.5, dy: -0.05, speed: 1.3, glint: '#faf5ff' },
+  icespire: { color: 'rgba(125,211,252,A)', a: 0.28, r: 0.5, dy: -0.1, speed: 0.9, glint: '#ffffff' },
+  obelisk: { color: 'rgba(34,211,238,A)', a: 0.3, r: 0.45, dy: -0.15, speed: 1.6, glint: '#a5f3fc' },
+  tree: { color: 'rgba(94,234,212,A)', a: 0.18, r: 0.45, dy: -0.2, speed: 0.8 },
+  plants: { color: 'rgba(163,230,53,A)', a: 0.14, r: 0.45, dy: -0.05, speed: 1.1 },
+  meteor: { color: 'rgba(251,146,60,A)', a: 0.2, r: 0.4, dy: 0, speed: 0.7 },
+};
