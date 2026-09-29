@@ -210,6 +210,10 @@ export class Hud {
     this.minimapBox.classList.add('hidden');
   }
 
+  get titleOpen(): boolean {
+    return !this.title.classList.contains('hidden');
+  }
+
   hideTitle() {
     startAmbient();
     this.title.classList.add('hidden');

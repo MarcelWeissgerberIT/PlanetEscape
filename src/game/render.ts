@@ -497,18 +497,51 @@ export class Renderer {
     const { ctx } = this;
     const px = x * TILE, py = y * TILE;
     if (t === 'oil') {
+      // only inside the pool: an oily rainbow sheen drifting across, bubbles that swell and pop
+      const cx = px + TILE / 2, cy = py + TILE / 2;
+      ctx.save();
+      ctx.beginPath();
+      ctx.ellipse(cx, cy, TILE * 0.36, TILE * 0.34, 0, 0, Math.PI * 2);
+      ctx.clip();
       const ph = this.time * 0.5 + x * 0.37 + y * 0.23;
       const o = (Math.sin(ph) * 0.5 + 0.5) * TILE;
       const g = ctx.createLinearGradient(px - TILE + o, py, px + o, py + TILE);
       g.addColorStop(0, 'rgba(120,80,255,0)');
-      g.addColorStop(0.35, `rgba(120,80,255,${0.16 * frac})`);
-      g.addColorStop(0.55, `rgba(0,230,200,${0.16 * frac})`);
-      g.addColorStop(0.75, `rgba(255,200,40,${0.12 * frac})`);
+      g.addColorStop(0.35, `rgba(120,80,255,${0.28 * frac})`);
+      g.addColorStop(0.55, `rgba(0,230,200,${0.28 * frac})`);
+      g.addColorStop(0.75, `rgba(255,200,40,${0.2 * frac})`);
       g.addColorStop(1, 'rgba(255,200,40,0)');
-      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalCompositeOperation = 'screen';
       ctx.fillStyle = g;
-      ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+      ctx.fillRect(px, py, TILE, TILE);
       ctx.globalCompositeOperation = 'source-over';
+      ctx.lineWidth = 1.4;
+      for (let k = 0; k < 3; k++) {
+        const period = 2.2 + hash(x, y, k + 7) * 1.6;
+        const tt = ((this.time + hash(x, y, k + 11) * period) % period) / period; // 0..1 through one bubble's life
+        const bx = cx + (hash(x, y, k + 13) - 0.5) * TILE * 0.5, by = cy + (hash(x, y, k + 17) - 0.5) * TILE * 0.46;
+        if (tt < 0.8) {
+          // swelling
+          const r = 1.5 + tt * 6;
+          ctx.globalAlpha = 0.22 + tt * 0.38;
+          ctx.strokeStyle = 'rgba(120,255,220,0.9)';
+          ctx.beginPath();
+          ctx.arc(bx, by, r, 0, Math.PI * 2);
+          ctx.stroke();
+          ctx.fillStyle = 'rgba(255,255,255,0.8)';
+          ctx.fillRect(bx - r * 0.45, by - r * 0.5, 1.6, 1.6);
+        } else {
+          // pop: a ring runs out and fades
+          const q = (tt - 0.8) / 0.2;
+          ctx.globalAlpha = (1 - q) * 0.5;
+          ctx.strokeStyle = 'rgba(160,255,230,0.9)';
+          ctx.beginPath();
+          ctx.arc(bx, by, 6.3 + q * 9, 0, Math.PI * 2);
+          ctx.stroke();
+        }
+      }
+      ctx.globalAlpha = 1;
+      ctx.restore();
       return;
     }
     // ice: two tiny star glints per tile, each twinkling on its own beat

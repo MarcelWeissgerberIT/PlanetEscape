@@ -198,7 +198,9 @@ let hudTimer = 0;
 function frame(now: number) {
   const dt = Math.min(0.25, (now - last) / 1000);
   last = now;
-  if (playing) {
+  // in the main menu the game stands still and is not drawn: the menu is all there is (and costs nothing)
+  const inGame = playing && !hud.titleOpen;
+  if (inGame) {
     acc += dt * speed;
     let guard = 0;
     while (acc >= STEP && guard++ < 12) {
@@ -253,9 +255,11 @@ function frame(now: number) {
       Save.save(sim.state);
     }
   }
-  if (playing && speed > 0) tickVideo(sim, now);
-  renderer.draw(dt);
-  if (playing) hud.updateFloating();
+  if (inGame && speed > 0) tickVideo(sim, now);
+  if (inGame) {
+    renderer.draw(dt);
+    hud.updateFloating();
+  }
   requestAnimationFrame(frame);
 }
 
