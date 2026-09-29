@@ -1,5 +1,6 @@
 import { buildingUrl, terrainUrl, uiUrl } from '../game/assets';
 import { playIntro } from './intro';
+import { fullscreenAvailable, toggleFullscreen } from './fullscreen';
 import { MenuVideo } from './menuVideo';
 import { EXAMPLES } from '../game/examples';
 import { SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
@@ -15,7 +16,8 @@ import { SAVE_VERSION } from '../game/world';
 import { MEDALS, challengeBest, challengeRival, playerName, recordRival, setPlayerName, recordChallenge, chaptersUnlocked, exportProgress, importProgress, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
 import { ACHIEVEMENTS, checkAchievements, earned, syncAchievementsToSteam, unlock as unlockAchievement } from '../game/achievements';
-import { DEMO_CHALLENGES, DEMO_CHAPTERS, EDITION, IS_DESKTOP, STORE_URL, WEB_URL, desktop } from '../game/desktop';
+import { CAN_UNLOCK, DEMO_CHALLENGES, DEMO_CHAPTERS, EDITION, IS_DESKTOP, STORE_URL, WEB_URL, desktop } from '../game/desktop';
+import { CODE_LENGTH, normalizeCode, tryUnlock } from '../game/unlock';
 import { kv } from '../game/storage';
 import { tutorialStepDone } from '../game/tutorial';
 import { cleanName, decodeResult, encodeResult, resultMedal, shareLink } from '../game/share';
@@ -203,7 +205,7 @@ export class Hud {
 
   private titleShell(): HTMLElement {
     if (!this.titleHost) {
-      this.title.innerHTML = `<div class="title-bg" style="background-image:url('${uiUrl('menu_bg.webp')}')"></div><div class="title-host"></div>`;
+      this.title.innerHTML = `<div class="title-bg" style="background-image:url('${uiUrl('menu_bg.webp')}')"></div><div class="title-host"></div>${fullscreenAvailable() ? `<button class="iconbtn title-fs" data-act="fullscreen" title="${t('fullscreen')}" aria-label="${t('fullscreen')}">${icon('fullscreen')}</button>` : ''}`;
       this.titleHost = this.title.querySelector('.title-host') as HTMLElement;
       // with reduced motion the still picture stays
       if (!matchMedia('(prefers-reduced-motion: reduce)').matches) this.bgVideo = new MenuVideo(this.title.querySelector('.title-bg') as HTMLElement);
@@ -252,6 +254,7 @@ export class Hud {
           </div>
           <button class="btn ghost small-line" data-act="replay-intro">🎬 ${t('intro_watch')}</button>
           ${EDITION === 'demo' && STORE_URL ? `<button class="btn ghost" data-act="store">${t('demo_store')} →</button>` : ''}
+          ${EDITION === 'demo' && CAN_UNLOCK ? `<button class="btn ghost small-line" data-act="unlock">🔑 ${t('unlock_full')}</button>` : ''}
           ${EDITION !== 'demo' && IS_DESKTOP && !Object.keys(loadProgress().stars).length ? `<button class="btn ghost" data-act="progress-import">${t('progress_import_title')}</button>` : ''}
           ${IS_DESKTOP ? '' : `<a class="btn ghost ai-link" href="./ai/">${t('ai_page')} →</a>`}
         </div>`;
@@ -345,6 +348,10 @@ export class Hud {
         this.showDemoEnd();
       } else if (act === 'store') {
         this.openLink(STORE_URL);
+      } else if (act === 'fullscreen') {
+        toggleFullscreen();
+      } else if (act === 'unlock') {
+        this.showUnlock();
       } else if (act === 'progress-import') {
         this.showProgressImport();
       } else if (act === 'ch-code') {
@@ -488,8 +495,10 @@ export class Hud {
       : `<p>${t('demo_carry_web')}</p><div class="row2"><button class="btn" data-act="progress-copy">${icon('copy', 'sm')} ${t('progress_copy')}</button><button class="btn" data-act="progress-file">${icon('download', 'sm')} ${t('progress_file')}</button></div>`;
     this.openModal(`<div class="launch"><h2>${t('demo_end_title')}</h2><p>${t('demo_end_text', { n: DEMO_CHAPTERS })}</p>${carry}
       ${STORE_URL ? `<button class="btn primary" data-act="store">${t('demo_store')}</button>` : `<p><b>${t('demo_soon')}</b></p>`}
+      ${CAN_UNLOCK ? `<button class="btn" data-act="unlock">🔑 ${t('unlock_full')}</button>` : ''}
       <button class="btn" data-act="close">${t('close')}</button></div>`, (target) => {
       const act = target.dataset.act;
+      if (act === 'unlock') return this.showUnlock();
       if (act === 'store') this.openLink(STORE_URL);
       else if (act === 'progress-copy') {
         const code = exportProgress();
@@ -502,6 +511,61 @@ export class Hud {
         setTimeout(() => URL.revokeObjectURL(a.href), 2000);
       }
     });
+  }
+
+  private unlockTries: number[] = [];
+
+  /** Web demo: a 5-character code turns it into the full game on this device (then the page reloads). */
+  showUnlock() {
+    this.openModal(
+      `<div class="unlock"><h2>🔑 ${t('unlock_full')}</h2>
+      <p>${t('unlock_hint', { n: CODE_LENGTH })}</p>
+      <input id="unlock-code" class="unlock-input" type="text" maxlength="7" autocomplete="off" autocapitalize="characters" spellcheck="false" inputmode="text" placeholder="•••••" aria-label="${t('unlock_full')}">
+      <p class="unlock-msg" id="unlock-msg"></p>
+      <button class="btn primary" data-act="unlock-go">${t('unlock_go')}</button>
+      <button class="btn ghost" data-act="close">${t('close')}</button></div>`,
+      (target) => {
+        if (target.dataset.act === 'unlock-go') void this.submitUnlock();
+      },
+    );
+    const input = this.modal.querySelector('#unlock-code') as HTMLInputElement;
+    input.addEventListener('input', () => {
+      const v = normalizeCode(input.value);
+      if (input.value !== v) input.value = v;
+    });
+    input.addEventListener('keydown', (e) => {
+      if (e.key === 'Enter') void this.submitUnlock();
+    });
+    setTimeout(() => input.focus(), 50);
+  }
+
+  private async submitUnlock() {
+    const input = this.modal.querySelector('#unlock-code') as HTMLInputElement | null;
+    const msg = this.modal.querySelector('#unlock-msg') as HTMLElement | null;
+    if (!input || !msg) return;
+    // a few tries, then a pause (it does not stop anyone determined, it stops guessing by hand)
+    const now = Date.now();
+    this.unlockTries = this.unlockTries.filter((t0) => now - t0 < 60000);
+    if (this.unlockTries.length >= 5) {
+      const wait = Math.ceil((60000 - (now - this.unlockTries[0])) / 1000);
+      msg.textContent = t('unlock_wait', { s: wait });
+      msg.className = 'unlock-msg bad';
+      return;
+    }
+    const ok = await tryUnlock(input.value).catch(() => false);
+    if (!ok) {
+      this.unlockTries.push(now);
+      msg.textContent = t('unlock_bad');
+      msg.className = 'unlock-msg bad';
+      input.classList.remove('shake');
+      void input.offsetWidth;
+      input.classList.add('shake');
+      return;
+    }
+    msg.textContent = `✓ ${t('unlock_ok')}`;
+    msg.className = 'unlock-msg good';
+    sfx.medal(3);
+    setTimeout(() => location.reload(), 1400); // the edition is decided when the game loads
   }
 
   /** Full game: take over the progress code from the web demo (pasted or as the saved file). */
@@ -2842,7 +2906,8 @@ export class Hud {
         <button class="tile" data-act="howto">${icon('help')}<span>${t('how_to')}</span></button>
         ${IS_DESKTOP ? '' : `<a class="tile" href="./ai/">${icon('spark')}<span>${t('ai_page')}</span></a>`}
         <button class="tile" data-act="achievements">${icon('trophy')}<span>${t('achievements')}</span></button>
-        ${desktop() ? `<button class="tile" data-act="fullscreen">${icon('fullscreen')}<span>${t('fullscreen')}</span></button><button class="tile" data-act="quit">${icon('power')}<span>${t('quit')}</span></button>` : ''}
+        ${fullscreenAvailable() ? `<button class="tile" data-act="fullscreen">${icon('fullscreen')}<span>${t('fullscreen')}</span></button>` : ''}
+        ${desktop() ? `<button class="tile" data-act="quit">${icon('power')}<span>${t('quit')}</span></button>` : ''}
       </div>
       <div class="row2"><button class="btn danger" data-act="new">${icon('plus', 'sm')} ${t('new_game')}</button><button class="btn primary" data-act="close">${t('close')}</button></div>
       <p class="save-hint">${t('save_hint')}${produced ? ` · ${t('produced')}: ${produced}` : ''}</p>`,
@@ -2869,7 +2934,7 @@ export class Hud {
         } else if (target.dataset.act === 'ednote') this.editNote();
         else if (target.dataset.act === 'transfer') this.showTransfer();
         else if (target.dataset.act === 'achievements') this.showAchievements();
-        else if (target.dataset.act === 'fullscreen') desktop()?.toggleFullscreen();
+        else if (target.dataset.act === 'fullscreen') toggleFullscreen();
         else if (target.dataset.act === 'quit') {
           this.cb.onSave();
           desktop()?.quit();

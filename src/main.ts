@@ -1,6 +1,7 @@
 import { DEMO_CHALLENGES, DEMO_CHAPTERS, EDITION, IS_DESKTOP } from './game/desktop';
 import { kv } from './game/storage';
 import { introWanted, playIntro } from './ui/intro';
+import { installFrame } from './ui/fullscreen';
 import { syncAchievementsToSteam } from './game/achievements';
 import './style.css';
 import { preloadAll } from './game/assets';
@@ -263,6 +264,7 @@ exposeDebug();
 // the cinematic intro on the first start (skippable, again from the menu); the menu is ready behind it, its video
 // waits until the intro ends
 const INTRO_KEY = 'pe_intro_seen';
+installFrame();
 const intro = introWanted() && (new URLSearchParams(location.search).has('intro') || !kv.get(INTRO_KEY));
 hud.holdMenuVideo = intro;
 hud.showTitle();

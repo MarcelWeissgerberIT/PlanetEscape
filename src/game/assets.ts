@@ -53,7 +53,7 @@ export function uiUrl(name: string): string {
 
 /** Videos (intro, menu background) live outside /assets/: the service worker leaves them to the browser. */
 export function videoUrl(name: string): string {
-  return `${base}/video/${name}`;
+  return `${base}/video/${name}${V}`; // per build: a new video is never served from an old browser cache
 }
 
 export function ready(img: HTMLImageElement): boolean {
