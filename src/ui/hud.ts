@@ -112,6 +112,11 @@ export class Hud {
     window.addEventListener(
       'keydown',
       (e) => {
+        if (e.key === 'Escape' && this.modal.classList.contains('page') && !this.modal.classList.contains('hidden')) {
+          e.stopPropagation();
+          this.closeModal();
+          return;
+        }
         if (!this.title.classList.contains('hidden') || !this.modal.classList.contains('hidden')) return;
         if (/^[1-9]$/.test(e.key) && !this.pauseOpen && !this.input.captureKeys && !(e.target as HTMLElement)?.closest?.('input, textarea') && !e.ctrlKey && !e.metaKey && !e.altKey) {
           const btn = this.bottom.querySelectorAll<HTMLButtonElement>('.build-bar .build-btn[data-build]')[Number(e.key) - 1];
@@ -467,6 +472,7 @@ export class Hud {
     this.lastTopHtml = '';
     this.lastBottomHtml = '';
     this.undoStack = [];
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(`<h2>🏁 ${t(`ch_${c.id}` as 'ch_c_drills')}</h2><p>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</p><p class="save-hint">${challengeRules(c.id)}</p><p class="save-hint">${t('ch_how')}</p>
       <div class="bufs">${Object.entries(c.deliver).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('')}</div>
       <div class="medal-row">${c.medals.map((s, i) => `<span>${MEDALS[3 - i]} ${fmtTime(s)}</span>`).join('')}</div>
@@ -555,6 +561,7 @@ export class Hud {
   showAchievements() {
     const have = earned();
     const rows = ACHIEVEMENTS.map((a) => `<div class="ach ${have[a.id] ? 'got' : ''}"><img class="ach-icon" src="${achievementUrl(a.id)}" alt=""><div><b>${t(`ach_${a.id}` as 'ach_FIRST_PLATE')}</b><small>${t(`ach_${a.id}_desc` as 'ach_FIRST_PLATE_desc')}</small></div></div>`).join('');
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(`<h2>🏆 ${t('achievements')} · ${Object.keys(have).length}/${ACHIEVEMENTS.length}</h2><div class="ach-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`);
   }
 
@@ -809,6 +816,7 @@ export class Hud {
         <button class="btn small ${open ? 'primary' : ''}" data-chapter="${i + 1}" ${open ? '' : 'disabled'} title="${open ? '' : t('chapter_locked')}">${t('play')}</button>
       </div>`;
     }).join('');
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(`<h2>${t('chapter_select')}</h2><div class="chapter-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
       const clips = Number(target.dataset.clips);
       if (clips) return this.showChapterClips(clips);
@@ -820,6 +828,7 @@ export class Hud {
   /** The chapter's two clips again: the explanation, and the reward once the chapter has been finished. */
   private showChapterClips(ch: number) {
     const done = (loadProgress().stars[ch - 1] ?? 0) > 0;
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<h2>${t('chapter')} ${ch}: ${tMission(MISSIONS[ch - 1].id).title}</h2>
       <div class="video-pair"><h3>${t('clip_intro')}</h3>${storyVideoHtml(ch, 'intro')}
@@ -1290,7 +1299,7 @@ export class Hud {
       return `<button class="build-btn ${active ? 'active' : ''} ${unlocked ? '' : 'locked'} ${affordable ? '' : 'poor'} ${hint === id ? 'hint' : ''}" data-build="${id}" ${unlocked ? '' : 'disabled'}>
           ${key}<img src="${buildingUrl(id)}" alt="" draggable="false">
           <span class="bname">${tBuilding(id)}</span>
-          <span class="bcost">${unlocked ? costHtml(def.cost, inv) : '🔒'}</span>
+          <span class="bcost">${unlocked ? costHtml(def.cost, inv) : ''}</span>${unlocked ? '' : `<span class="block">${icon('lock', 'sm')}</span>`}
           ${def.power ? `<span class="bpower ${def.power < 0 ? 'gen' : ''}">⚡${Math.abs(def.power)}</span>` : ''}
           ${kitN ? `<span class="bkit" title="${t('printer_kits')}">×${kitN}</span>` : ''}
         </button>`;
@@ -1533,6 +1542,7 @@ export class Hud {
         <button class="btn small primary" data-use="${i}">${t('bp_use')}</button><button class="btn small danger" data-del="${i}">${icon('close', 'sm')}</button></div>`,
       )
       .join('');
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<h2>${icon('blueprint', 'sm')} ${t('blueprints')}</h2>
       ${this.clipboard ? `<div class="prob"><span class="pname"><b>${t('bp_clipboard')}</b><br><small>${this.clipboard.items.length} · ${this.clipboard.w}×${this.clipboard.h}</small></span><button class="btn small primary" data-act="useclip">${t('bp_use')}</button><button class="btn small" data-act="saveclip">${icon('save', 'sm')}</button></div>` : ''}
@@ -2162,6 +2172,7 @@ export class Hud {
   showProgramEditor(b: Building) {
     const src = b.prog ?? CHIP8_PROGRAMS[0].source;
     const errs = this.sim.cpuErrorsOf(b);
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<h2>✎ ${t('term_program')}</h2>
       <div class="chips" style="margin-bottom:8px">${CHIP8_PROGRAMS.map((p) => `<button class="chip" data-prog="${p.id}">${p.name}</button>`).join('')}<button class="chip" data-act="term-help">?</button></div>
@@ -2208,6 +2219,7 @@ export class Hud {
 
   openPrinter() {
     this.printerOpen = true;
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(printerHtml(this.sim), (target) => {
       const act = target.dataset.act;
       if ((act === 'auto-on' || act === 'auto-off') && !this.sim.challenge()) this.sim.state.autoPrint = act === 'auto-on';
@@ -2542,6 +2554,7 @@ export class Hud {
     const n = this.sim.state.note;
     if (!n) return;
     const text = (getLang() === 'de' ? n.de : n.en) ?? n.en ?? n.de ?? '';
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${n.title ?? t('save_note')}</small></div></div>
       <p style="white-space:pre-line">${text}</p>
@@ -2813,8 +2826,18 @@ export class Hud {
     });
   }
 
+  /** set right before openModal: the dialog opens as a full page in the main menu's style */
+  private pageNext = false;
+
   private openModal(html: string, onClick?: (target: HTMLButtonElement) => void) {
-    this.modal.innerHTML = `<div class="modal-card">${html}</div>`;
+    const page = this.pageNext;
+    this.pageNext = false;
+    this.modal.classList.toggle('page', page);
+    this.root.classList.toggle('ui-page', page); // the HUD steps back behind a page
+    this.modal.innerHTML = page
+      ? `<div class="title-frame" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
+        <div class="modal-card page-card"><button class="page-back" data-act="close">‹ ${t('back')} <kbd>Esc</kbd></button>${html}</div>`
+      : `<div class="modal-card">${html}</div>`;
     this.modal.classList.remove('hidden');
     wireStoryVideos(this.modal);
     this.modal.onclick = (e) => {
@@ -2828,17 +2851,22 @@ export class Hud {
 
   closeModal() {
     this.modal.classList.add('hidden');
+    this.root.classList.remove('ui-page');
     this.modal.querySelectorAll('video').forEach((v) => v.pause());
     this.modal.innerHTML = '';
   }
 
   showHowTo() {
-    this.openModal(`<h2>${t('how_to')}</h2><p class="pre">${t('how_to_text')}</p>
-      <div class="chain">
+    const steps = t('how_to_text').split('\n').map((l) => l.replace(/^•\s*/, '').trim()).filter(Boolean);
+    this.pageNext = true; // opens as a full page in the menu style
+    this.openModal(`<h2>${t('how_to')}</h2>
+      <div class="chain howto-chain">
         ${itemImg('iron_ore')}→<img class="icon" src="${buildingUrl('smelter')}" alt="">→${itemImg('iron_plate')}→<img class="icon" src="${buildingUrl('printer')}" alt="">→${itemImg('machine_part')}→<img class="icon" src="${buildingUrl('assembler')}" alt="">→${itemImg('steel_frame')}→<img class="icon" src="${buildingUrl('fabricator')}" alt="">→${itemImg('hull_plate')}
       </div>
-      <button class="btn primary" data-act="close">${t('ok')}</button>`);
+      <div class="howto-grid">${steps.map((st, k) => `<div class="howto-card" style="--i:${k}"><span class="howto-num">${String(k + 1).padStart(2, '0')}</span><p>${st}</p></div>`).join('')}</div>
+      <button class="btn primary page-ok" data-act="close">${t('ok')}</button>`);
   }
+
 
   showMissions() {
     const st = this.sim.state;
@@ -2862,6 +2890,7 @@ export class Hud {
       </div>`;
     }).join('');
     const tutBtn = st.tutorialStep >= 0 ? `<button class="btn ghost" data-act="skiptut">${t('skip')}: ${t('tutorial_title')}</button>` : '';
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('kora_role')}</small></div></div>
       <h2>${t('missions')}</h2><div class="mission-list">${list}</div>${tutBtn}<button class="btn primary" data-act="close">${t('close')}</button>`,
@@ -2889,6 +2918,7 @@ export class Hud {
           .join('')
       : `<p class="okline">✓ ${t('all_ok')}</p>`;
     const power = st.powerDemand > st.powerSupply ? `<p class="badline">⚡ ${tStatus('low_power')}: ${st.powerDemand}/${st.powerSupply}</p>` : '';
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<h2>${t('diagnostics')}</h2>${power}<div class="prob-list">${rows}</div>
       <h3>${t('chains')}</h3>
@@ -2938,6 +2968,7 @@ export class Hud {
     }
     const { head, tree } = blueprintContent(this.sim, what, this.chainRate);
     const back = this.bpHistory.length > 1 ? `<button class="btn small" data-bp-back="1">← ${t('bp_back')}</button>` : '';
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<div class="bp">${head}<div class="bp-scroll">${tree}</div>
       <p class="save-hint">${what.kind === 'item' ? t('calc_hint') : t('bp_building_hint')}</p>
@@ -3027,6 +3058,7 @@ export class Hud {
           )
           .join('')
       : `<p>${t('contract_none')}</p>`;
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('contracts')} · ✓ ${st.contractsDone}</small></div></div><div class="contract-list">${list}</div><button class="btn primary" data-act="close">${t('close')}</button>`,
       (target) => {
@@ -3068,6 +3100,7 @@ export class Hud {
     // open projects first, then the waiting ones, finished ones last
     const order = { open: 0, requires: 1, mission: 2, done: 3 };
     const sorted = PROJECTS.map((p, i) => ({ html: projects[i], o: order[this.sim.projectState(p.id)] })).sort((a, b) => a.o - b.o).map((x) => x.html).join('');
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(`<h2>${t('research')}</h2><h3>${t('proj_title')}</h3><p class="save-hint">${t('proj_intro')}</p><div class="upgrade-list">${sorted}</div><h3>${t('upgrades')}</h3><div class="upgrade-list">${base}</div><h3>${t('upgrades')} II</h3><div class="upgrade-list">${tier2}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
       const pid = target.dataset.proj;
       if (pid && this.sim.research(pid)) {
@@ -3237,6 +3270,7 @@ export class Hud {
     this.cb.onSave();
     const raw = serialize(this.sim.state);
     const encoded = 'PE1.' + btoa(unescape(encodeURIComponent(raw)));
+    this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<h2>${icon('transfer', 'sm')} ${t('transfer_short')}</h2>
       <div class="xcard">
