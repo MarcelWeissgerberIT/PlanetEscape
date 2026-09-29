@@ -118,12 +118,30 @@ export const VALVE_THRESHOLDS = [10, 20, 50, 100, 200, 500];
 
 export const TUNNEL_RANGE = 4; // max tiles between entrance and exit
 
-/** Seconds the core needs to print a building kit: grows with the material in it. */
+/** Share of the material's production work that printing a kit takes (see printSeconds). */
+export const PRINT_WORK_SHARE = 0.04;
+
+const workMemo: Partial<Record<ItemId, number>> = {};
+/** Machine seconds that go into one item, from the deposit up (mining counts 1 s per raw item). */
+export function itemWork(item: ItemId, seen: Set<ItemId> = new Set()): number {
+  const known = workMemo[item];
+  if (known !== undefined) return known;
+  const r = RECIPES.find((x) => x.output === item);
+  if (!r || seen.has(item)) return 1;
+  seen.add(item);
+  let s = r.seconds / r.outputCount;
+  for (const k in r.inputs) s += ((r.inputs[k as ItemId] ?? 0) * itemWork(k as ItemId, seen)) / r.outputCount;
+  seen.delete(item);
+  return (workMemo[item] = s);
+}
+
+/** Seconds the core needs to print a building kit: a share of the work in its material, so a fusion plant takes
+ *  longer than a pile of plates of the same count. Belts stay quick (0.3 s), the biggest halls end at 40 s. */
 export function printSeconds(id: BuildingId): number {
   const cost = BUILDINGS[id].cost;
-  let n = 0;
-  for (const k in cost) n += cost[k as ItemId] ?? 0;
-  return Math.min(40, Math.round((0.2 + 0.12 * n) * 10) / 10);
+  let work = 0;
+  for (const k in cost) work += (cost[k as ItemId] ?? 0) * itemWork(k as ItemId);
+  return Math.min(40, Math.max(0.3, Math.round(PRINT_WORK_SHARE * work * 10) / 10));
 }
 
 export const BUILD_ORDER: BuildingId[] = [
