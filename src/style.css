@@ -1705,3 +1705,55 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .info-panel .btn.danger::before { background: rgba(248, 113, 113, 0.7); }
 .info-panel .menu-row { border-bottom: 1px solid rgba(148, 163, 184, 0.1); padding: 6px 0; }
 .info-panel .pbar { height: 5px; background: rgba(255, 255, 255, 0.08); -webkit-mask: repeating-linear-gradient(90deg, #000 0 10px, transparent 10px 12px); mask: repeating-linear-gradient(90deg, #000 0 10px, transparent 10px 12px); }
+
+/* =====================================================================================
+   Chapter select: image cards. Story slides: full-bleed art with a slow push-in, the text
+   block over a dark fade, HUD corners, a counter and progress bars.
+   ===================================================================================== */
+.ch-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(290px, 1fr)); gap: 12px; margin-bottom: 18px; }
+.ch-card { position: relative; animation: rise 0.4s ease-out both; animation-delay: calc(var(--i) * 0.05s); }
+.ch-play {
+  position: relative; display: block; width: 100%; aspect-ratio: 16 / 9; padding: 0; margin: 0; overflow: hidden; cursor: pointer; text-align: left; color: #fff; font: inherit;
+  background: #05070b; border: 1px solid rgba(148, 163, 184, 0.22); clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 16px 100%, 0 calc(100% - 16px));
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.ch-img { position: absolute; inset: 0; background-size: cover; background-position: center; transition: transform 0.6s ease, filter 0.3s; }
+.ch-play::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(3, 5, 9, 0.1) 30%, rgba(3, 5, 9, 0.92) 100%); }
+.ch-play:not([disabled]):hover, .ch-play:focus-visible { border-color: rgba(103, 232, 249, 0.9); box-shadow: inset 0 0 30px rgba(34, 211, 238, 0.35); outline: none; }
+.ch-play:not([disabled]):hover .ch-img { transform: scale(1.06); }
+.ch-num { position: absolute; z-index: 1; left: 14px; top: 8px; font-family: var(--disp); font-size: 44px; font-weight: 700; line-height: 1; color: rgba(255, 255, 255, 0.92); text-shadow: 0 0 18px rgba(34, 211, 238, 0.7), 0 3px 12px rgba(0, 0, 0, 0.8); }
+.ch-body { position: absolute; z-index: 1; left: 14px; right: 14px; bottom: 10px; display: flex; flex-direction: column; gap: 2px; }
+.ch-body b { font-family: var(--disp); font-size: 18px; letter-spacing: 0.08em; text-transform: uppercase; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.9); }
+.ch-stars { color: #64748b; letter-spacing: 2px; font-size: 15px; }
+.ch-card.gold .ch-stars { color: #fbbf24; text-shadow: 0 0 10px rgba(251, 191, 36, 0.6); }
+.ch-card:not(.locked) .ch-stars { color: #e2e8f0; }
+.ch-card.gold .ch-stars { color: #fbbf24; }
+.ch-body small { color: #aab6c6; font-size: 11.5px; }
+.ch-card.locked .ch-img { filter: grayscale(1) brightness(0.35); }
+.ch-card.locked .ch-play { cursor: not-allowed; }
+.ch-card.locked .ch-num { color: rgba(148, 163, 184, 0.6); text-shadow: none; }
+.ch-lock { position: absolute; z-index: 1; left: 50%; top: 38%; transform: translate(-50%, -50%); width: 44px; height: 44px; display: grid; place-items: center; color: #cbd5e1; background: rgba(5, 7, 11, 0.8); border: 1px solid rgba(148, 163, 184, 0.4); clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+.ch-clips {
+  position: absolute; z-index: 2; right: 10px; top: 10px; padding: 4px 9px; cursor: pointer; font-family: var(--disp); font-size: 11px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase;
+  color: #e2e8f0; background: rgba(5, 7, 11, 0.7); border: 1px solid rgba(148, 163, 184, 0.35); transition: color 0.2s, border-color 0.2s;
+}
+.ch-clips:hover { color: var(--accent); border-color: var(--accent); }
+
+/* story slides */
+.story { background: #05070b; }
+.story-img { position: absolute; inset: 0; animation: storyfade 0.7s ease-out, storypush 14s ease-out forwards; }
+@keyframes storypush { from { transform: scale(1.02); } to { transform: scale(1.1); } }
+.story-shade { position: absolute; inset: 0; background: linear-gradient(0deg, rgba(3, 5, 9, 0.95) 0%, rgba(3, 5, 9, 0.7) 28%, rgba(3, 5, 9, 0) 55%), linear-gradient(90deg, rgba(3, 5, 9, 0.5), rgba(3, 5, 9, 0) 55%); pointer-events: none; }
+.story .title-frame { z-index: 1; }
+.story-text { position: absolute; z-index: 2; left: 0; right: 0; bottom: 0; margin: 0; padding: 0 calc(max(28px, 5vw) + var(--sar)) calc(34px + var(--sab)) calc(max(28px, 5vw) + var(--sal)); background: none; max-width: 900px; }
+.story-kora { gap: 12px; font-size: 13px; }
+.story-kora img { width: 40px; height: 40px; }
+.story-kora b { color: var(--accent); text-shadow: 0 0 10px rgba(34, 211, 238, 0.6); }
+.story-count { margin-left: auto; font-family: var(--disp); font-size: 12px; letter-spacing: 0.2em; color: rgba(203, 213, 225, 0.75); }
+.story-text p { font-size: clamp(18px, 2.2vw, 26px) !important; line-height: 1.45; color: #f1f5f9; text-shadow: 0 2px 12px rgba(0, 0, 0, 0.8); margin: 14px 0 18px; min-height: 2.9em; animation: rise 0.5s ease-out both; }
+.story-dots { gap: 6px; margin-bottom: 16px; }
+.story-dots span { width: 34px !important; height: 3px !important; transform: none !important; background: rgba(148, 163, 184, 0.3) !important; }
+.story-dots span.done { background: rgba(34, 211, 238, 0.55) !important; }
+.story-dots span.on { background: var(--accent) !important; box-shadow: 0 0 10px var(--accent); }
+@media (prefers-reduced-motion: reduce) { .story-img { animation: none; } }
+@media (max-width: 640px) { .ch-grid { grid-template-columns: 1fr; } }

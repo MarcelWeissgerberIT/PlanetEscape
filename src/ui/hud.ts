@@ -817,16 +817,22 @@ export class Hud {
       const open = i + 1 <= unlocked && (EDITION !== 'demo' || i < DEMO_CHAPTERS);
       const stars = p.stars[i] ?? 0;
       const best = p.best[i];
-      return `<div class="chapter-row ${open ? '' : 'locked'}">
-        <div class="cnum">${i + 1}</div>
-        <div class="cbody"><b>${mt.title}</b><small>${lvl.size}×${lvl.size} · ${best !== undefined ? `${t('best_time')} ${fmtTime(best)} · ` : ''}${t('par_time', { time: fmtTime(lvl.par) })}</small></div>
-        <div class="cstars ${stars === 3 ? 'gold' : ''}">${starString(stars)}</div>
-        ${open ? `<button class="btn small ghost" data-clips="${i + 1}" title="${t('chapter_clips')}">🎬</button>` : ''}
-        <button class="btn small ${open ? 'primary' : ''}" data-chapter="${i + 1}" ${open ? '' : 'disabled'} title="${open ? '' : t('chapter_locked')}">${t('play')}</button>
+      // a card per chapter: a still from its briefing clip, the number large, title, stars and times; the whole card starts it
+      return `<div class="ch-card ${open ? '' : 'locked'} ${stars === 3 ? 'gold' : ''}" style="--i:${i}">
+        <button class="ch-play" data-chapter="${i + 1}" ${open ? '' : 'disabled'} title="${open ? t('play') : t('chapter_locked')}">
+          <span class="ch-img" style="background-image:url('${uiUrl(`chapter_${i + 1}.webp`)}')"></span>
+          <span class="ch-num">${String(i + 1).padStart(2, '0')}</span>
+          ${open ? '' : `<span class="ch-lock">${icon('lock')}</span>`}
+          <span class="ch-body"><b>${mt.title}</b>
+            <span class="ch-stars">${starString(stars)}</span>
+            <small>${lvl.size}×${lvl.size} · ${best !== undefined ? `${t('best_time')} ${fmtTime(best)}` : t('par_time', { time: fmtTime(lvl.par) })}</small>
+          </span>
+        </button>
+        ${open ? `<button class="ch-clips" data-clips="${i + 1}" title="${t('chapter_clips')}">▶ ${t('chapter_clips_short')}</button>` : ''}
       </div>`;
     }).join('');
     this.pageNext = true; // opens as a full page in the menu style
-    this.openModal(`<h2>${t('chapter_select')}</h2><div class="chapter-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
+    this.openModal(`<h2>${t('chapter_select')}</h2><div class="ch-grid">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
       const clips = Number(target.dataset.clips);
       if (clips) return this.showChapterClips(clips);
       const ch = Number(target.dataset.chapter);
@@ -861,10 +867,12 @@ export class Hud {
     const last = i >= texts.length - 1;
     this.story.innerHTML = `
       <div class="story-img" style="background-image:url('${uiUrl(`story_${i + 1}.webp`)}')"></div>
+      <div class="story-shade"></div>
+      <div class="title-frame" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i></div>
       <div class="story-text">
-        <div class="story-kora"><img src="${uiUrl('kora.webp')}" alt=""><b>${t('kora')}</b></div>
+        <div class="story-kora"><img src="${uiUrl('kora.webp')}" alt=""><b>${t('kora')}</b><span class="story-count">${String(i + 1).padStart(2, '0')} / ${String(texts.length).padStart(2, '0')}</span></div>
         <p>${texts[i]}</p>
-        <div class="story-dots">${texts.map((_, k) => `<span class="${k === i ? 'on' : ''}"></span>`).join('')}</div>
+        <div class="story-dots">${texts.map((_, k) => `<span class="${k === i ? 'on' : k < i ? 'done' : ''}"></span>`).join('')}</div>
         <div class="story-buttons">
           <button class="btn ghost small" data-act="skip">${t('skip')}</button>
           <button class="btn primary small" data-act="next">${last ? t('play') : t('next')}</button>
