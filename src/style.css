@@ -1757,3 +1757,58 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .story-dots span.on { background: var(--accent) !important; box-shadow: 0 0 10px var(--accent); }
 @media (prefers-reduced-motion: reduce) { .story-img { animation: none; } }
 @media (max-width: 640px) { .ch-grid { grid-template-columns: 1fr; } }
+
+/* =====================================================================================
+   Story pages in two columns (clip and KORA's words left, the goals right), the mission
+   overview as a timeline, contracts as cards.
+   ===================================================================================== */
+.story-split { display: grid; grid-template-columns: minmax(0, 1.55fr) minmax(280px, 1fr); gap: 22px; align-items: start; margin-bottom: 16px; }
+.story-main .story-video { max-width: none; margin-bottom: 10px; }
+.story-say { font-size: 16px !important; line-height: 1.55; color: #dbe4ee !important; margin: 0; padding-left: 12px; border-left: 2px solid rgba(34, 211, 238, 0.6); }
+.story-goals {
+  position: relative; padding: 16px 18px; background: linear-gradient(160deg, rgba(20, 30, 42, 0.72), rgba(6, 9, 14, 0.82));
+  border: 1px solid rgba(34, 211, 238, 0.24); clip-path: polygon(0 0, calc(100% - 16px) 0, 100% 16px, 100% 100%, 0 100%);
+  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); animation: rise 0.45s ease-out 0.15s both;
+}
+.story-goals::before { content: ''; position: absolute; left: 0; top: 0; width: 60px; height: 3px; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.story-goals h3 { margin: 4px 0 10px !important; }
+.story-goals h3 ~ h3 { margin-top: 16px !important; }
+.goal { display: grid; grid-template-columns: 34px 1fr auto; align-items: center; gap: 10px; padding: 7px 0; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+.goal .icon { width: 30px; height: 30px; }
+.goal span { color: #e2e8f0; font-size: 14px; }
+.goal b { font-family: var(--disp); font-size: 18px; color: #fff; letter-spacing: 0.04em; }
+.goal.rate span { color: var(--accent); }
+.goal-ico { font-size: 20px; text-align: center; color: var(--accent) !important; }
+.goal-chips { display: flex; flex-wrap: wrap; gap: 5px; }
+.goal-chips i { font-style: normal; font-family: var(--disp); font-size: 11.5px; letter-spacing: 0.06em; padding: 3px 8px; color: #fde68a; border: 1px solid rgba(245, 158, 11, 0.45); background: rgba(245, 158, 11, 0.08); }
+.story-goals .stars-big { font-size: 44px; line-height: 1; margin: 0 0 6px; text-align: left; }
+.story-goals .stars-line { font-size: 13px; color: #cbd5e1; margin: 0; }
+.story-goals .stars-line .rec { color: #fbbf24; }
+.next-ch b { display: block; font-family: var(--disp); font-size: 18px; letter-spacing: 0.08em; text-transform: uppercase; color: #fff; }
+.next-ch p { font-size: 13.5px !important; color: #b6c2d1 !important; margin: 4px 0 6px; }
+.next-ch small { color: var(--muted); font-size: 12px; }
+@media (max-width: 899px) { .story-split { grid-template-columns: 1fr; } }
+
+/* missions: a timeline down the left edge */
+.page-card .mission-list { position: relative; display: flex; flex-direction: column; gap: 8px; padding-left: 26px; margin-bottom: 18px; max-width: 900px; }
+.page-card .mission-list::before { content: ''; position: absolute; left: 8px; top: 8px; bottom: 8px; width: 2px; background: linear-gradient(180deg, var(--accent), rgba(148, 163, 184, 0.25)); }
+.page-card .mission { position: relative; padding: 10px 14px; background: none; border: 0; --edge: transparent; --fill: transparent; clip-path: none; box-shadow: none !important; }
+.page-card .mission::before { content: ''; position: absolute; left: -24px; top: 14px; width: 12px; height: 12px; background: #0b1017; border: 2px solid rgba(148, 163, 184, 0.5); transform: rotate(45deg); }
+.page-card .mission.done::before { background: var(--accent); border-color: var(--accent); }
+.page-card .mission.current { background: linear-gradient(90deg, rgba(34, 211, 238, 0.14), rgba(34, 211, 238, 0.02)); border-left: 2px solid var(--accent); }
+.page-card .mission.current::before { background: var(--accent); border-color: #a5f3fc; box-shadow: 0 0 12px var(--accent); }
+.page-card .mission .mtitle { font-family: var(--disp); font-size: 17px; letter-spacing: 0.08em; text-transform: uppercase; }
+.page-card .mission.done .mtitle { color: #94a3b8; }
+.page-card .mission.future { opacity: 0.5; }
+.page-card .mission p { margin: 4px 0 8px; color: #cbd5e1; }
+.page-card .mission .mrows { max-width: 480px; }
+
+/* contracts: cards in a grid */
+.page-sub { color: #aab6c6 !important; margin: -8px 0 16px !important; }
+.page-card .contract-list { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.page-card .contract { position: relative; padding: 14px 16px; --edge: rgba(148, 163, 184, 0.2); --fill: linear-gradient(160deg, rgba(40, 52, 70, 0.55), rgba(10, 14, 20, 0.75)); }
+.page-card .contract.accepted { --edge: rgba(34, 211, 238, 0.55); }
+.page-card .contract .ctitle { display: flex; align-items: center; gap: 10px; }
+.page-card .contract .ctitle b { font-size: 14.5px; }
+.page-card .contract .creward { margin-top: 8px; font-family: var(--disp); font-size: 12px; letter-spacing: 0.1em; text-transform: uppercase; color: #fde68a; }
+.page-card .auto-tag { font-family: var(--disp); font-size: 10.5px; letter-spacing: 0.12em; padding: 1px 6px; color: #03141a; background: var(--accent); }

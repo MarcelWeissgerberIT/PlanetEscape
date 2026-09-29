@@ -2912,8 +2912,7 @@ export class Hud {
     const tutBtn = st.tutorialStep >= 0 ? `<button class="btn ghost" data-act="skiptut">${t('skip')}: ${t('tutorial_title')}</button>` : '';
     this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
-      `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('kora_role')}</small></div></div>
-      <h2>${t('missions')}</h2><div class="mission-list">${list}</div>${tutBtn}<button class="btn primary" data-act="close">${t('close')}</button>`,
+      `<h2>${t('missions')}</h2><div class="mission-list">${list}</div>${tutBtn}<button class="btn primary" data-act="close">${t('close')}</button>`,
       (target) => {
         if (target.dataset.act === 'skiptut') {
           st.tutorialStep = -1;
@@ -3080,7 +3079,7 @@ export class Hud {
       : `<p>${t('contract_none')}</p>`;
     this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
-      `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('contracts')} · ✓ ${st.contractsDone}</small></div></div><div class="contract-list">${list}</div><button class="btn primary" data-act="close">${t('close')}</button>`,
+      `<h2>${t('contracts')}</h2><p class="page-sub">✓ ${st.contractsDone} · ${t('contracts_sub')}</p><div class="contract-list">${list}</div><button class="btn primary" data-act="close">${t('close')}</button>`,
       (target) => {
         const c = st.contracts.find((x) => String(x.id) === (target.dataset.accept ?? target.dataset.decline));
         if (!c) return;
@@ -3449,15 +3448,17 @@ export class Hud {
       this.pageNext = true; // opens as a full page in the menu style
       this.openModal(
         `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('chapter_done', { n: index + 1 })}</small></div></div>
-        ${storyVideoHtml(index + 1, 'done')}
         <h2>✓ ${mt.title}</h2>
-        <div class="stars-big ${rec.stars === 3 ? 'gold' : ''}">${starString(rec.stars)}</div>
-        <p class="stars-line">${t('stars_earned', { time: fmtTime(seconds), stars: `${rec.stars}/3` })}${rec.improved ? ` · ${t('new_record')}` : ''}<br><small>${t('par_time', { time: fmtTime(LEVELS[Math.min(index, LEVELS.length - 1)].par) })} · ${t('efficiency_line', { p: Math.round(eff * 100), need: Math.round(STAR_EFFICIENCY * 100) })}</small></p>
-        <p>${tChapter(index)}</p>
-        ${unlocks.length ? `<div class="unlocks">${t('unlocked')}: ${unlocks.join(', ')}</div>` : ''}
-        <h3>${t('chapter')} ${index + 2}: ${nt.title}</h3>
-        <p>${nt.text}</p>
-        <p class="save-hint">${t('chapter_next_hint', { size: `${lvl.size}×${lvl.size}` })}</p>
+        <div class="story-split">
+          <div class="story-main">${storyVideoHtml(index + 1, 'done')}<p class="story-say">${tChapter(index)}</p></div>
+          <aside class="story-goals">
+            <div class="stars-big ${rec.stars === 3 ? 'gold' : ''}">${starString(rec.stars)}</div>
+            <p class="stars-line">${t('stars_earned', { time: fmtTime(seconds), stars: `${rec.stars}/3` })}${rec.improved ? ` · <b class="rec">${t('new_record')}</b>` : ''}<br><small>${t('par_time', { time: fmtTime(LEVELS[Math.min(index, LEVELS.length - 1)].par) })} · ${t('efficiency_line', { p: Math.round(eff * 100), need: Math.round(STAR_EFFICIENCY * 100) })}</small></p>
+            ${unlocks.length ? `<h3>${t('unlocked')}</h3><div class="goal-chips">${unlocks.map((u) => `<i>${u}</i>`).join('')}</div>` : ''}
+            <h3>${t('chapter')} ${index + 2}</h3>
+            <div class="next-ch"><b>${nt.title}</b><p>${nt.text}</p><small>${t('chapter_next_hint', { size: `${lvl.size}×${lvl.size}` })}</small></div>
+          </aside>
+        </div>
         <button class="btn primary" data-act="next">${t('chapter_next', { n: index + 2 })}</button>`,
         (target) => {
           if (target.dataset.act === 'next') {
@@ -3488,6 +3489,20 @@ export class Hud {
   }
 
   /** Story: the chapter's explanation clip with its order, before the player starts building. */
+  /** The order of a chapter as a goals panel: deliveries, buildings, the rate to hold, what it unlocks. */
+  private goalsHtml(index: number): string {
+    const m = MISSIONS[index];
+    if (!m) return '';
+    const deliver = Object.entries(m.deliver).map(([k, n]) => `<div class="goal">${itemImg(k as ItemId, 'icon')}<span>${tItem(k as ItemId)}</span><b>${n}×</b></div>`).join('');
+    const build = m.build ? Object.entries(m.build).map(([k, n]) => `<div class="goal"><img class="icon" src="${buildingUrl(k as BuildingId)}" alt=""><span>${t('build_req')}: ${tBuilding(k)}</span><b>${n}×</b></div>`).join('') : '';
+    const rate = m.rate ? Object.entries(m.rate).map(([k, n]) => `<div class="goal rate">${itemImg(k as ItemId, 'icon')}<span>${t('rate_row', { item: tItem(k as ItemId) })}</span><b>${n}</b></div>`).join('') + `<div class="goal rate"><span class="goal-ico">⏱</span><span>${t('rate_hold')}</span><b>${m.rateHold ?? 0} s</b></div>` : '';
+    const unlocks = [...m.unlocks.map((u) => tBuilding(u)), ...m.unlockRecipes.map((r) => tItem(RECIPE_BY_ID[r].output))];
+    return `<aside class="story-goals">
+      <h3>${t('hud_goals')}</h3>${build}${deliver}${rate}
+      ${unlocks.length ? `<h3>${t('unlocks_next')}</h3><div class="goal-chips">${unlocks.map((u) => `<i>${u}</i>`).join('')}</div>` : ''}
+    </aside>`;
+  }
+
   showBriefing() {
     const i = this.sim.state.missionIndex;
     const m = MISSIONS[i];
@@ -3496,9 +3511,11 @@ export class Hud {
     this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('chapter')} ${i + 1}/${MISSIONS.length}</small></div></div>
-      ${storyVideoHtml(i + 1, 'intro')}
       <h2>${mt.title}</h2>
-      <p>${mt.text}</p>
+      <div class="story-split">
+        <div class="story-main">${storyVideoHtml(i + 1, 'intro')}<p class="story-say">${mt.text}</p></div>
+        ${this.goalsHtml(i)}
+      </div>
       <button class="btn primary" data-act="close">${t('play')}</button>`,
     );
   }
