@@ -1701,7 +1701,7 @@ export class Hud {
       <div class="info-head">
         ${img}
         <div class="info-title"><b>${t(`sc_${s.key}` as 'sc_volcano')}</b><small>${t('sc_landscape')} · ${x}, ${y}</small></div>
-        <button class="iconbtn" data-act="close">${icon('close')}</button>
+        <button class="info-x" data-act="close" aria-label="${t('close')}">${icon('close')}</button>
       </div>
       <div class="info-body"><p class="sc-text">${t(`sc_${s.key}_d` as 'sc_volcano_d')}</p>${blocked}</div>`;
     const wasHidden = this.info.classList.contains('hidden');
@@ -1766,7 +1766,7 @@ export class Hud {
       <div class="info-head">
         <img src="${terrainUrl(terrain)}" alt="" draggable="false">
         <div class="info-title"><b>${item ? tItem(item) : t('rock')}</b><small>${item ? t('deposit') : t('rock')} · ${x}, ${y}</small></div>
-        <button class="iconbtn" data-act="close">${icon('close')}</button>
+        <button class="info-x" data-act="close" aria-label="${t('close')}">${icon('close')}</button>
       </div>
       <div class="info-body">${body}</div>
       ${canMine ? `<div class="info-actions"><button class="btn small primary" data-act="miner">⛏ ${t('place_miner')}</button>${item ? `<button class="btn small" data-act="chain">${t('chain_for')}…</button>` : ''}</div>` : ''}`;
@@ -2272,7 +2272,7 @@ export class Hud {
       <div class="info-head">
         <img src="${buildingUrl(b.type)}" alt="" draggable="false" data-building="${b.type}" title="${t('bp_title')}">
         <div class="info-title"><b>${tBuilding(b.type)}</b><small class="clamp2" data-more>${tBuildingDesc(b.type)}</small></div>
-        <button class="iconbtn" data-act="close">${icon('close')}</button>
+        <button class="info-x" data-act="close" aria-label="${t('close')}">${icon('close')}</button>
       </div>
       <div class="info-body">${b.site ? siteLine(this.sim, b) : ''}${this.infoBody(b)}</div>
       ${b.type !== 'core' ? `<div class="info-actions">
