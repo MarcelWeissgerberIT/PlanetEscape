@@ -16,7 +16,10 @@ export class MenuVideo {
   constructor(host: HTMLElement) {
     this.video = document.createElement('video');
     this.video.className = 'title-video';
+    // iOS only autoplays a video that is muted and inline from the start: attributes, not just properties
+    for (const a of ['muted', 'playsinline', 'webkit-playsinline', 'autoplay']) this.video.setAttribute(a, '');
     this.video.muted = true;
+    this.video.defaultMuted = true;
     this.video.playsInline = true;
     this.video.preload = 'none';
     this.cover = document.createElement('canvas');
@@ -33,7 +36,7 @@ export class MenuVideo {
       this.video.innerHTML = videoSources('menu');
       this.video.load();
     }
-    void this.video.play().catch(() => undefined); // muted autoplay is allowed; if not, the still image stays
+    this.kick();
     const watch = () => {
       if (!this.running) return;
       const v = this.video;
@@ -41,6 +44,19 @@ export class MenuVideo {
       this.raf = requestAnimationFrame(watch);
     };
     this.raf = requestAnimationFrame(watch);
+  }
+
+  /** Start playing; where autoplay is refused (iOS in low power mode) the first touch or click starts it. */
+  private kick() {
+    void this.video.play().catch(() => {
+      // events that count as a user gesture for media (on touch that is the lift of the finger, not the press)
+      const events = ['touchend', 'click', 'keydown'];
+      const retry = () => {
+        for (const e of events) window.removeEventListener(e, retry, true);
+        if (this.running && this.video.paused) void this.video.play().catch(() => undefined);
+      };
+      for (const e of events) window.addEventListener(e, retry, true);
+    });
   }
 
   stop() {
@@ -72,6 +88,6 @@ export class MenuVideo {
     };
     v.addEventListener('seeked', () => requestAnimationFrame(resume), { once: true });
     v.currentTime = 0;
-    if (v.paused && this.running) void v.play().catch(() => undefined);
+    if (v.paused && this.running) this.kick();
   }
 }

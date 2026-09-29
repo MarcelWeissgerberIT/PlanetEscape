@@ -11,10 +11,15 @@ export function videoHeight(): 1080 | 720 {
   return IS_DESKTOP || px >= 1700 ? 1080 : 720;
 }
 
-/** <source> tags for a video: VP9/WebM first (every Chromium, Firefox), H.264/MP4 for Safari and the rest. */
+/** Safari (every browser on iPhone/iPad included): H.264 is decoded in hardware there, WebM is patchy. */
+const APPLE = /Apple/.test(navigator.vendor) || /iPad|iPhone|iPod/.test(navigator.userAgent);
+
+/** <source> tags for a video: VP9/WebM first (Chromium, Firefox), H.264/MP4 first on Apple devices. */
 export function videoSources(name: string): string {
   const h = videoHeight();
-  return `<source src="${videoUrl(`${name}_${h}.webm`)}" type="video/webm"><source src="${videoUrl(`${name}_${h}.mp4`)}" type="video/mp4">`;
+  const webm = `<source src="${videoUrl(`${name}_${h}.webm`)}" type="video/webm">`;
+  const mp4 = `<source src="${videoUrl(`${name}_${h}.mp4`)}" type="video/mp4">`;
+  return APPLE ? mp4 + webm : webm + mp4;
 }
 
 /** Automated browsers (the screenshot and check tools) and ?nointro go straight to the menu; ?intro forces it. */
@@ -27,7 +32,7 @@ export function playIntro(): Promise<void> {
   return new Promise((done) => {
     const el = document.createElement('div');
     el.className = 'intro-overlay';
-    el.innerHTML = `<video class="intro-video" playsinline preload="auto">${videoSources('intro')}</video>
+    el.innerHTML = `<video class="intro-video" playsinline webkit-playsinline preload="auto">${videoSources('intro')}</video>
       <button class="intro-start hidden"><span class="intro-play">▶</span><b>PLANET <span class="accent">ESCAPE</span></b><small>${t('intro_start')}</small></button>
       <button class="btn ghost intro-skip">${t('intro_skip')} ›</button>`;
     document.body.appendChild(el);
