@@ -117,6 +117,11 @@ export class Hud {
           this.closeModal();
           return;
         }
+        if (e.key === 'Escape' && this.titleOpen && this.titleView !== 'main' && this.modal.classList.contains('hidden')) {
+          this.titleView = 'main';
+          this.renderTitle();
+          return;
+        }
         if (!this.title.classList.contains('hidden') || !this.modal.classList.contains('hidden')) return;
         if (/^[1-9]$/.test(e.key) && !this.pauseOpen && !this.input.captureKeys && !(e.target as HTMLElement)?.closest?.('input, textarea') && !e.ctrlKey && !e.metaKey && !e.altKey) {
           const btn = this.bottom.querySelectorAll<HTMLButtonElement>('.build-bar .build-btn[data-build]')[Number(e.key) - 1];
@@ -370,7 +375,7 @@ export class Hud {
       <div class="title-content aaa ${main ? '' : 'sub'}">
         <h1 class="logo"><span>PLANET</span><span class="accent">ESCAPE</span></h1>
         <p class="tagline">${t('tagline')}</p>
-        ${main ? mainView : `<section class="aaa-panel">
+        ${main ? mainView : `<button class="page-back sub-back" data-act="back">‹ ${t('back')} <kbd>Esc</kbd></button><section class="aaa-panel">
           <header class="aaa-panel-head">${this.titleView === 'challenges' ? `<b>${t('mode_challenge')}</b><small>${t('ch_intro')}</small>` : this.titleView === 'playground' ? `<b>${t('mode_playground')}</b><small>${t('mode_playground_desc')}</small>` : `<b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small>`}</header>
           ${this.titleView === 'playground' ? playView : this.titleView === 'challenges' ? challView : freeView}
           ${this.titleView === 'free' ? `<p class="save-hint">${t('seed_hint')}</p>` : ''}

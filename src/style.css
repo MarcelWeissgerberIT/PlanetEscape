@@ -1656,3 +1656,14 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .story-buttons .btn:not(.mode) { flex: none !important; }
 .story-text p { font-size: 17px; }
 .story-kora b { font-family: var(--disp); letter-spacing: 0.16em; }
+/* menu sub pages: the way back sits above the panel, always in view (the panel's own back buttons go) */
+.sub-back { margin: -8px 0 8px; }
+.aaa-panel .btn[data-act="back"] { display: none; }
+/* header pod: one unbroken lit edge drawn above the buttons */
+.hb-right { box-shadow: none !important; }
+.hb-right::after { content: ''; position: absolute; left: 12px; right: 0; bottom: 0; height: 2px; background: rgba(34, 211, 238, 0.65); box-shadow: 0 0 8px rgba(34, 211, 238, 0.5); pointer-events: none; }
+.hb-right .hb-pod .iconbtn:hover, .hb-right .hb-pod .iconbtn.active { box-shadow: none !important; }
+.hb-mission { box-shadow: none !important; }
+.hb-mission::after { content: ''; position: absolute; left: 0; right: 12px; bottom: 0; height: 2px; background: rgba(34, 211, 238, 0.65); box-shadow: 0 0 8px rgba(34, 211, 238, 0.5); pointer-events: none; }
+.hb-mission { position: relative; }
+.hb-right { position: relative; }
