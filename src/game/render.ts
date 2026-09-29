@@ -362,8 +362,12 @@ export class Renderer {
         ctx.globalAlpha = 0.4 + 0.6 * frac;
         if (ready(img)) ctx.drawImage(img, x * TILE, y * TILE, TILE, TILE);
         else {
+          // sprite still loading: a faint tinted spot, not a hard square
+          ctx.globalAlpha *= 0.3;
           ctx.fillStyle = itemColor(TERRAIN_ITEM[t]!);
-          ctx.fillRect(x * TILE + 8, y * TILE + 8, TILE - 16, TILE - 16);
+          ctx.beginPath();
+          ctx.arc((x + 0.5) * TILE, (y + 0.5) * TILE, TILE * 0.36, 0, Math.PI * 2);
+          ctx.fill();
         }
         ctx.globalAlpha = 1;
         if (!this.lowDetail && (t === 'oil' || t === 'ice')) this.liquid(t, x, y, frac);

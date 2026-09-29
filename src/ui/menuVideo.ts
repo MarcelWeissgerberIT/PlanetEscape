@@ -94,10 +94,19 @@ export class MenuVideo {
     });
   }
 
+  /** Stop and drop the downloads: in the game the connections belong to the sprites (iOS opens only a few at once). */
   stop() {
     this.running = false;
+    this.switching = false;
     cancelAnimationFrame(this.raf);
-    for (const v of this.vids) v.pause();
+    for (const v of this.vids) {
+      v.pause();
+      v.classList.remove('on');
+      v.querySelectorAll('source').forEach((src) => src.remove());
+      v.removeAttribute('src');
+      v.preload = 'none';
+      v.load(); // aborts the running request
+    }
   }
 
   /** Fade the other player in over the current one; the current one holds its last frame (the shared still). */
