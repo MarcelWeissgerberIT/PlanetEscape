@@ -1,6 +1,6 @@
 # Planet Escape auf Steam: Checkliste
 
-Die Web-Version (https://planet-escape.dev/) bleibt, wie sie ist. Für Steam gibt es eine Desktop-App (Electron) aus
+Die Web-Version (https://planet-escape.dev/) ist ab jetzt die kostenlose Demo. Für Steam gibt es eine Desktop-App (Electron) aus
 demselben Code. Dieses Dokument listet, was im Repository schon vorbereitet ist und was noch zu tun ist.
 
 ## Was im Repository schon fertig ist
@@ -107,21 +107,39 @@ Danach die Achievements in Steamworks **veröffentlichen** (Publish), sonst meld
 4. In Steamworks den Build auf den Branch `default` setzen, dann **Review** anfordern (Shop-Seite und Build werden
    getrennt geprüft, jeweils ein paar Tage).
 
-### 6. Signieren (optional, aber empfohlen)
+### 6. Signieren
 - **Windows**: ohne Zertifikat zeigt der Installer SmartScreen-Warnungen. Über Steam gestartet stört das nicht
-  (Steam installiert selbst); nur für die Installer außerhalb von Steam nötig.
-- **macOS**: ohne Signatur + Notarisierung blockiert Gatekeeper die App außerhalb von Steam; über Steam gestartete Apps
-  laufen meist trotzdem, sicherer ist aber Apple Developer (99 USD/Jahr) + `CSC_LINK`/`APPLE_ID`-Secrets für
-  electron-builder. Alternativ macOS zunächst weglassen.
+  (Steam installiert selbst); nur für Installer außerhalb von Steam nötig.
+- **macOS** (Apple-Developer-Konto vorhanden): der Workflow signiert und notarisiert die Mac-App automatisch, sobald
+  diese **Repository-Secrets** gesetzt sind (GitHub → Settings → Secrets and variables → Actions → *New repository secret*):
+
+  | Secret | Inhalt | Woher |
+  |---|---|---|
+  | `MAC_CERT_P12_BASE64` | das Zertifikat „Developer ID Application“ als .p12, base64-kodiert | developer.apple.com → Certificates → „+“ → *Developer ID Application*; in der Schlüsselbundverwaltung Zertifikat + privaten Schlüssel als .p12 exportieren, dann `base64 -i cert.p12 \| pbcopy` |
+  | `MAC_CERT_PASSWORD` | das Passwort, das du beim .p12-Export vergeben hast | – |
+  | `APPLE_ID` | die E-Mail deiner Apple-ID | – |
+  | `APPLE_APP_SPECIFIC_PASSWORD` | ein app-spezifisches Passwort | account.apple.com → Anmeldung und Sicherheit → App-spezifische Passwörter |
+  | `APPLE_TEAM_ID` | die 10-stellige Team-ID | developer.apple.com → Account → Membership |
+
+  Wichtig: *Developer ID Application*, nicht „Apple Development“ oder „Mac App Distribution“ – nur Developer ID ist für
+  Apps außerhalb des Mac App Store. Ohne die Secrets baut der Workflow die Mac-App wie bisher unsigniert.
+  Die Entitlements (`desktop/build/entitlements.mac.plist`) erlauben Electron den JIT und Steam das Laden seiner
+  Bibliotheken und des Overlays trotz Hardened Runtime.
 
 ### 7. Steam Deck
 Maus/Tastatur-Spiel mit Touch-Unterstützung – auf dem Deck per Touchscreen spielbar. Für „Verified“ fehlen
 Controller-Steuerung und eine Bildschirmtastatur-Anbindung; ein Steam-Input-Layout (Trackpad als Maus) reicht für
 „Playable“. Im Linux-Build testen.
 
-## Offene Entscheidungen
+## Entscheidungen
 
-- **Web-Version**: bleibt sie komplett kostenlos (dann ist Steam ein „Komfort-Kauf“ mit Achievements/Cloud), oder wird
-  sie zur Demo (`PE_EDITION=demo` auch für den Web-Build)? Beides ist technisch vorbereitet.
-- **Preis**: vergleichbare kleine Fabrik-/Logistikspiele liegen bei 5–15 €.
-- **Demo auf Steam**: eigene App (von Steam für Demos vorgesehen), Build mit Edition `demo` und der Shop-URL der Vollversion.
+- **Web-Version = Demo**: https://planet-escape.dev/ wird mit `PE_EDITION=demo` gebaut (Kapitel 1–3, zwei
+  Challenges, kein Freispiel). Am Ende der Demo kann man den Fortschritt als Code oder Datei mitnehmen; die Vollversion
+  bietet auf dem Startbildschirm „Demo-Fortschritt übernehmen“ (Sterne, Bestzeiten, Erfolge werden zusammengeführt).
+  Sobald die Shop-Seite steht: GitHub → Settings → Secrets and variables → Actions → **Variables** →
+  `PE_STORE_URL` = `https://store.steampowered.com/app/<APPID>/` anlegen und den Deploy einmal neu laufen lassen –
+  dann zeigen Web-Demo und Steam-Demo den Knopf „Zur Vollversion“ (vorher: „erscheint bald auf Steam“).
+- **Preis: 15 €** → in Steamworks als Basispreis **14,99 € / 14,99 USD** eintragen und Valves regionale
+  Preisempfehlungen übernehmen. Ein Launch-Rabatt (z. B. 10–20 %) ist üblich und bringt Sichtbarkeit.
+- **Demo auf Steam**: eigene App (Steam legt sie zur Haupt-App an), Build mit Edition `demo`. Steam-Demo und
+  Vollversion nutzen denselben Spielstand-Ordner, der Fortschritt geht also von selbst mit.

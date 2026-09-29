@@ -41,6 +41,7 @@ jobs:
     runs-on: ${{ matrix.os }}
     env:
       PE_EDITION: ${{ github.event.inputs.edition || 'full' }}
+      PE_STORE_URL: ${{ vars.PE_STORE_URL }}
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
@@ -55,10 +56,17 @@ jobs:
       - run: npm run desktop:web
       - run: npm install --no-audit --no-fund
         working-directory: desktop
+      # macOS is signed and notarized when the Apple secrets are set (see STEAM.md: signing); otherwise and on
+      # Windows/Linux the builds stay unsigned
       - run: npx electron-builder --publish never
         working-directory: desktop
         env:
-          CSC_IDENTITY_AUTO_DISCOVERY: 'false' # unsigned builds (see STEAM.md: signing)
+          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_P12_BASE64 != '' && 'true' || 'false' }}
+          CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_P12_BASE64 || '' }}
+          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_PASSWORD || '' }}
+          APPLE_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_ID || '' }}
+          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
+          APPLE_TEAM_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_TEAM_ID || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: planet-escape-${{ env.PE_EDITION }}-${{ matrix.os }}

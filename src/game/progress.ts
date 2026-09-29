@@ -128,3 +128,42 @@ export function setPlayerName(name: string) {
   p.playerName = name;
   store(p);
 }
+
+/** The whole progress as a text code ("PEP1.…"), to carry it from the web demo into the full game. */
+export function exportProgress(): string {
+  return 'PEP1.' + btoa(unescape(encodeURIComponent(JSON.stringify(loadProgress()))));
+}
+
+/** Merge a progress code into the stored progress (the better of both everywhere); false when the code is not valid. */
+export function importProgress(code: string): boolean {
+  let q: Partial<Progress>;
+  try {
+    const raw = code.trim();
+    if (!raw.startsWith('PEP1.')) return false;
+    q = JSON.parse(decodeURIComponent(escape(atob(raw.slice(5)))));
+    if (!q || typeof q !== 'object' || typeof q.stars !== 'object') return false;
+  } catch {
+    return false;
+  }
+  const p = loadProgress();
+  const num = (v: unknown) => (typeof v === 'number' && Number.isFinite(v) ? v : undefined);
+  const merge = (to: Record<string | number, number>, from: unknown, better: (a: number, b: number) => number) => {
+    if (!from || typeof from !== 'object') return;
+    for (const [k, v] of Object.entries(from)) {
+      const n = num(v);
+      if (n !== undefined) to[k] = to[k] === undefined ? n : better(to[k], n);
+    }
+  };
+  merge(p.stars, q.stars, Math.max);
+  merge(p.best, q.best, Math.min);
+  merge((p.challenges ??= {}), q.challenges, Math.min);
+  merge((p.achievements ??= {}), q.achievements, Math.min);
+  p.bestScore.normal = Math.max(p.bestScore.normal, num(q.bestScore?.normal) ?? 0);
+  p.bestScore.hard = Math.max(p.bestScore.hard, num(q.bestScore?.hard) ?? 0);
+  const last = num(q.lastChapter);
+  if (last !== undefined) p.lastChapter = Math.max(p.lastChapter ?? 1, last);
+  for (const [id, r] of Object.entries(q.rivals ?? {})) if (r && num(r.time) !== undefined && (!p.rivals?.[id] || r.time < p.rivals[id].time)) (p.rivals ??= {})[id] = { name: String(r.name ?? '').slice(0, 24), time: r.time };
+  if (!p.playerName && typeof q.playerName === 'string') p.playerName = q.playerName.slice(0, 24);
+  store(p);
+  return true;
+}

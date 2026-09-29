@@ -10,9 +10,9 @@ import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave, migrate as migrateSave, lastDropped, serialize } from '../game/save';
 import { SAVE_VERSION } from '../game/world';
-import { MEDALS, challengeBest, challengeRival, playerName, recordRival, setPlayerName, recordChallenge, chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
+import { MEDALS, challengeBest, challengeRival, playerName, recordRival, setPlayerName, recordChallenge, chaptersUnlocked, exportProgress, importProgress, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
-import { ACHIEVEMENTS, checkAchievements, earned, unlock as unlockAchievement } from '../game/achievements';
+import { ACHIEVEMENTS, checkAchievements, earned, syncAchievementsToSteam, unlock as unlockAchievement } from '../game/achievements';
 import { DEMO_CHALLENGES, DEMO_CHAPTERS, EDITION, IS_DESKTOP, STORE_URL, WEB_URL, desktop } from '../game/desktop';
 import { kv } from '../game/storage';
 import { tutorialStepDone } from '../game/tutorial';
@@ -213,6 +213,8 @@ export class Hud {
             <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
             <button class="btn ghost" data-act="howto">${t('how_to')}</button>
           </div>
+          ${EDITION === 'demo' && STORE_URL ? `<button class="btn ghost" data-act="store">${t('demo_store')} →</button>` : ''}
+          ${EDITION !== 'demo' && IS_DESKTOP && !Object.keys(loadProgress().stars).length ? `<button class="btn ghost" data-act="progress-import">${t('progress_import_title')}</button>` : ''}
           ${IS_DESKTOP ? '' : `<a class="btn ghost ai-link" href="./ai/">${t('ai_page')} →</a>`}
         </div>`;
     const playView = `
@@ -304,6 +306,10 @@ export class Hud {
         this.renderTitle();
       } else if (act === 'demo-locked') {
         this.showDemoEnd();
+      } else if (act === 'store') {
+        this.openLink(STORE_URL);
+      } else if (act === 'progress-import') {
+        this.showProgressImport();
       } else if (act === 'ch-code') {
         this.showChallengeCode();
       } else if (act === 'challview') {
@@ -438,11 +444,56 @@ export class Hud {
 
   /** Demo: the end of what it contains, with the way to the full game. */
   showDemoEnd() {
-    this.openModal(`<div class="launch"><h2>${t('demo_end_title')}</h2><p>${t('demo_end_text', { n: DEMO_CHAPTERS })}</p>
-      ${STORE_URL ? `<button class="btn primary" data-act="store">${t('demo_store')}</button>` : ''}
+    // the Steam demo and the full game share their save folder; from the web the progress goes along as a code
+    const carry = IS_DESKTOP
+      ? `<p>${t('demo_carry_desktop')}</p>`
+      : `<p>${t('demo_carry_web')}</p><div class="row2"><button class="btn" data-act="progress-copy">${icon('copy', 'sm')} ${t('progress_copy')}</button><button class="btn" data-act="progress-file">${icon('download', 'sm')} ${t('progress_file')}</button></div>`;
+    this.openModal(`<div class="launch"><h2>${t('demo_end_title')}</h2><p>${t('demo_end_text', { n: DEMO_CHAPTERS })}</p>${carry}
+      ${STORE_URL ? `<button class="btn primary" data-act="store">${t('demo_store')}</button>` : `<p><b>${t('demo_soon')}</b></p>`}
       <button class="btn" data-act="close">${t('close')}</button></div>`, (target) => {
-      if (target.dataset.act === 'store') this.openLink(STORE_URL);
+      const act = target.dataset.act;
+      if (act === 'store') this.openLink(STORE_URL);
+      else if (act === 'progress-copy') {
+        const code = exportProgress();
+        navigator.clipboard?.writeText(code).then(() => this.toast(`✓ ${t('copied')}`, 1500, 'success')).catch(() => this.toast(code.slice(0, 40) + '…', 3000));
+      } else if (act === 'progress-file') {
+        const a = document.createElement('a');
+        a.href = URL.createObjectURL(new Blob([exportProgress()], { type: 'text/plain' }));
+        a.download = 'planet-escape-progress.txt';
+        a.click();
+        setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+      }
     });
+  }
+
+  /** Full game: take over the progress code from the web demo (pasted or as the saved file). */
+  showProgressImport() {
+    this.openModal(
+      `<h2>${t('progress_import_title')}</h2>
+      <div class="xcard">
+        <p>${t('progress_import_hint')}</p>
+        <textarea id="progressbox" rows="3" placeholder="PEP1.…"></textarea>
+        <div class="row2"><button class="btn primary" data-act="apply">${icon('upload', 'sm')} ${t('import')}</button><button class="btn" data-act="pickfile">${t('import_file')}</button><input id="progressfile" class="file-hidden" type="file" accept=".txt,text/plain"></div>
+      </div>
+      <button class="btn ghost" data-act="close">${t('close')}</button>`,
+      (target) => {
+        if (target.dataset.act === 'apply') this.applyProgress((this.modal.querySelector('#progressbox') as HTMLTextAreaElement).value);
+      },
+    );
+    const file = this.modal.querySelector('#progressfile') as HTMLInputElement | null;
+    (this.modal.querySelector('[data-act="pickfile"]') as HTMLButtonElement | null)?.addEventListener('click', () => file?.click());
+    file?.addEventListener('change', () => void file.files?.[0]?.text().then((txt) => this.applyProgress(txt)));
+  }
+
+  private applyProgress(code: string) {
+    if (!importProgress(code)) {
+      this.toast(t('progress_invalid'), 4000, 'error');
+      return;
+    }
+    this.closeModal();
+    syncAchievementsToSteam();
+    this.toast(`✓ ${t('progress_imported')}`, 2500, 'success');
+    if (!this.title.classList.contains('hidden')) this.renderTitle();
   }
 
   /** Links leave the desktop app through the system browser. */
@@ -2811,6 +2862,7 @@ export class Hud {
   private importText(txt: string) {
     try {
       let raw = txt.trim();
+      if (raw.startsWith('PEP1.')) return this.applyProgress(raw);
       if (raw.startsWith('PE1.')) raw = decodeURIComponent(escape(atob(raw.slice(4))));
       const loaded = migrateSave(JSON.parse(raw));
       if (!loaded) throw new Error('version');

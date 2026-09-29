@@ -37,7 +37,12 @@ jobs:
           node-version: 22
           cache: npm
       - run: npm ci
+      # the web version is the demo of the Steam game; the store link comes from the repository variable
+      # PE_STORE_URL (Settings → Secrets and variables → Actions → Variables), without it the demo says "coming soon"
       - run: npm run build
+        env:
+          PE_EDITION: demo
+          PE_STORE_URL: ${{ vars.PE_STORE_URL }}
       - uses: actions/configure-pages@v5
         with:
           enablement: true

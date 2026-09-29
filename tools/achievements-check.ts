@@ -1,6 +1,6 @@
 // Achievements: the checks fire from the game state and the saved progress, each one only once, and every id has texts.
 import { ACHIEVEMENTS, checkAchievements, earned, unlock } from '../src/game/achievements';
-import { recordChallenge, recordChapter } from '../src/game/progress';
+import { exportProgress, importProgress, loadProgress, recordChallenge, recordChapter } from '../src/game/progress';
 import { Sim } from '../src/game/sim';
 import { t } from '../src/i18n';
 import { newGame } from '../src/game/world';
@@ -32,4 +32,17 @@ const pg = new Sim(newGame(4, { mode: 'playground', mapSize: 'medium', infiniteO
 pg.state.stats.delivered.machine_part = 5;
 if (checkAchievements(pg).includes('FIRST_PART')) throw new Error('the playground earned an achievement');
 console.log('earned', Object.keys(earned()).length, 'of', ACHIEVEMENTS.length);
+
+// demo progress goes into the full game as a code: merged, the better value wins, nothing is lost
+const demoCode = exportProgress();
+mem.clear();
+recordChapter(0, 900, 1);
+recordChapter(2, 9999, 1);
+recordChallenge('c_drills', 300);
+if (importProgress('PE1.xyz') || importProgress('PEP1.%%%') || importProgress('hello')) throw new Error('an invalid code was taken');
+if (!importProgress(demoCode)) throw new Error('the demo code was refused');
+const merged = loadProgress();
+console.log('merged progress:', JSON.stringify({ stars: merged.stars, best: merged.best, challenges: merged.challenges, ach: Object.keys(merged.achievements ?? {}).length }));
+if (merged.stars[0] === undefined || merged.best[2] !== 500 || merged.challenges?.c_drills !== 100) throw new Error('progress merge wrong');
+if (!merged.achievements?.CHAPTER_3 || !merged.achievements.SHARE) throw new Error('achievements not carried over');
 console.log('achievements check ok');
