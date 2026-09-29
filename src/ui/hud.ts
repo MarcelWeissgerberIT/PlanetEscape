@@ -3113,6 +3113,7 @@ export class Hud {
       this.pauseTab = 'stats';
     }
     this.pauseEl.classList.remove('hidden');
+    this.root.classList.add('ui-paused'); // the HUD steps back (Safari would even draw it over the pause screen)
     this.renderPause();
   }
 
@@ -3122,6 +3123,7 @@ export class Hud {
   resumeGame() {
     if (!this.pauseOpen) return;
     this.pauseEl!.classList.add('hidden');
+    this.root.classList.remove('ui-paused');
     this.cb.onSpeed(this.pauseSpeed || 1);
     this.lastTopHtml = '';
     this.renderTop();
@@ -3219,6 +3221,7 @@ export class Hud {
       } else if (act === 'blueprints') return this.showBlueprints();
       else if (act === 'new') {
         this.pauseEl!.classList.add('hidden');
+        this.root.classList.remove('ui-paused');
         this.cb.onSpeed(this.pauseSpeed || 1);
         this.cb.onSave();
         this.titleView = 'main';

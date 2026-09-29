@@ -1449,3 +1449,48 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .info-title small.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
 .info-title small.clamp2.open { display: block; }
 .info-title b { font-family: var(--disp); letter-spacing: 0.1em; }
+/* pause screen: the HUD steps back completely */
+#ui.ui-paused > .hud-top, #ui.ui-paused > .hud-bottom, #ui.ui-paused > .info-panel, #ui.ui-paused > .floating, #ui.ui-paused > .minimap-box, #ui.ui-paused > .tool-chip, #ui.ui-paused > .tip { visibility: hidden; }
+
+/* Header, fourth pass: three calm pieces of equal height. Left the mission chip, centre the resource plate,
+   right ONE pod that holds power, status, clock and the controls, split by thin dividers instead of boxes. */
+.hud-bar { align-items: start; }
+.hb-mission, .hb-right { height: 46px; box-sizing: border-box; }
+.hb-right {
+  display: flex; align-items: center; gap: 0; padding: 0 4px;
+  background: linear-gradient(180deg, rgba(10, 15, 22, 0.94), rgba(14, 21, 31, 0.86));
+  clip-path: polygon(0 0, 100% 0, 100% 100%, 12px 100%, 0 calc(100% - 12px));
+  box-shadow: inset 0 -2px 0 rgba(34, 211, 238, 0.6);
+  filter: drop-shadow(0 6px 14px rgba(0, 0, 0, 0.55));
+}
+.hb-right > * { position: relative; }
+.hb-right > * + *::before { content: ''; position: absolute; left: 0; top: 11px; bottom: 11px; width: 1px; background: rgba(148, 163, 184, 0.22); }
+.hb-right .power, .hb-right .pill, .hb-right .hb-pod {
+  --edge: transparent !important; --fill: transparent !important; --base: transparent !important;
+  background: none !important; border: 0 !important; clip-path: none !important; box-shadow: none !important; backdrop-filter: none !important; -webkit-backdrop-filter: none !important;
+}
+.hb-right .power { padding: 0 12px; min-width: 0; height: 46px; display: flex; flex-direction: column; justify-content: center; }
+.hb-right .power .pbar { width: 64px; }
+.hb-right .pill { height: 46px; padding: 0 12px; display: inline-flex; align-items: center; gap: 4px; }
+.hb-right .pill.warn { animation: none; color: #fbbf24; }
+.hb-right .pill.warn .ico { animation: warnblink 1.4s ease-in-out infinite; }
+@keyframes warnblink { 50% { opacity: 0.35; } }
+.hb-right .hb-clock { padding: 0 12px; line-height: 46px; }
+.hb-right .hb-pod { padding: 0 2px; gap: 0; }
+.hb-right .hb-pod .iconbtn { width: 40px !important; height: 46px !important; }
+.hb-right .hb-pod .iconbtn + .iconbtn { box-shadow: none !important; }
+.hb-mission { clip-path: polygon(0 0, 100% 0, 100% calc(100% - 12px), calc(100% - 12px) 100%, 0 100%); padding-top: 0; padding-bottom: 0; }
+.hb-res { height: calc(46px + var(--sat)); box-sizing: border-box; display: flex; align-items: center; padding-top: var(--sat); padding-bottom: 0; }
+@media (max-width: 899px) {
+  .hb-mission, .hb-right { height: 40px; }
+  .hb-right { padding: 0 2px; }
+  .hb-right .power { padding: 0 7px; height: 40px; }
+  .hb-right .power .pbar { width: 40px; }
+  .hb-right .pill { height: 40px; padding: 0 7px; }
+  .hb-right .hb-pod .iconbtn { width: 34px !important; height: 40px !important; }
+  .hb-res { height: calc(40px + var(--sat)); }
+  .hb-right > * + *::before { top: 9px; bottom: 9px; }
+}
+@media (max-width: 899px), (max-aspect-ratio: 4/3) {
+  .pause-shade { background: radial-gradient(ellipse at 50% 30%, rgba(4, 6, 10, 0.72), rgba(4, 6, 10, 0.92)); }
+}
