@@ -781,3 +781,28 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .ach small { display: block; color: var(--muted); }
 .ach-icon { font-size: 22px; }
 .btn.mode.locked { opacity: 0.6; }
+
+/* phones held upright: no box around the menu. The logo floats over the video at the top, the buttons sit compact at
+   the bottom (titles only, each on its own glass), so the scene stays visible in the middle. */
+@media (max-width: 640px) and (orientation: portrait) {
+  .title-video, .title-video-cover { object-position: 66% 50%; }
+  .title-bg { background-position: 66% 50%; }
+  .title-bg::after { background: linear-gradient(180deg, rgba(8, 10, 15, 0.6) 0%, rgba(8, 10, 15, 0) 24%, rgba(8, 10, 15, 0) 42%, rgba(8, 10, 15, 0.72) 100%); }
+  .title-screen { align-items: stretch; }
+  .title-content {
+    background: none !important; box-shadow: none !important; border: 0 !important; clip-path: none;
+    backdrop-filter: none; -webkit-backdrop-filter: none;
+    display: flex; flex-direction: column; max-height: none; height: 100%; box-sizing: border-box;
+    padding-top: calc(14px + var(--sat));
+  }
+  .title-content .logo { text-shadow: 0 3px 18px rgba(0, 0, 0, 0.85); }
+  .title-content .tagline { text-shadow: 0 2px 8px rgba(0, 0, 0, 0.95); }
+  .title-content > .intro, .title-content .save-hint { display: none; }
+  .title-content .title-buttons { margin-top: auto; }
+  .title-content .main-menu .btn.mode small { display: none; }
+  .title-content .main-menu .btn.mode { padding: 11px 14px; }
+  .title-content .btn { backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px); }
+  .title-content .main-menu .seed-row { display: none; } /* free play has its own seed field */
+  .title-content .main-menu .row2 .btn, .title-content .main-menu .small-line, .title-content .main-menu .ai-link { font-size: 11.5px; padding: 8px 10px; min-height: 0; }
+  .title-content .lang-switch { margin: 6px 0 calc(4px + var(--sab)); }
+}

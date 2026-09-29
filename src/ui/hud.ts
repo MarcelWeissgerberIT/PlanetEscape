@@ -236,7 +236,7 @@ export class Hud {
     const seedInput = `<div class="seed-row"><input id="seed" type="text" inputmode="numeric" placeholder="${t('seed')}" maxlength="12"></div>`;
     const resume = resumeChapter();
     const mainView = `
-        <div class="title-buttons">
+        <div class="title-buttons main-menu">
           ${hasSave() ? `<button class="btn primary" data-act="continue">${t('continue')}</button>` : ''}
           ${resume > 1
             ? `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story-resume"><b>${t('mode_story')} · ${t('story_resume', { n: resume })}</b><small>${MISSIONS[resume - 1] ? tMission(MISSIONS[resume - 1].id).title + ' · ' : ''}${t('story_resume_desc')}</small></button>
