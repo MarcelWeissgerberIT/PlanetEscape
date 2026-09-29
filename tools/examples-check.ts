@@ -1,9 +1,12 @@
 // Builds every playground example headlessly and checks the circuits do what their notes promise.
 import { EXAMPLES, buildAdder, buildBinaryCounter, buildPongMatrix, buildRunningLight, buildVideoWall } from '../src/game/examples';
 import { Sim } from '../src/game/sim';
+import { readFileSync } from 'node:fs';
+import { migrate } from '../src/game/save';
 
 for (const ex of EXAMPLES) {
-  const st = ex.build();
+  // ready-made maps (megafactories) come from public/, the others are built here
+  const st = ex.file ? migrate(JSON.parse(readFileSync(`public/${ex.file}`, 'utf8')))! : ex.build!();
   const sim = new Sim(st);
   for (let i = 0; i < 60; i++) sim.tick(1 / 30);
   console.log(`${ex.id.padEnd(8)} ${String(st.buildings.length).padStart(5)} buildings, ${st.width}x${st.height}, note ${st.note ? 'ok' : 'MISSING'}, creative ${sim.creative}`);

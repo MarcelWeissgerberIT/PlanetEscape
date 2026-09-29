@@ -17,6 +17,8 @@ const base = ((window as unknown as { __PE_BASE?: string }).__PE_BASE ?? import.
 
 /** Per-build query on every sprite URL: redrawn art is never served from an old cache. */
 const V = `?v=${encodeURIComponent(__BUILD__)}`;
+/** the per-build cache buster for files fetched from public/ */
+export const assetVersion = () => V;
 
 export function buildingSprite(id: BuildingId | 'core_0' | 'core_1' | 'core_2'): HTMLImageElement {
   return load(`b:${id}`, `${base}/assets/buildings/${id}.webp${V}`);

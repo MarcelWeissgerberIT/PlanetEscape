@@ -4,7 +4,7 @@ import { introWanted, playIntro } from './ui/intro';
 import { installFrame } from './ui/fullscreen';
 import { syncAchievementsToSteam } from './game/achievements';
 import './style.css';
-import { preloadAll } from './game/assets';
+import { assetVersion, preloadAll } from './game/assets';
 import { BUILD_ORDER, ITEM_ORDER } from './game/data';
 import { EXAMPLES } from './game/examples';
 import { startVideo, stopVideo, tickVideo, videoHasAudio, videoLive } from './game/video';
@@ -117,11 +117,25 @@ const hud = new Hud(sim, input, renderer, {
   onVideoStop: (b) => stopVideo(b.id),
   videoLive: (b) => videoLive(b.id),
   videoHasAudio: (b) => videoHasAudio(b.id),
-  onLoadExample: (id: string) => {
+  onLoadExample: async (id: string): Promise<void> => {
     const ex = EXAMPLES.find((e) => e.id === id);
     if (!ex) return;
+    let st: GameState | null = null;
+    if (ex.file) {
+      // ready-made map (megafactories): a few hundred KB, fetched when chosen
+      hud.toast(`⏳ ${t('loading')}`, 1500);
+      try {
+        st = Save.migrate(await (await fetch(`${import.meta.env.BASE_URL}${ex.file}${assetVersion()}`)).json());
+      } catch {
+        st = null;
+      }
+      if (!st) {
+        hud.toast(t('import_failed'), 3000, 'error');
+        return;
+      }
+    } else st = ex.build!();
     Save.clear();
-    swapState(ex.build());
+    swapState(st);
     Save.save(sim.state);
     start();
     if (sim.state.note) setTimeout(() => hud.showNote(), 400);

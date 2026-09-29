@@ -6,14 +6,67 @@ import type { Building, Dir, GameOptions, GameState } from './types';
 import { newGame } from './world';
 import { SCREEN_BUDGET_MAX } from './data';
 
+/** Filter groups in the playground's example list. */
+export type ExampleCat = 'mega' | 'computer' | 'logic';
+
 export interface Example {
   id: string;
   title: string;
   icon: string; // building id whose sprite is shown on the card
   de: string; // one-line teaser
   en: string;
-  build: () => GameState;
+  cat: ExampleCat;
+  /** the title is "Deutsch · English" */
+  bi?: boolean;
+  map: string; // map size shown on the card
+  /** built on demand … */
+  build?: () => GameState;
+  /** … or loaded ready-made from public/ (the megafactories: the solver takes seconds to lay them out) */
+  file?: string;
 }
+
+/** Megafactories: whole production chains laid out by the solver on a big map (tools/make-examples-mega.ts). */
+export const MEGA: {
+  id: string; size: GameOptions['mapSize']; seeds: number[]; chains: [string, number][]; rounds: number; warm: number; zoom: number;
+  note: NonNullable<GameState['note']>;
+}[] = [
+  {
+    id: 'shipyard', size: 'giant', seeds: [4242, 5151, 6161, 7171, 8181, 9191, 1313, 2424], rounds: 2, warm: 900, zoom: 0.28,
+    chains: [['hull_plate', 8], ['engine', 6], ['nav_computer', 6], ['fuel_cell', 6], ['life_support', 6]],
+    note: {
+      title: 'Schiffswerft · Shipyard',
+      de: 'Alle fünf Schiffsteile gleichzeitig, auf einer Riesenkarte: Rumpfplatten, Triebwerke, Navigationscomputer, Brennstoffzellen und Lebenserhaltung. Jede Kette beginnt an einem eigenen Vorkommen und endet im Kern. Zoom heraus und folge einem Band vom Bohrer bis zum Fabrikator.\n\nTipp: Die Statistik (Menü) zeigt, was pro Minute entsteht. Such den Engpass und bau eine zweite Maschine daneben.',
+      en: 'All five ship parts at once on a giant map: hull plates, engines, nav computers, fuel cells and life support. Every chain starts at its own deposit and ends in the core. Zoom out and follow a belt from the drill to the fabricator.\n\nTip: the stats (menu) show what is made per minute. Find the bottleneck and build a second machine next to it.',
+    },
+  },
+  {
+    id: 'electronics', size: 'huge', seeds: [3131, 4141, 5252, 6363, 7474], rounds: 3, warm: 600, zoom: 0.34,
+    chains: [['circuit', 20], ['precision_part', 8], ['glass', 20], ['copper_wire', 30]],
+    note: {
+      title: 'Elektronik-Campus · Electronics campus',
+      de: 'Platinen, Präzisionsteile, Glas und Kupferdraht in Serie. Die Platinen-Montagewerke brauchen Eisenplatten UND Draht: sieh dir an, wie die Bänder von zwei Seiten zusammenlaufen.',
+      en: 'Circuits, precision parts, glass and copper wire in series. The circuit assemblers need iron plates AND wire: watch the belts meet from two sides.',
+    },
+  },
+  {
+    id: 'refinery', size: 'large', seeds: [2121, 3232, 4343, 5454, 6565], rounds: 3, warm: 600, zoom: 0.4,
+    chains: [['water', 30], ['fuel', 20], ['fuel_cell', 6]],
+    note: {
+      title: 'Raffinerie-Kombinat · Refinery complex',
+      de: 'Eis wird zu Wasser, Öl und Wasser werden im Mischer zu Treibstoff, und daraus entstehen Brennstoffzellen. Flüssigkeiten laufen in Kanistern über die Bänder.',
+      en: 'Ice becomes water, oil and water become fuel in the mixer, and fuel cells are made from it. Liquids travel the belts in canisters.',
+    },
+  },
+  {
+    id: 'steelworks', size: 'large', seeds: [1717, 2828, 3939, 4040, 5151], rounds: 4, warm: 600, zoom: 0.4,
+    chains: [['iron_plate', 60], ['steel_frame', 20], ['machine_part', 12], ['hull_plate', 6]],
+    note: {
+      title: 'Stahlwerk · Steelworks',
+      de: 'Masse statt Klasse: Reihen von Schmelzen, Stahlrahmen am Fließband, Maschinenteile aus dem 3D-Drucker und Rumpfplatten ganz am Ende.',
+      en: 'Mass production: rows of smelters, steel frames on the line, machine parts from the 3D printer and hull plates at the very end.',
+    },
+  },
+];
 
 const OPTS: GameOptions = { mode: 'playground', mapSize: 'medium', infiniteOre: true, allUnlocked: true, storms: false };
 
@@ -619,16 +672,20 @@ export function buildAdder(): GameState {
 }
 
 export const EXAMPLES: Example[] = [
-  { id: 'logistics', title: 'Roboter & Kisten · Robots & crates', icon: 'depot', de: 'Straße, Roboterdepot, Ladestationen, Stapler und Greifarm in einer Kette.', en: 'Road, robot depot, docks, stacker and grabber arm in one chain.', build: buildLogistics },
-  { id: 'pong', title: 'KORA Terminal · PONG', icon: 'terminal', de: 'CPU aus Bauteilen, RAM aus Speicherzellen, Bausteinspieler drücken die Tasten.', en: 'CPU from parts, RAM from registers, block players press the keys.', build: buildPongBoard },
-  { id: 'pongmini', title: 'PONG · LED-Matrix', icon: 'matrix', de: 'Dasselbe Spiel auf 32 LED-Matrizen statt 2048 Lampen.', en: 'The same game on 32 LED matrices instead of 2048 lamps.', build: buildPongMatrix },
-  { id: 'kdos', title: 'KDOS · Mini-PC', icon: 'keyboard', de: 'Kommandozeile mit Tastatur: HELP, DIR, RUN PONG … alles in Assembler.', en: 'A command line with keyboard: HELP, DIR, RUN PONG … all in assembly.', build: buildKdos },
-  { id: 'trailer', title: 'KORA TRAILER', icon: 'terminal', de: '30-Sekunden-Trailer, vom Chip in Assembler gerechnet, auf 32 LED-Matrizen.', en: 'A 30 second trailer computed by the chip in assembly, on 32 LED matrices.', build: buildTrailer },
-  { id: 'video', title: 'Videowand · Video wall', icon: 'screen', de: 'YouTube-Tab, Kamera oder Datei auf 128 LED-Matrizen, mit Ton und Abtast-Band.', en: 'A YouTube tab, camera or file on 128 LED matrices, with sound and a sampling belt.', build: buildVideoWall },
-  { id: 'ray', title: 'KORA RAY', icon: 'oscillator', de: 'Doom-artiges Ego-Labyrinth mit 60 kHz Turbo-Takt.', en: 'Doom-style first-person maze on a 60 kHz turbo clock.', build: buildRay },
-  { id: 'blocks', title: 'KORA BLOCKS HD', icon: 'register', de: 'Bunte 2D-Blockwelt in 128×64 mit Texturen, die Karte liegt als Zahlen im RAM.', en: 'Colour 2D block world in 128×64 with textures, the map sits in RAM as numbers.', build: buildBlocks },
-  { id: 'ttt', title: 'Tic Tac Toe', icon: 'lamp', de: 'Neun Lampen, Depots unter Druck, Züge per Schalter.', en: 'Nine lamps, pressurised depots, moves by switch.', build: buildTicTacToe },
-  { id: 'counter', title: 'Binärzähler · Binary counter', icon: 'divider', de: 'Acht Dividierer halbieren den Strom: ein Ripple-Counter aus Bändern.', en: 'Eight dividers halve the stream: a ripple counter made of belts.', build: buildBinaryCounter },
-  { id: 'light', title: 'Lauflicht · Running light', icon: 'switch', de: 'Teile kreisen in einem Bandring, Lampen leuchten im Vorbeilaufen.', en: 'Items circle a belt ring, lamps light as they pass.', build: buildRunningLight },
-  { id: 'adder', title: 'Addierwerk · Adder', icon: 'adder', de: 'Zwei Speicherzellen, ein Addierer, die Summe binär auf acht Lampen.', en: 'Two registers, an adder, the sum in binary on eight lamps.', build: buildAdder },
+  { id: 'shipyard', bi: true, title: 'Schiffswerft · Shipyard', icon: 'fabricator', de: 'Alle fünf Schiffsteile gleichzeitig: rund 300 Maschinen auf der Riesenkarte.', en: 'All five ship parts at once: some 300 machines on the giant map.', cat: 'mega', map: '240×240', file: 'examples/shipyard.json' },
+  { id: 'electronics', bi: true, title: 'Elektronik-Campus · Electronics campus', icon: 'assembler', de: 'Platinen, Präzisionsteile, Glas und Draht in Serie.', en: 'Circuits, precision parts, glass and wire in series.', cat: 'mega', map: '200×200', file: 'examples/electronics.json' },
+  { id: 'refinery', bi: true, title: 'Raffinerie-Kombinat · Refinery complex', icon: 'refinery', de: 'Eis, Öl, Wasser, Treibstoff und Brennstoffzellen.', en: 'Ice, oil, water, fuel and fuel cells.', cat: 'mega', map: '160×160', file: 'examples/refinery.json' },
+  { id: 'steelworks', bi: true, title: 'Stahlwerk · Steelworks', icon: 'smelter', de: 'Reihen von Schmelzen, Stahlrahmen, Maschinenteile, Rumpfplatten.', en: 'Rows of smelters, steel frames, machine parts, hull plates.', cat: 'mega', map: '160×160', file: 'examples/steelworks.json' },
+  { id: 'logistics', bi: true, title: 'Roboter & Kisten · Robots & crates', icon: 'depot', de: 'Straße, Roboterdepot, Ladestationen, Stapler und Greifarm in einer Kette.', en: 'Road, robot depot, docks, stacker and grabber arm in one chain.', cat: 'logic', map: '80×60', build: buildLogistics },
+  { id: 'pong', title: 'KORA Terminal · PONG', icon: 'terminal', de: 'CPU aus Bauteilen, RAM aus Speicherzellen, Bausteinspieler drücken die Tasten.', en: 'CPU from parts, RAM from registers, block players press the keys.', cat: 'computer', map: '120×120', build: buildPongBoard },
+  { id: 'pongmini', title: 'PONG · LED-Matrix', icon: 'matrix', de: 'Dasselbe Spiel auf 32 LED-Matrizen statt 2048 Lampen.', en: 'The same game on 32 LED matrices instead of 2048 lamps.', cat: 'computer', map: '120×120', build: buildPongMatrix },
+  { id: 'kdos', title: 'KDOS · Mini-PC', icon: 'keyboard', de: 'Kommandozeile mit Tastatur: HELP, DIR, RUN PONG … alles in Assembler.', en: 'A command line with keyboard: HELP, DIR, RUN PONG … all in assembly.', cat: 'computer', map: '120×120', build: buildKdos },
+  { id: 'trailer', title: 'KORA TRAILER', icon: 'terminal', de: '30-Sekunden-Trailer, vom Chip in Assembler gerechnet, auf 32 LED-Matrizen.', en: 'A 30 second trailer computed by the chip in assembly, on 32 LED matrices.', cat: 'computer', map: '120×120', build: buildTrailer },
+  { id: 'video', bi: true, title: 'Videowand · Video wall', icon: 'screen', de: 'YouTube-Tab, Kamera oder Datei auf 128 LED-Matrizen, mit Ton und Abtast-Band.', en: 'A YouTube tab, camera or file on 128 LED matrices, with sound and a sampling belt.', cat: 'computer', map: '160×160', build: buildVideoWall },
+  { id: 'ray', title: 'KORA RAY', icon: 'oscillator', de: 'Doom-artiges Ego-Labyrinth mit 60 kHz Turbo-Takt.', en: 'Doom-style first-person maze on a 60 kHz turbo clock.', cat: 'computer', map: '120×120', build: buildRay },
+  { id: 'blocks', title: 'KORA BLOCKS HD', icon: 'register', de: 'Bunte 2D-Blockwelt in 128×64 mit Texturen, die Karte liegt als Zahlen im RAM.', en: 'Colour 2D block world in 128×64 with textures, the map sits in RAM as numbers.', cat: 'computer', map: '160×120', build: buildBlocks },
+  { id: 'ttt', title: 'Tic Tac Toe', icon: 'lamp', de: 'Neun Lampen, Depots unter Druck, Züge per Schalter.', en: 'Nine lamps, pressurised depots, moves by switch.', cat: 'logic', map: '80×60', build: buildTicTacToe },
+  { id: 'counter', bi: true, title: 'Binärzähler · Binary counter', icon: 'divider', de: 'Acht Dividierer halbieren den Strom: ein Ripple-Counter aus Bändern.', en: 'Eight dividers halve the stream: a ripple counter made of belts.', cat: 'logic', map: '80×60', build: buildBinaryCounter },
+  { id: 'light', bi: true, title: 'Lauflicht · Running light', icon: 'switch', de: 'Teile kreisen in einem Bandring, Lampen leuchten im Vorbeilaufen.', en: 'Items circle a belt ring, lamps light as they pass.', cat: 'logic', map: '80×60', build: buildRunningLight },
+  { id: 'adder', bi: true, title: 'Addierwerk · Adder', icon: 'adder', de: 'Zwei Speicherzellen, ein Addierer, die Summe binär auf acht Lampen.', en: 'Two registers, an adder, the sum in binary on eight lamps.', cat: 'logic', map: '80×60', build: buildAdder },
 ];

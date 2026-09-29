@@ -46,7 +46,7 @@ export interface HudCallbacks {
   onPlayChapter: (chapter: number) => void;
   onPlayChallenge: (id: string) => void;
   onNewEditor: (w: number, h: number, random: boolean, seed?: number) => void;
-  onLoadExample: (id: string) => void;
+  onLoadExample: (id: string) => void | Promise<void>;
   onVideo: (b: Building, kind: 'screen' | 'camera' | 'file', file?: File) => Promise<string | null>; // resolves with an error message or null
   onVideoStop: (b: Building) => void;
   videoLive: (b: Building) => 'screen' | 'camera' | 'file' | null;
@@ -263,6 +263,7 @@ export class Hud {
 
   private freeOptions: GameOptions = { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
   private titleView: 'main' | 'free' | 'playground' | 'challenges' = 'main';
+  private exampleCat: 'all' | 'mega' | 'computer' | 'logic' = 'all';
 
   private renderTitle() {
     const lang = getLang();
@@ -294,12 +295,15 @@ export class Hud {
           ${IS_DESKTOP ? '' : `<a class="ai-link" href="./ai/">${t('ai_page')} →</a>`}
           <span class="aaa-lang"><button class="${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span>
         </div>`;
+    const exTitle = (ex: (typeof EXAMPLES)[number]) => (ex.bi ? ex.title.split(' · ')[getLang() === 'de' ? 0 : 1] ?? ex.title : ex.title);
+    const cats = ['all', 'mega', 'computer', 'logic'] as const;
+    const shown = EXAMPLES.filter((ex) => this.exampleCat === 'all' || ex.cat === this.exampleCat);
     const playView = `
         <div class="title-buttons">
-          <button class="btn mode primary" data-act="editor"><b>✎ ${t('pg_empty')}</b><small>${t('pg_empty_desc')}</small></button>
-          <div class="lbl">${t('pg_examples')}</div>
-          <div class="examples">
-            ${EXAMPLES.map((ex) => `<button class="btn mode example" data-example="${ex.id}"><img class="icon" src="${buildingUrl(ex.icon as BuildingId)}" alt=""><span><b>${ex.title}</b><small>${getLang() === 'de' ? ex.de : ex.en}</small></span></button>`).join('')}
+          <button class="ex-empty" data-act="editor"><span class="ex-plus">+</span><span><b>${t('pg_empty')}</b><small>${t('pg_empty_desc')}</small></span></button>
+          <div class="ex-filter">${cats.map((c) => `<button class="${this.exampleCat === c ? 'active' : ''}" data-excat="${c}">${t(`excat_${c}` as 'excat_all')}<i>${c === 'all' ? EXAMPLES.length : EXAMPLES.filter((ex) => ex.cat === c).length}</i></button>`).join('')}</div>
+          <div class="ex-grid">
+            ${shown.map((ex, k) => `<button class="ex-card cat-${ex.cat}" data-example="${ex.id}" style="--i:${k}"><img src="${buildingUrl(ex.icon as BuildingId)}" alt=""><span class="ex-body"><b>${exTitle(ex)}</b><small>${getLang() === 'de' ? ex.de : ex.en}</small><span class="ex-tags"><i class="ex-cat">${t(`excat_${ex.cat}` as 'excat_all')}</i><i>${ex.map}</i></span></span></button>`).join('')}
           </div>
           <button class="btn ghost" data-act="back">${t('back')}</button>
         </div>`;
@@ -348,6 +352,11 @@ export class Hud {
       if (lang) {
         setLang(lang);
         this.renderAll();
+        return;
+      }
+      if (target.dataset.excat) {
+        this.exampleCat = target.dataset.excat as typeof this.exampleCat;
+        this.renderTitle();
         return;
       }
       if (target.dataset.size) {
@@ -402,7 +411,7 @@ export class Hud {
         this.renderTitle();
       } else if (target.closest<HTMLElement>('[data-example]')) {
         const id = target.closest<HTMLElement>('[data-example]')!.dataset.example!;
-        void this.confirmNewGame().then((yes) => yes && this.cb.onLoadExample(id));
+        void this.confirmNewGame().then((yes) => yes && void this.cb.onLoadExample(id));
       } else if (act === 'back') {
         this.titleView = 'main';
         this.renderTitle();
