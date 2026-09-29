@@ -4,7 +4,7 @@ import { fullscreenAvailable, toggleFullscreen } from './fullscreen';
 import { MenuVideo } from './menuVideo';
 import { storyVideoHtml, wireStoryVideos } from './storyVideo';
 import { EXAMPLES } from '../game/examples';
-import { SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -344,17 +344,24 @@ export class Hud {
           </div>
           <button class="btn ghost" data-act="back">${t('back')}</button>
         </div>`;
+    const tiers = [3, 2, 1].map((m) => CHALLENGES.filter((c) => { const b = challengeBest(c.id); return b !== undefined && challengeMedal(c.id, b) === m; }).length);
     const challView = `
         <div class="title-buttons">
-          <div class="examples">
-            ${CHALLENGES.map((c) => {
+          <div class="chl-sum">${tiers.map((n, i) => `<span class="chl-sum-m t${3 - i}"><i>${MEDALS[3 - i]}</i><b>${n}</b><small>/${CHALLENGES.length}</small></span>`).join('')}
+            <button class="btn" data-act="ch-code">⚔ ${t('ch_enter_code')}</button></div>
+          <div class="chl-grid">
+            ${CHALLENGES.map((c, k) => {
               const best = challengeBest(c.id);
-              const medal = best !== undefined ? MEDALS[challengeMedal(c.id, best)] || '✓' : '';
-              if (EDITION === 'demo' && !DEMO_CHALLENGES.includes(c.id)) return `<button class="btn mode example locked" data-act="demo-locked"><img class="icon" src="${buildingUrl(c.icon)}" alt=""><span><b>🔒 ${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${t('demo_full_only')}</small></span></button>`;
-              return `<button class="btn mode example" data-challenge="${c.id}"><img class="icon" src="${buildingUrl(c.icon)}" alt=""><span><b>${medal} ${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</small><small class="ch-meta">${challengeRules(c.id)}${best !== undefined ? ` · ${t('ch_best')} ${fmtTime(best)}` : ''}</small>${this.rivalLine(c.id)}</span></button>`;
+              const m = best !== undefined ? challengeMedal(c.id, best) : 0;
+              const locked = EDITION === 'demo' && !DEMO_CHALLENGES.includes(c.id);
+              return `<button class="chl-card t${m} ${best !== undefined ? 'played' : ''} ${locked ? 'locked' : ''}" ${locked ? 'data-act="demo-locked"' : `data-challenge="${c.id}"`} style="--i:${k}">
+                <span class="chl-top"><img src="${buildingUrl(c.icon)}" alt=""><span class="chl-name"><b>${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${locked ? t('demo_full_only') : t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</small></span>
+                  <span class="chl-badge">${locked ? icon('lock') : m ? MEDALS[m] : best !== undefined ? '✓' : ''}</span></span>
+                ${locked ? '' : this.challengeKits(c.id)}
+                ${locked ? '' : `<span class="chl-foot">${this.medalTrack(c.id, best)}${best !== undefined ? `<span class="chl-best"><small>${t('ch_best')}</small><b>${fmtTime(best)}</b></span>` : ''}</span>${this.rivalLine(c.id)}`}
+              </button>`;
             }).join('')}
           </div>
-          <button class="btn" data-act="ch-code">⚔ ${t('ch_enter_code')}</button>
           <button class="btn ghost" data-act="back">${t('back')}</button>
         </div>`;
     const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
@@ -477,12 +484,38 @@ export class Hud {
     this.lastTopHtml = '';
     this.lastBottomHtml = '';
     this.undoStack = [];
+    const deliver = Object.entries(c.deliver).map(([k, n]) => `<div class="goal">${itemImg(k as ItemId, 'icon')}<span>${tItem(k as ItemId)}</span><b>${n}×</b></div>`).join('');
+    const rate = c.rate ? Object.entries(c.rate).map(([k, n]) => `<div class="goal rate">${itemImg(k as ItemId, 'icon')}<span>${t('rate_row', { item: tItem(k as ItemId) })}</span><b>${n}</b></div>`).join('') + `<div class="goal rate"><span class="goal-ico">⏱</span><span>${t('rate_hold')}</span><b>${c.rateHold ?? 0} s</b></div>` : '';
     this.pageNext = true; // opens as a full page in the menu style
-    this.openModal(`<h2>🏁 ${t(`ch_${c.id}` as 'ch_c_drills')}</h2><p>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</p><p class="save-hint">${challengeRules(c.id)}</p><p class="save-hint">${t('ch_how')}</p>
-      <div class="bufs">${Object.entries(c.deliver).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('')}</div>
-      <div class="medal-row">${c.medals.map((s, i) => `<span>${MEDALS[3 - i]} ${fmtTime(s)}</span>`).join('')}</div>
+    this.openModal(`<h2>${t(`ch_${c.id}` as 'ch_c_drills')}</h2>
+      <div class="story-split">
+        <div class="story-main">
+          <p class="story-say">${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</p>
+          <h3>${t('ch_kits')}</h3>${this.challengeKits(c.id, true)}
+          <p class="save-hint">${t('ch_how')}</p>
+        </div>
+        <aside class="story-goals"><h3>${t('ch_goal')}</h3>${deliver}${rate}<h3>${t('ch_medals')}</h3>${this.medalTrack(c.id)}</aside>
+      </div>
       <button class="btn primary" data-act="close">${t('ch_go')}</button>`, () => {});
     this.refresh();
+  }
+
+  /** The kit quota as chips; parts that cannot be printed carry a lock. */
+  private challengeKits(id: string, big = false): string {
+    const c = CHALLENGE_BY_ID[id];
+    const kits = Object.entries(c.kits) as [BuildingId, number][];
+    if (!kits.length) return `<span class="chl-kits"><small class="chl-none">${t('ch_no_kits')}</small></span>`;
+    return `<span class="chl-kits ${big ? 'big' : ''}">${kits.map(([k, n]) => {
+      const fixed = c.noPrint.includes(k);
+      return `<span class="chl-kit ${fixed ? 'fixed' : ''}" title="${tBuilding(k)}${fixed ? ` · ${t('ch_fixed')}` : ''}"><img src="${buildingUrl(k)}" alt=""><b>${n}</b>${big ? `<small>${tBuilding(k)}</small>` : ''}${fixed ? icon('lock', 'chl-lock') : ''}</span>`;
+    }).join('')}</span>${big && c.noPrint.length ? `<small class="chl-legend">${icon('lock')} ${t('ch_fixed')}</small>` : ''}`;
+  }
+
+  /** Gold, silver and bronze times; the medals reached with `time` are lit. */
+  private medalTrack(id: string, time?: number): string {
+    const c = CHALLENGE_BY_ID[id];
+    const m = time !== undefined ? challengeMedal(id, time) : 0;
+    return `<span class="chl-medals">${c.medals.map((sec, i) => `<span class="chl-medal t${3 - i} ${m >= 3 - i ? 'got' : ''}"><i>${MEDALS[3 - i]}</i><b>${fmtTime(sec)}</b></span>`).join('')}</span>`;
   }
 
   /** The challenge goal was met. */
@@ -492,12 +525,15 @@ export class Hud {
     const r = recordChallenge(c.id, seconds);
     sfx.medal(r.medal);
     this.pageNext = true; // opens as a full page in the menu style
-    this.openModal(`<div class="launch"><h2>🏁 ${t('ch_done')}</h2>
-      <p class="medal-big">${MEDALS[r.medal] || '✓'}</p>
-      <p>${t('ch_time', { time: fmtTime(seconds) })}${r.improved ? ` <span class="rec">${t('new_record')}</span>` : ''}</p>
-      <div class="medal-row">${c.medals.map((s, i) => `<span>${MEDALS[3 - i]} ${fmtTime(s)}</span>`).join('')}</div>
-      <p class="save-hint">${t('ch_best')} ${fmtTime(r.best)}</p>
+    this.openModal(`<h2>${t('ch_done')}</h2>
+      <p class="page-sub">${t(`ch_${c.id}` as 'ch_c_drills')}</p>
+      <div class="chl-result t${r.medal}">
+        <span class="chl-bigmedal">${MEDALS[r.medal] || '✓'}</span>
+        <span class="chl-time"><small>${t('ch_your_time')}</small><b>${fmtTime(seconds)}</b>${r.improved ? `<em>${t('new_record')}</em>` : `<small>${t('ch_best')} ${fmtTime(r.best)}</small>`}</span>
+      </div>
+      ${this.medalTrack(c.id, seconds)}
       ${this.rivalLine(c.id, seconds)}
+      <div class="chl-actions">
       <button class="btn primary" data-act="ch-share">🔗 ${t('ch_share')}</button>
       <button class="btn" data-act="ch-again">${t('ch_again')}</button>
       <button class="btn" data-act="ch-list">${t('ch_list')}</button>
@@ -712,11 +748,14 @@ export class Hud {
       const who = r.name || t('ch_someone');
       const vs = best === undefined ? t('ch_not_played') : best < r.time ? t('ch_you_ahead', { d: fmtTime(r.time - best) }) : best > r.time ? t('ch_you_behind', { d: fmtTime(best - r.time) }) : t('ch_tie');
       this.pageNext = true; // opens as a full page in the menu style
-      this.openModal(`<div class="launch"><h2>⚔ ${t('ch_challenge_from', { n: who })}</h2>
-        <p><b>${t(`ch_${r.id}` as 'ch_c_drills')}</b></p>
-        <p class="medal-big">${medal}</p>
-        <p>${t('ch_time', { time: fmtTime(r.time) })}</p>
-        <p class="save-hint">${vs}${isNew ? '' : ` · ${t('ch_rival_kept')}`}</p>
+      this.openModal(`<h2>⚔ ${t('ch_challenge_from', { n: who })}</h2>
+        <p class="page-sub">${t(`ch_${r.id}` as 'ch_c_drills')}</p>
+        <div class="chl-result t${resultMedal(r)}">
+          <span class="chl-bigmedal">${medal}</span>
+          <span class="chl-time"><small>${who}</small><b>${fmtTime(r.time)}</b><small>${vs}${isNew ? '' : ` · ${t('ch_rival_kept')}`}</small></span>
+        </div>
+        ${this.medalTrack(r.id, r.time)}
+        <div class="chl-actions">
         <button class="btn primary" data-act="ch-play">${t('ch_beat_it')}</button>
         <button class="btn ghost" data-act="close">${t('close')}</button></div>`, (target) => {
         if (target.dataset.act === 'ch-play') {
@@ -2942,24 +2981,32 @@ export class Hud {
   showDiagnostics() {
     const probs = this.problems;
     const st = this.sim.state;
+    const low = st.powerDemand > st.powerSupply;
     const rows = probs.length
-      ? probs
+      ? `<div class="dg-grid">${probs
           .slice(0, 40)
           .map((p, i) => {
             const b = p.building;
-            const txt = p.status === 'starved' ? `${tStatus('starved')} ${(p.missing ?? []).map((m) => itemImg(m, 'icon xs') + tItem(m)).join(', ')}` : tStatus(p.status);
-            return `<div class="prob"><img class="icon sm" src="${buildingUrl(b.type)}" alt=""><span class="pname"><b>${tBuilding(b.type)}</b> ${txt}</span><button class="btn small" data-show="${i}">${t('show')}</button></div>`;
+            const missing = p.status === 'starved' ? `<span class="dg-miss">${(p.missing ?? []).map((m) => `<i>${itemImg(m, 'icon xs')}${tItem(m)}</i>`).join('')}</span>` : '';
+            return `<div class="dg-prob s-${p.status}" style="--i:${Math.min(i, 12)}"><img src="${buildingUrl(b.type)}" alt=""><span class="dg-body"><b>${tBuilding(b.type)}</b><span class="dg-tag">${tStatus(p.status)}</span>${missing}</span><button class="btn small" data-show="${i}">${t('show')}</button></div>`;
           })
-          .join('')
-      : `<p class="okline">✓ ${t('all_ok')}</p>`;
-    const power = st.powerDemand > st.powerSupply ? `<p class="badline">⚡ ${tStatus('low_power')}: ${st.powerDemand}/${st.powerSupply}</p>` : '';
+          .join('')}</div>`
+      : `<div class="dg-ok">${icon('check')}<span><b>${t('all_ok')}</b><small>${t('diag_ok_sub')}</small></span></div>`;
+    const pct = st.powerSupply ? Math.min(100, Math.round((st.powerDemand / st.powerSupply) * 100)) : st.powerDemand ? 100 : 0;
+    const tiles = (list: string) => `<div class="dg-tiles">${list}</div>`;
     this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
-      `<h2>${t('diagnostics')}</h2>${power}<div class="prob-list">${rows}</div>
+      `<h2>${t('diagnostics')}</h2>
+      <div class="dg-stats">
+        <div class="dg-stat ${probs.length ? 'bad' : 'ok'}"><small>${t('diag_problems')}</small><b>${probs.length}</b></div>
+        <div class="dg-stat ${low ? 'bad' : 'ok'}"><small>${icon('bolt')} ${t('power')}</small><b>${st.powerDemand}<span>/${st.powerSupply}</span></b><span class="dg-bar"><i style="width:${pct}%"></i></span></div>
+        <div class="dg-stat"><small>${t('buildings_n')}</small><b>${st.buildings.filter((b) => b.type !== 'core').length}</b></div>
+      </div>
+      <h3>${t('diag_problems')}</h3>${rows}
       <h3>${t('chains')}</h3>
-      <div class="chain-grid">${ITEM_ORDER.filter((id) => RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id))).map((id) => `<button class="chip" data-chain="${id}">${itemImg(id, 'icon xs')} ${tItem(id)}</button>`).join('')}</div>
+      ${tiles(ITEM_ORDER.filter((id) => RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id))).map((id) => `<button class="dg-tile" data-chain="${id}">${itemImg(id, 'icon')}<span>${tItem(id)}</span></button>`).join(''))}
       <h3>${t('bp_buildings')}</h3>
-      <div class="chain-grid">${BUILD_ORDER.filter((id) => st.unlockedBuildings.includes(id)).map((id) => `<button class="chip" data-bp-building="${id}"><img class="icon xs" src="${buildingUrl(id)}" alt=""> ${tBuilding(id)}</button>`).join('')}</div>
+      ${tiles(BUILD_ORDER.filter((id) => st.unlockedBuildings.includes(id)).map((id) => `<button class="dg-tile" data-bp-building="${id}"><img class="icon" src="${buildingUrl(id)}" alt=""><span>${tBuilding(id)}</span></button>`).join(''))}
       <button class="btn primary" data-act="close">${t('close')}</button>`,
       (target) => {
         if (target.dataset.show !== undefined) {
