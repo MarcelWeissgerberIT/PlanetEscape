@@ -1,6 +1,8 @@
 import { buildingSprite, decoSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Critters } from './critters';
-import { buildScenery, type Scenery } from './scenery';
+import { buildScenery, hash, type Scenery } from './scenery';
+import { daylight, drawLavaFlow, NightPass, Weather, type Light } from './atmosphere';
+import { kv } from './storage';
 import { Camera, TILE } from './camera';
 import { SERVICE_RANGE, BELT_SPACING, BUILDINGS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from './chip8';
@@ -73,6 +75,11 @@ export class Renderer {
   private sceneryOf: GameState | null = null;
   private groundColor = '#373d45';
   private critters = new Critters();
+  private weather = new Weather();
+  private night = new NightPass();
+  private stillMotion = typeof matchMedia !== 'undefined' && matchMedia('(prefers-reduced-motion: reduce)').matches;
+  /** the day and night cycle can be switched off in the menu */
+  static dayNight = kv.get('pe_daynight') !== '0';
   private worldT: DOMMatrix | null = null;
   static readonly CACHE_PX = 12;
   static readonly CACHE_ZOOM = 0.45;
@@ -352,6 +359,7 @@ export class Renderer {
           ctx.fillRect(x * TILE + 8, y * TILE + 8, TILE - 16, TILE - 16);
         }
         ctx.globalAlpha = 1;
+        if (!this.lowDetail && (t === 'oil' || t === 'ice')) this.liquid(t, x, y, frac);
       }
     }
 
@@ -463,7 +471,80 @@ export class Renderer {
 
     ctx.restore();
 
+    // time of day and weather over the world (screen space)
+    ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
+    const day = Renderer.dayNight ? daylight(s.time) : { dark: 0, dusk: 0 };
+    this.night.draw(ctx, cam.width, cam.height, this.dpr, day.dark, day.dusk, day.dark > 0.01 ? this.lights(visible, scenery) : []);
+    if (!this.stillMotion) this.weather.draw(ctx, cam.width, cam.height, this.paused ? 0 : dt, scenery.biome.id, day.dark, this.time);
+
     if (s.storm > 0) this.drawStorm(dt);
+  }
+
+  /** Oil shimmers in moving rainbow colours, ice glints here and there. */
+  private liquid(t: 'oil' | 'ice', x: number, y: number, frac: number) {
+    const { ctx } = this;
+    const px = x * TILE, py = y * TILE;
+    if (t === 'oil') {
+      const ph = this.time * 0.5 + x * 0.37 + y * 0.23;
+      const o = (Math.sin(ph) * 0.5 + 0.5) * TILE;
+      const g = ctx.createLinearGradient(px - TILE + o, py, px + o, py + TILE);
+      g.addColorStop(0, 'rgba(120,80,255,0)');
+      g.addColorStop(0.35, `rgba(120,80,255,${0.16 * frac})`);
+      g.addColorStop(0.55, `rgba(0,230,200,${0.16 * frac})`);
+      g.addColorStop(0.75, `rgba(255,200,40,${0.12 * frac})`);
+      g.addColorStop(1, 'rgba(255,200,40,0)');
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.fillStyle = g;
+      ctx.fillRect(px + 4, py + 4, TILE - 8, TILE - 8);
+      ctx.globalCompositeOperation = 'source-over';
+      return;
+    }
+    // ice: two tiny star glints per tile, each twinkling on its own beat
+    ctx.fillStyle = '#ffffff';
+    for (let k = 0; k < 2; k++) {
+      const tw = Math.sin(this.time * 2.3 + hash(x, y, k) * 40);
+      if (tw < 0.82) continue;
+      const a = (tw - 0.82) / 0.18;
+      const gx = px + 10 + hash(x, y, k + 3) * (TILE - 20), gy = py + 10 + hash(x, y, k + 5) * (TILE - 20);
+      const r = 5 * a;
+      ctx.globalAlpha = a;
+      ctx.fillRect(gx - r, gy - 0.6, r * 2, 1.2);
+      ctx.fillRect(gx - 0.6, gy - r, 1.2, r * 2);
+      ctx.globalAlpha = 1;
+    }
+  }
+
+  /** What shines at night: the core, running machines, lamps, robots, lava. In screen pixels. */
+  private lights(visible: Building[], sc: Scenery): Light[] {
+    const out: Light[] = [];
+    const z = this.cam.zoom * TILE;
+    const add = (tx: number, ty: number, tiles: number, color: string, strength = 1) => {
+      if (out.length > 260) return;
+      const [x, y] = this.cam.worldToScreen(tx * TILE, ty * TILE);
+      out.push({ x, y, r: tiles * z, color, strength });
+    };
+    const HOT = new Set<BuildingId>(['smelter', 'refinery', 'generator', 'reactor']);
+    const TECH = new Set<BuildingId>(['assembler', 'fabricator', 'printer', 'miner', 'service', 'recycler', 'mixer', 'depot', 'kitport']);
+    for (const b of visible) {
+      const size = BUILDINGS[b.type].size;
+      const cx = b.x + size / 2, cy = b.y + size / 2;
+      if (b.type === 'core') add(cx, cy, 5, '34,211,238');
+      else if (b.type === 'lamp') {
+        const item = this.sim.lampItem(b);
+        if (item) add(cx, cy, 3, hexRgb(itemColor(item)));
+      } else if (b.site) continue;
+      else if (b.status === 'ok' && HOT.has(b.type)) add(cx, cy, 1.4 + size * 0.6, '251,146,60');
+      else if (b.status === 'ok' && TECH.has(b.type)) add(cx, cy, 1 + size * 0.5, '125,211,252', 0.8);
+      else if (b.type !== 'conveyor' && b.type !== 'road' && b.type !== 'tunnel' && b.type !== 'bus') add(cx, cy, 0.7, '148,163,184', 0.45);
+    }
+    for (const r of this.sim.robots()) add(r.x, r.y, 1.1, '254,249,195', 0.8);
+    const [x0, y0] = this.cam.screenToTile(0, 0), [x1, y1] = this.cam.screenToTile(this.cam.width, this.cam.height);
+    for (const d of sc.decos) {
+      if (d.kind !== 'lava' && d.kind !== 'volcano' && d.kind !== 'vent') continue;
+      if (d.cx < x0 - 2 || d.cx > x1 + 2 || d.cy < y0 - 2 || d.cy > y1 + 2) continue;
+      add(d.cx, d.kind === 'volcano' ? d.cy - d.size * 0.3 : d.cy, d.kind === 'volcano' ? 2.2 : d.kind === 'lava' ? 1.3 : 0.8, '251,113,40', 0.85);
+    }
+    return out;
   }
 
   // ---------- Belts ----------
@@ -2077,11 +2158,16 @@ export class Renderer {
       if (!ready(img)) continue;
       const px = d.cx * TILE, py = d.cy * TILE, sz = d.size * TILE;
       ctx.setTransform(this.worldT!);
+      const flows = !this.lowDetail && (d.kind === 'lava' || d.kind === 'volcano');
       if (d.flip) {
         ctx.translate(px, py);
         ctx.scale(-1, 1);
         ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
-      } else ctx.drawImage(img, px - sz / 2, py - sz / 2, sz, sz);
+        if (flows) drawLavaFlow(ctx, img, -sz / 2, -sz / 2, sz, this.time, d.tx + d.ty * 7);
+      } else {
+        ctx.drawImage(img, px - sz / 2, py - sz / 2, sz, sz);
+        if (flows) drawLavaFlow(ctx, img, px - sz / 2, py - sz / 2, sz, this.time, d.tx + d.ty * 7);
+      }
       if (d.kind === 'volcano' || d.kind === 'lava') {
         // a slow pulse of heat
         ctx.setTransform(this.worldT!);
@@ -2223,4 +2309,11 @@ function roundRect(ctx: CanvasRenderingContext2D, x: number, y: number, w: numbe
   ctx.lineTo(x, y + r);
   ctx.quadraticCurveTo(x, y, x + r, y);
   ctx.closePath();
+}
+
+/** "#rrggbb" to "r,g,b" for the light colours. */
+function hexRgb(hex: string): string {
+  const h = hex.replace('#', '');
+  const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6), 16);
+  return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
 }

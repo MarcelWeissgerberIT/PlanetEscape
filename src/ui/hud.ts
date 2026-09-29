@@ -4,7 +4,7 @@ import { MenuVideo } from './menuVideo';
 import { EXAMPLES } from '../game/examples';
 import { SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
-import type { Renderer } from '../game/render';
+import { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
 import { ambientEnabled, setAmbient, setSound, sfx, soundEnabled, startAmbient } from '../game/sfx';
 import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, TerrainId, UpgradeId } from '../game/types';
@@ -2830,6 +2830,7 @@ export class Hud {
         <div class="menu-row"><span>${t('language')}</span><span class="seg"><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
         <div class="menu-row"><span>${t('sound')}</span><span class="seg"><button class="chip ${soundEnabled() ? 'active' : ''}" data-sound="on">${t('on')}</button><button class="chip ${soundEnabled() ? '' : 'active'}" data-sound="off">${t('off')}</button></span></div>
         <div class="menu-row"><span>${t('ambience')}</span><span class="seg"><button class="chip ${ambientEnabled() ? 'active' : ''}" data-ambient="on">${t('on')}</button><button class="chip ${ambientEnabled() ? '' : 'active'}" data-ambient="off">${t('off')}</button></span></div>
+        <div class="menu-row"><span>${t('day_night')}</span><span class="seg"><button class="chip ${Renderer.dayNight ? 'active' : ''}" data-daynight="on">${t('on')}</button><button class="chip ${Renderer.dayNight ? '' : 'active'}" data-daynight="off">${t('off')}</button></span></div>
       </div>
       <h3>${icon('save', 'sm')} ${t('section_save')}</h3>
       <div class="mtiles">
@@ -2855,6 +2856,10 @@ export class Hud {
           this.showMenu();
         } else if (target.dataset.ambient) {
           setAmbient(target.dataset.ambient === 'on');
+          this.showMenu();
+        } else if (target.dataset.daynight) {
+          Renderer.dayNight = target.dataset.daynight === 'on';
+          kv.set('pe_daynight', Renderer.dayNight ? '1' : '0');
           this.showMenu();
         } else if (target.dataset.act === 'howto') this.showHowTo();
         else if (target.dataset.act === 'note') this.showNote();
