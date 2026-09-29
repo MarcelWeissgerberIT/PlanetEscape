@@ -2963,7 +2963,7 @@ export class Hud {
         ${fullscreenAvailable() ? `<button class="tile" data-act="fullscreen">${icon('fullscreen')}<span>${t('fullscreen')}</span></button>` : ''}
         ${desktop() ? `<button class="tile" data-act="quit">${icon('power')}<span>${t('quit')}</span></button>` : ''}
       </div>
-      <div class="row2"><button class="btn danger" data-act="new">${icon('plus', 'sm')} ${t('new_game')}</button><button class="btn primary" data-act="close">${t('close')}</button></div>
+      <div class="row2"><button class="btn" data-act="new">‹ ${t('to_main_menu')}</button><button class="btn primary" data-act="close">${t('close')}</button></div>
       <p class="save-hint">${t('save_hint')}${produced ? ` · ${t('produced')}: ${produced}` : ''}</p>`,
       (target) => {
         if (target.dataset.lang) {
