@@ -1,4 +1,5 @@
 import { DEMO_CHALLENGES, DEMO_CHAPTERS, EDITION, IS_DESKTOP } from './game/desktop';
+import { kv } from './game/storage';
 import { introWanted, playIntro } from './ui/intro';
 import { syncAchievementsToSteam } from './game/achievements';
 import './style.css';
@@ -259,13 +260,16 @@ document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: fals
 renderer.resize();
 renderer.centerOnCore();
 exposeDebug();
-// the cinematic intro on every start (skippable); the menu is ready behind it, its video waits until the intro ends
-const intro = introWanted();
+// the cinematic intro on the first start (skippable, again from the menu); the menu is ready behind it, its video
+// waits until the intro ends
+const INTRO_KEY = 'pe_intro_seen';
+const intro = introWanted() && (new URLSearchParams(location.search).has('intro') || !kv.get(INTRO_KEY));
 hud.holdMenuVideo = intro;
 hud.showTitle();
 syncAchievementsToSteam();
 if (intro)
   void playIntro().then(() => {
+    kv.set(INTRO_KEY, '1');
     hud.holdMenuVideo = false;
     if (!document.querySelector('.title-screen.hidden')) hud.menuVideo(true);
   });

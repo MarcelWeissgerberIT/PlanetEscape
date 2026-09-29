@@ -1,5 +1,6 @@
 import { buildingUrl, terrainUrl, uiUrl } from '../game/assets';
-import { videoSources } from './intro';
+import { playIntro } from './intro';
+import { MenuVideo } from './menuVideo';
 import { EXAMPLES } from '../game/examples';
 import { SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
@@ -198,29 +199,32 @@ export class Hud {
   /** true while the intro plays: the menu video waits so it does not compete for the download */
   holdMenuVideo = false;
 
+  private bgVideo: MenuVideo | null = null;
+
   private titleShell(): HTMLElement {
     if (!this.titleHost) {
-      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
-      this.title.innerHTML = `<div class="title-bg" style="background-image:url('${uiUrl('menu_bg.webp')}')">${still ? '' : '<video class="title-video" muted loop playsinline preload="none"></video>'}</div><div class="title-host"></div>`;
+      this.title.innerHTML = `<div class="title-bg" style="background-image:url('${uiUrl('menu_bg.webp')}')"></div><div class="title-host"></div>`;
       this.titleHost = this.title.querySelector('.title-host') as HTMLElement;
+      // with reduced motion the still picture stays
+      if (!matchMedia('(prefers-reduced-motion: reduce)').matches) this.bgVideo = new MenuVideo(this.title.querySelector('.title-bg') as HTMLElement);
     }
     return this.titleHost;
   }
 
   /** Run or pause the menu background video (loaded on first use, in the size that fits the screen). */
   menuVideo(on: boolean) {
-    const v = this.title.querySelector('.title-video') as HTMLVideoElement | null;
-    if (!v) return;
-    if (!on) {
-      v.pause();
-      return;
-    }
-    if (!v.querySelector('source')) {
-      v.innerHTML = videoSources('menu');
-      v.load();
-    }
-    v.addEventListener('playing', () => v.classList.add('on'), { once: true });
-    void v.play().catch(() => undefined); // muted autoplay is allowed; if not, the still image stays
+    if (on) this.bgVideo?.start();
+    else this.bgVideo?.stop();
+  }
+
+  /** The intro again, from the menu (a click: it starts with sound right away). */
+  private replayIntro() {
+    this.menuVideo(false);
+    this.holdMenuVideo = true;
+    void playIntro().then(() => {
+      this.holdMenuVideo = false;
+      if (!this.title.classList.contains('hidden')) this.menuVideo(true);
+    });
   }
 
   private freeOptions: GameOptions = { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
@@ -246,6 +250,7 @@ export class Hud {
             <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
             <button class="btn ghost" data-act="howto">${t('how_to')}</button>
           </div>
+          <button class="btn ghost small-line" data-act="replay-intro">🎬 ${t('intro_watch')}</button>
           ${EDITION === 'demo' && STORE_URL ? `<button class="btn ghost" data-act="store">${t('demo_store')} →</button>` : ''}
           ${EDITION !== 'demo' && IS_DESKTOP && !Object.keys(loadProgress().stars).length ? `<button class="btn ghost" data-act="progress-import">${t('progress_import_title')}</button>` : ''}
           ${IS_DESKTOP ? '' : `<a class="btn ghost ai-link" href="./ai/">${t('ai_page')} →</a>`}
@@ -363,6 +368,7 @@ export class Hud {
         const seed = seedOf();
         void this.confirmNewGame().then((yes) => yes && this.cb.onNewGame(seed, { ...this.freeOptions, mode: 'free' }));
       } else if (act === 'howto') this.showHowTo();
+      else if (act === 'replay-intro') this.replayIntro();
       else if (act === 'chapters') this.showChapters();
       else if (act === 'editor') this.showEditorSetup();
     };
