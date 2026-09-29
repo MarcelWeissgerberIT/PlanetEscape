@@ -1,0 +1,71 @@
+name: Desktop builds
+
+# Windows, macOS and Linux builds of the desktop app (Electron, see desktop/). Runs by hand (Actions → Desktop builds →
+# Run workflow) or for a version tag like v0.2.0; the builds end up as downloadable artifacts of the run.
+on:
+  workflow_dispatch:
+    inputs:
+      edition:
+        description: 'full or demo'
+        default: full
+        required: true
+      steam_app_id:
+        description: 'Steam App ID (empty: build without Steam)'
+        default: ''
+        required: false
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npm run typecheck
+      - run: npm run ci
+
+  build:
+    needs: check
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    env:
+      PE_EDITION: ${{ github.event.inputs.edition || 'full' }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Steam App ID
+        if: ${{ github.event.inputs.steam_app_id != '' && github.event.inputs.steam_app_id != null }}
+        shell: bash
+        run: echo "${{ github.event.inputs.steam_app_id }}" > desktop/steam/steam_appid.txt
+      - run: npm run desktop:web
+      - run: npm install --no-audit --no-fund
+        working-directory: desktop
+      - run: npx electron-builder --publish never
+        working-directory: desktop
+        env:
+          CSC_IDENTITY_AUTO_DISCOVERY: 'false' # unsigned builds (see STEAM.md: signing)
+      - uses: actions/upload-artifact@v4
+        with:
+          name: planet-escape-${{ env.PE_EDITION }}-${{ matrix.os }}
+          path: |
+            desktop/release/*.exe
+            desktop/release/*.zip
+            desktop/release/*.dmg
+            desktop/release/*.AppImage
+            desktop/release/*.tar.gz
+          if-no-files-found: error

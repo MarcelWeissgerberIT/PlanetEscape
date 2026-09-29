@@ -4,3 +4,6 @@ dist/
 *.log
 tools/raw/
 mcp/dist/
+
+# store screenshot saves (made by tools/shot-saves.ts)
+steam-assets/.saves/

@@ -1,0 +1,15 @@
+"AppBuild"
+{
+	// fill in APP_ID and the three DEPOT_IDs from Steamworks (App Admin → SteamPipe → Depots), save as app_build.vdf
+	"AppID" "APP_ID"
+	"Desc" "Planet Escape build"
+	"BuildOutput" "../release/steam-output/"
+	"ContentRoot" "../release/"
+	"SetLive" ""
+	"Depots"
+	{
+		"DEPOT_ID_WINDOWS" { "FileMapping" { "LocalPath" "win-unpacked/*" "DepotPath" "." "recursive" "1" } }
+		"DEPOT_ID_MAC" { "FileMapping" { "LocalPath" "mac-universal/Planet Escape.app/*" "DepotPath" "Planet Escape.app" "recursive" "1" } }
+		"DEPOT_ID_LINUX" { "FileMapping" { "LocalPath" "linux-unpacked/*" "DepotPath" "." "recursive" "1" } }
+	}
+}

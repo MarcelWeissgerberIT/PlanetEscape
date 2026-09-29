@@ -12,6 +12,9 @@ import { hasSave, migrate as migrateSave, lastDropped, serialize } from '../game
 import { SAVE_VERSION } from '../game/world';
 import { MEDALS, challengeBest, challengeRival, playerName, recordRival, setPlayerName, recordChallenge, chaptersUnlocked, loadProgress, recordChapter, recordScore, resumeChapter, starString } from '../game/progress';
 import { icon } from './icons';
+import { ACHIEVEMENTS, checkAchievements, earned, unlock as unlockAchievement } from '../game/achievements';
+import { DEMO_CHALLENGES, DEMO_CHAPTERS, EDITION, IS_DESKTOP, STORE_URL, WEB_URL, desktop } from '../game/desktop';
+import { kv } from '../game/storage';
 import { tutorialStepDone } from '../game/tutorial';
 import { cleanName, decodeResult, encodeResult, resultMedal, shareLink } from '../game/share';
 import { DIR_ARROWS, costHtml, el, fmtTime, itemImg } from './dom';
@@ -202,7 +205,7 @@ export class Hud {
             ? `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story-resume"><b>${t('mode_story')} · ${t('story_resume', { n: resume })}</b><small>${MISSIONS[resume - 1] ? tMission(MISSIONS[resume - 1].id).title + ' · ' : ''}${t('story_resume_desc')}</small></button>
                <button class="btn ghost small-line" data-act="story">${t('story_restart')}</button>`
             : `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story"><b>${t('mode_story')}</b><small>${t('mode_story_desc')}</small></button>`}
-          <button class="btn mode" data-act="freeview"><b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small></button>
+          ${EDITION === 'demo' ? `<button class="btn mode locked" data-act="demo-locked"><b>🔒 ${t('mode_free')}</b><small>${t('demo_full_only')}</small></button>` : `<button class="btn mode" data-act="freeview"><b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small></button>`}
           <button class="btn mode" data-act="playview"><b>${t('mode_playground')}</b><small>${t('mode_playground_desc')}</small></button>
           <button class="btn mode" data-act="challview"><b>🏁 ${t('mode_challenge')} ${medalSummary()}</b><small>${t('mode_challenge_desc')}</small></button>
           ${seedInput}
@@ -210,7 +213,7 @@ export class Hud {
             <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
             <button class="btn ghost" data-act="howto">${t('how_to')}</button>
           </div>
-          <a class="btn ghost ai-link" href="./ai/">${t('ai_page')} →</a>
+          ${IS_DESKTOP ? '' : `<a class="btn ghost ai-link" href="./ai/">${t('ai_page')} →</a>`}
         </div>`;
     const playView = `
         <div class="title-buttons">
@@ -227,6 +230,7 @@ export class Hud {
             ${CHALLENGES.map((c) => {
               const best = challengeBest(c.id);
               const medal = best !== undefined ? MEDALS[challengeMedal(c.id, best)] || '✓' : '';
+              if (EDITION === 'demo' && !DEMO_CHALLENGES.includes(c.id)) return `<button class="btn mode example locked" data-act="demo-locked"><img class="icon" src="${buildingUrl(c.icon)}" alt=""><span><b>🔒 ${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${t('demo_full_only')}</small></span></button>`;
               return `<button class="btn mode example" data-challenge="${c.id}"><img class="icon" src="${buildingUrl(c.icon)}" alt=""><span><b>${medal} ${t(`ch_${c.id}` as 'ch_c_drills')}</b><small>${t(`ch_${c.id}_desc` as 'ch_c_drills_desc')}</small><small class="ch-meta">${challengeRules(c.id)}${best !== undefined ? ` · ${t('ch_best')} ${fmtTime(best)}` : ''}</small>${this.rivalLine(c.id)}</span></button>`;
             }).join('')}
           </div>
@@ -298,6 +302,8 @@ export class Hud {
       } else if (act === 'freeview') {
         this.titleView = 'free';
         this.renderTitle();
+      } else if (act === 'demo-locked') {
+        this.showDemoEnd();
       } else if (act === 'ch-code') {
         this.showChallengeCode();
       } else if (act === 'challview') {
@@ -398,7 +404,8 @@ export class Hud {
     }
     const res = { id, time: Math.round(seconds), name };
     const code = encodeResult(res);
-    const link = shareLink(res, location.href);
+    const link = shareLink(res, IS_DESKTOP ? WEB_URL : location.href);
+    if (unlockAchievement('SHARE')) this.achievementToast('SHARE');
     const text = t('ch_share_text', { c: t(`ch_${id}` as 'ch_c_drills'), time: fmtTime(seconds), m: MEDALS[challengeMedal(id, seconds)] || '✓' });
     this.openModal(`<h2>🔗 ${t('ch_share')}</h2><p>${text}</p>
       <div class="lbl">${t('ch_code')}</div><input class="text-input mono" id="ch-code" readonly value="${code}">
@@ -415,6 +422,34 @@ export class Hud {
       else if (act === 'copy-code') copy(code);
       else if (act === 'native-share') void navigator.share({ title: 'Planet Escape', text, url: link }).catch(() => undefined);
     });
+  }
+
+  private achievementToast(id: string) {
+    sfx.mission();
+    this.toast(`🏆 ${t('ach_unlocked')}: <b>${t(`ach_${id}` as 'ach_FIRST_PLATE')}</b><br><small>${t(`ach_${id}_desc` as 'ach_FIRST_PLATE_desc')}</small>`, 5000, 'success');
+  }
+
+  /** Achievements window (menu). */
+  showAchievements() {
+    const have = earned();
+    const rows = ACHIEVEMENTS.map((a) => `<div class="ach ${have[a.id] ? 'got' : ''}"><span class="ach-icon">${have[a.id] ? '🏆' : '🔒'}</span><div><b>${t(`ach_${a.id}` as 'ach_FIRST_PLATE')}</b><small>${t(`ach_${a.id}_desc` as 'ach_FIRST_PLATE_desc')}</small></div></div>`).join('');
+    this.openModal(`<h2>🏆 ${t('achievements')} · ${Object.keys(have).length}/${ACHIEVEMENTS.length}</h2><div class="ach-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`);
+  }
+
+  /** Demo: the end of what it contains, with the way to the full game. */
+  showDemoEnd() {
+    this.openModal(`<div class="launch"><h2>${t('demo_end_title')}</h2><p>${t('demo_end_text', { n: DEMO_CHAPTERS })}</p>
+      ${STORE_URL ? `<button class="btn primary" data-act="store">${t('demo_store')}</button>` : ''}
+      <button class="btn" data-act="close">${t('close')}</button></div>`, (target) => {
+      if (target.dataset.act === 'store') this.openLink(STORE_URL);
+    });
+  }
+
+  /** Links leave the desktop app through the system browser. */
+  openLink(url: string) {
+    const d = desktop();
+    if (d) d.openExternal(url);
+    else window.open(url, '_blank', 'noopener');
   }
 
   /** A pasted code or an opened link: show who played what, keep the best rival time, offer to play it. */
@@ -539,7 +574,7 @@ export class Hud {
     const rows = LEVELS.map((lvl, i) => {
       const m = MISSIONS[i];
       const mt = tMission(m.id);
-      const open = i + 1 <= unlocked;
+      const open = i + 1 <= unlocked && (EDITION !== 'demo' || i < DEMO_CHAPTERS);
       const stars = p.stars[i] ?? 0;
       const best = p.best[i];
       return `<div class="chapter-row ${open ? '' : 'locked'}">
@@ -1110,18 +1145,14 @@ export class Hud {
 
   private savedBlueprints(): Blueprint[] {
     try {
-      return JSON.parse(localStorage.getItem('pe_blueprints') ?? '[]') as Blueprint[];
+      return JSON.parse(kv.get('pe_blueprints') ?? '[]') as Blueprint[];
     } catch {
       return [];
     }
   }
 
   private storeBlueprints(list: Blueprint[]) {
-    try {
-      localStorage.setItem('pe_blueprints', JSON.stringify(list.slice(0, 24)));
-    } catch {
-      /* ignore */
-    }
+    kv.set('pe_blueprints', JSON.stringify(list.slice(0, 24)));
   }
 
   saveClipboard() {
@@ -2676,7 +2707,9 @@ export class Hud {
         ${st.note && !this.editor ? `<button class="tile" data-act="note">${icon('note')}<span>${t('save_note')}</span></button>` : ''}
         ${st.options.mode === 'free' || st.options.mode === 'playground' ? (this.editor ? `<button class="tile" data-act="ednote">${icon('note')}<span>${t('ed_note')}</span></button><button class="tile primary" data-act="edtoggle">${icon('play')}<span>${t('ed_play')}</span></button>` : `<button class="tile" data-act="edtoggle">${icon('pencil')}<span>${t('editor')}</span></button>`) : ''}
         <button class="tile" data-act="howto">${icon('help')}<span>${t('how_to')}</span></button>
-        <a class="tile" href="./ai/">${icon('spark')}<span>${t('ai_page')}</span></a>
+        ${IS_DESKTOP ? '' : `<a class="tile" href="./ai/">${icon('spark')}<span>${t('ai_page')}</span></a>`}
+        <button class="tile" data-act="achievements">${icon('trophy')}<span>${t('achievements')}</span></button>
+        ${desktop() ? `<button class="tile" data-act="fullscreen">${icon('fullscreen')}<span>${t('fullscreen')}</span></button><button class="tile" data-act="quit">${icon('power')}<span>${t('quit')}</span></button>` : ''}
       </div>
       <div class="row2"><button class="btn danger" data-act="new">${icon('plus', 'sm')} ${t('new_game')}</button><button class="btn primary" data-act="close">${t('close')}</button></div>
       <p class="save-hint">${t('save_hint')}${produced ? ` · ${t('produced')}: ${produced}` : ''}</p>`,
@@ -2698,7 +2731,12 @@ export class Hud {
           this.setEditor(!this.editor);
         } else if (target.dataset.act === 'ednote') this.editNote();
         else if (target.dataset.act === 'transfer') this.showTransfer();
-        else if (target.dataset.act === 'blueprints') this.showBlueprints();
+        else if (target.dataset.act === 'achievements') this.showAchievements();
+        else if (target.dataset.act === 'fullscreen') desktop()?.toggleFullscreen();
+        else if (target.dataset.act === 'quit') {
+          this.cb.onSave();
+          desktop()?.quit();
+        } else if (target.dataset.act === 'blueprints') this.showBlueprints();
         else if (target.dataset.act === 'save') {
           this.cb.onSave();
           this.toast(`${icon('save', 'sm')} ${t('saved')}`, 1500, 'success');
@@ -2857,6 +2895,11 @@ export class Hud {
     if (m.reward) for (const k in m.reward) unlocks.push(`${m.reward[k as ItemId]}× ${tItem(k as ItemId)}`);
     sfx.mission();
     const st = this.sim.state;
+    if (st.options.mode === 'story' && EDITION === 'demo' && index + 1 >= DEMO_CHAPTERS) {
+      recordChapter(index, st.time - (st.chapterStart ?? 0), this.sim.efficiency());
+      this.showDemoEnd();
+      return;
+    }
     if (st.options.mode === 'story' && index < MISSIONS.length - 1) {
       // story: every order is a chapter on its own map -> hand over to the next map
       const next = MISSIONS[index + 1];
@@ -2991,6 +3034,7 @@ export class Hud {
 
   /** Called ~4x per second. */
   refresh(dt = 0.25) {
+    for (const id of checkAchievements(this.sim)) this.achievementToast(id);
     // phones: keep the tool chip just above the (variable height) bottom HUD
     if (window.innerWidth < 900) this.toolChip.style.bottom = `${this.bottom.offsetHeight + 8}px`;
     else this.toolChip.style.bottom = '';

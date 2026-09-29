@@ -276,7 +276,8 @@ export interface GameState {
   launched: boolean;
   challenge?: string; // challenge id (mode 'challenge')
   challengeDone?: number; // seconds it took, once the goal was met
-  flights?: number; // supply flights sent after the launch (endless goals)
+  flights?: number;
+  autoContractsDone?: number; // automation contracts completed // supply flights sent after the launch (endless goals)
   powerSupply: number;
   powerDemand: number;
   chapterStart?: number; // game time when the current story chapter began (for the star rating)

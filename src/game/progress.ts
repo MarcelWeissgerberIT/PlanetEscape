@@ -1,5 +1,6 @@
 // Persistent player progress across games: chapter stars, best times and best scores.
 import { STAR_EFFICIENCY, LEVELS, challengeMedal } from './data';
+import { kv } from './storage';
 
 export interface Progress {
   stars: Record<number, number>; // chapter index (0-based) -> 1..3
@@ -9,16 +10,17 @@ export interface Progress {
   challenges?: Record<string, number>; // challenge id -> best seconds
   rivals?: Record<string, { name: string; time: number }>; // challenge id -> best time from a pasted share code
   playerName?: string; // name that goes into share codes
+  achievements?: Record<string, number>; // achievement id -> time it was earned (ms)
 }
 
 const KEY = 'pe_progress_v1';
 
 export function loadProgress(): Progress {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = kv.get(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<Progress>;
-      return { stars: p.stars ?? {}, best: p.best ?? {}, bestScore: { normal: p.bestScore?.normal ?? 0, hard: p.bestScore?.hard ?? 0 }, lastChapter: p.lastChapter, challenges: p.challenges ?? {}, rivals: p.rivals ?? {}, playerName: p.playerName };
+      return { stars: p.stars ?? {}, best: p.best ?? {}, bestScore: { normal: p.bestScore?.normal ?? 0, hard: p.bestScore?.hard ?? 0 }, lastChapter: p.lastChapter, challenges: p.challenges ?? {}, rivals: p.rivals ?? {}, playerName: p.playerName, achievements: p.achievements ?? {} };
     }
   } catch {
     /* ignore */
@@ -27,11 +29,7 @@ export function loadProgress(): Progress {
 }
 
 function store(p: Progress) {
-  try {
-    localStorage.setItem(KEY, JSON.stringify(p));
-  } catch {
-    /* ignore */
-  }
+  kv.set(KEY, JSON.stringify(p));
 }
 
 /** Stars for finishing chapter `index` in `seconds`: 3 within par, 2 within 1.75× par, else 1.

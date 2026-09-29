@@ -746,3 +746,10 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .ch-rival { color: #f59e0b; display: block; }
 .text-input.mono { font-family: ui-monospace, monospace; font-size: 12px; width: 100%; }
 .launch .medal-big, .modal-card .medal-big { font-size: 56px; line-height: 1.1; margin: 4px 0; }
+
+.ach-list { display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; }
+.ach { display: flex; gap: 10px; align-items: center; padding: 6px 8px; opacity: 0.55; border: 1px solid var(--line); }
+.ach.got { opacity: 1; border-color: rgba(245, 158, 11, 0.5); }
+.ach small { display: block; color: var(--muted); }
+.ach-icon { font-size: 22px; }
+.btn.mode.locked { opacity: 0.6; }

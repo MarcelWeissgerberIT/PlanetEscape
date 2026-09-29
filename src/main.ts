@@ -1,3 +1,5 @@
+import { DEMO_CHALLENGES, DEMO_CHAPTERS, EDITION, IS_DESKTOP } from './game/desktop';
+import { syncAchievementsToSteam } from './game/achievements';
 import './style.css';
 import { preloadAll } from './game/assets';
 import { BUILD_ORDER, ITEM_ORDER } from './game/data';
@@ -122,6 +124,7 @@ const hud = new Hud(sim, input, renderer, {
     if (sim.state.note) setTimeout(() => hud.showNote(), 400);
   },
   onPlayChallenge: (id: string) => {
+    if (EDITION === 'demo' && !DEMO_CHALLENGES.includes(id)) return hud.showDemoEnd();
     Save.clear();
     swapState(challengeState(id));
     Save.save(sim.state);
@@ -129,6 +132,7 @@ const hud = new Hud(sim, input, renderer, {
     hud.challengeStart();
   },
   onPlayChapter: (chapter: number) => {
+    if (EDITION === 'demo' && chapter > DEMO_CHAPTERS) return hud.showDemoEnd();
     Save.clear();
     swapState(chapterState(chapter, { mode: 'story', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true }));
     Save.save(sim.state);
@@ -255,6 +259,9 @@ renderer.resize();
 renderer.centerOnCore();
 exposeDebug();
 hud.showTitle();
+syncAchievementsToSteam();
+// the desktop app saves when the window closes
+window.addEventListener('beforeunload', () => { if (playing) Save.save(sim.state); });
 // a shared challenge link (?ch=PE-C1-…): show the comparison over the title screen, then drop it from the address
 {
   const code = new URLSearchParams(location.search).get('ch');
@@ -267,7 +274,8 @@ requestAnimationFrame(frame);
 
 void preloadAll(BUILD_ORDER.concat('core'), ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'rock'] as TerrainId[], ITEM_ORDER);
 
-if ('serviceWorker' in navigator && import.meta.env.PROD) {
+// the desktop app loads its files from disk: no offline cache there
+if ('serviceWorker' in navigator && import.meta.env.PROD && !IS_DESKTOP) {
   window.addEventListener('load', () => {
     navigator.serviceWorker.register(`${import.meta.env.BASE_URL}sw.js?v=${encodeURIComponent(__BUILD__)}`).catch(() => undefined);
   });

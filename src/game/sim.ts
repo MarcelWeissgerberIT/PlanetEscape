@@ -1108,6 +1108,7 @@ export class Sim {
         for (const k in c.reward) this.addInv(k as ItemId, c.reward[k as ItemId]!);
         st.contractsDone++;
         st.contracts.splice(i, 1);
+        if (c.kind && c.kind !== 'amount') st.autoContractsDone = (st.autoContractsDone ?? 0) + 1;
         this.events.push({ type: 'contract_done', contract: c });
       } else if (st.time >= c.deadline) {
         st.contracts.splice(i, 1);

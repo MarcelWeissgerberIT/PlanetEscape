@@ -1,5 +1,6 @@
 import type { GameState } from './types';
 import { SAVE_VERSION } from './world';
+import { kv } from './storage';
 import { BUILDINGS, MATRIX_SAVE_MAX, UPGRADE_DEFAULTS } from './data';
 
 const KEY = 'pe_save_v1';
@@ -25,16 +26,12 @@ function unpackPixels(s: string): number[] {
 }
 
 export function save(state: GameState) {
-  try {
-    localStorage.setItem(KEY, serialize(state));
-  } catch {
-    /* quota or private mode – ignore */
-  }
+  kv.set(KEY, serialize(state));
 }
 
 export function load(): GameState | null {
   try {
-    const raw = localStorage.getItem(KEY);
+    const raw = kv.get(KEY);
     if (!raw) return null;
     return migrate(JSON.parse(raw));
   } catch {
@@ -94,17 +91,9 @@ export function migrate(parsed: unknown): GameState | null {
 }
 
 export function clear() {
-  try {
-    localStorage.removeItem(KEY);
-  } catch {
-    /* ignore */
-  }
+  kv.remove(KEY);
 }
 
 export function hasSave(): boolean {
-  try {
-    return !!localStorage.getItem(KEY);
-  } catch {
-    return false;
-  }
+  return !!kv.get(KEY);
 }
