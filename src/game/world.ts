@@ -1,4 +1,5 @@
 import type { Building, GameOptions, GameState, TerrainId } from './types';
+import { addFeatures } from './features';
 import { CHALLENGE_BY_ID, BUILD_ORDER, HARD_ORE_FACTOR, LEVELS, MISSIONS, ORE_PER_TILE, RECIPES, STARTING_BUILDINGS, STARTING_RECIPES, UPGRADE_DEFAULTS } from './data';
 
 export const SAVE_VERSION = 4;
@@ -104,6 +105,7 @@ export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOpt
   const height = custom ? Math.max(24, Math.min(320, Math.round(custom.h))) : width;
   const all = options.allUnlocked || options.mode === 'playground';
   const terrain: TerrainId[] = custom?.blank ? new Array(width * height).fill('ground') : generateTerrain(seed, width, height);
+  const features = custom?.blank || options.mode === 'playground' ? [] : addFeatures(terrain, width, height, seed, false);
   const r2 = rng(seed ^ 0x5bd1e995);
   const hard = options.difficulty === 'hard';
   const ore = terrain.map((t) => (t === 'ground' || t === 'rock' ? 0 : Math.round((ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0])) * (hard ? HARD_ORE_FACTOR : 1))));
@@ -115,6 +117,7 @@ export function newGame(seed = Math.floor(Math.random() * 1e9), options: GameOpt
     width,
     height,
     terrain,
+    ...(features.length ? { features } : {}),
     buildings: [core],
     nextId: 2,
     // plates to print with, and a starter set of kits instead of free intermediate products
@@ -217,6 +220,7 @@ export function levelState(prev: GameState | null, level: number, options: GameO
   const def = LEVELS[Math.min(level, LEVELS.length - 1)];
   const width = def.size, height = def.size;
   const terrain = generateTerrain(def.seed, width, height, { basics: def.basics, extraTypes: def.extraTypes, extra: def.extra, rocks: def.rocks });
+  const features = addFeatures(terrain, width, height, def.seed, true);
   const r2 = rng(def.seed ^ 0x5bd1e995);
   const ore = terrain.map((t) => (t === 'ground' || t === 'rock' ? 0 : Math.round(ORE_PER_TILE[0] + r2() * (ORE_PER_TILE[1] - ORE_PER_TILE[0]))));
   const core: Building = { id: 1, type: 'core', x: Math.floor(width / 2) - 1, y: Math.floor(height / 2) - 1, dir: 0 };
@@ -229,6 +233,7 @@ export function levelState(prev: GameState | null, level: number, options: GameO
     width,
     height,
     terrain,
+    ...(features.length ? { features } : {}),
     buildings: [core],
     nextId: 2,
     inventory: { ...def.inventory },

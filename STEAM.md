@@ -53,6 +53,9 @@ Demo bauen: `PE_EDITION=demo PE_STORE_URL=https://store.steampowered.com/app/<AP
 ### 3. Achievements eintragen
 Unter *Stats & Achievements* genau diese API-Namen anlegen (Name/Beschreibung EN+DE stehen in `src/i18n/index.ts`
 unter `ach_<ID>` und `ach_<ID>_desc`). Pro Achievement zwei Icons, 256×256 (farbig + grau).
+Fertige Icons liegen in `steam-assets/achievements/`: `<ID>.jpg` (freigeschaltet) und `<ID>_locked.jpg` (grau), je
+256×256. Neu erzeugen aus `tools/raw/ach/<ID>.png` mit `node tools/achievement-icons.mjs` (schreibt auch die
+Icons fürs Spiel nach `public/assets/ach/`).
 
 | API-Name | Deutsch | Englisch |
 |---|---|---|
@@ -91,7 +94,7 @@ Danach die Achievements in Steamworks **veröffentlichen** (Publish), sonst meld
   GPU mit WebGL-Unterstützung nicht nötig (Canvas 2D), 400 MB Speicher.
 - **Content Survey**:
   - *KI-generierte Inhalte*: **Ja angeben.** Die Grafiken der ersten Version (Gebäude, Items, Gelände, Titelbild, KORA,
-    Story-Bilder, Raumschiff) und die Karten-Deko (Vulkane, Krater, Pflanzen usw.) wurden mit OpenArt erzeugt (`tools/process-assets.mjs`). Neuere Bauteil-Sprites sind
+    Story-Bilder, Raumschiff) die Karten-Deko (Vulkane, Krater, Pflanzen, Wracks, Obelisken usw.) und die Achievement-Icons wurden mit OpenArt erzeugt (`tools/process-assets.mjs`). Neuere Bauteil-Sprites sind
     prozedural gezeichnet (`tools/sprites-parts.mjs`). Trailer, Intro und das Menü-Hintergrundvideo sind KI-generiert
     (Standbilder mit Nano Banana Pro, Video mit Ton und Musik mit Veo 3.1, über OpenArt). Im Spiel selbst wird zur
     Laufzeit nichts generiert. Das Formular

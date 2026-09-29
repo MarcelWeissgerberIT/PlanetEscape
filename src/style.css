@@ -776,10 +776,11 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .launch .medal-big, .modal-card .medal-big { font-size: 56px; line-height: 1.1; margin: 4px 0; }
 
 .ach-list { display: grid; gap: 6px; max-height: 60vh; overflow-y: auto; }
-.ach { display: flex; gap: 10px; align-items: center; padding: 6px 8px; opacity: 0.55; border: 1px solid var(--line); }
+.ach { display: flex; gap: 10px; align-items: center; padding: 6px 8px; opacity: 0.7; border: 1px solid var(--line); }
 .ach.got { opacity: 1; border-color: rgba(245, 158, 11, 0.5); }
 .ach small { display: block; color: var(--muted); }
-.ach-icon { font-size: 22px; }
+.ach-icon { width: 44px; height: 44px; flex: none; border-radius: 50%; filter: grayscale(1) brightness(0.6); }
+.ach.got .ach-icon { filter: none; }
 .btn.mode.locked { opacity: 0.6; }
 
 /* phones held upright: no box around the menu. The logo floats over the video at the top, the buttons sit compact at
@@ -837,3 +838,10 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .fs-frame .plate b { color: #22d3ee; }
 .fs-frame .ticks { position: absolute; bottom: 5px; left: 50%; transform: translateX(-50%); width: 120px; height: 4px;
   background: repeating-linear-gradient(90deg, rgba(125, 211, 252, 0.55) 0 2px, transparent 2px 8px); }
+
+/* landscape info: a swatch of the liquid instead of a picture */
+.liquid-swatch { width: 44px; height: 44px; border-radius: 50%; flex: none; box-shadow: inset 0 0 0 3px rgba(0, 0, 0, 0.35); }
+.liquid-swatch.lava { background: radial-gradient(circle at 35% 35%, #fde68a, #f97316 45%, #b8400d); box-shadow: 0 0 14px rgba(249, 115, 22, 0.7), inset 0 0 0 3px rgba(40, 18, 12, 0.6); }
+.liquid-swatch.metal { background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1 35%, #64748b); }
+.liquid-swatch.water { background: radial-gradient(circle at 35% 30%, #bae6fd, #38bdf8 40%, #1d5872); }
+.sc-text { margin: 2px 0 6px; line-height: 1.45; color: var(--text); font-size: 13px; }

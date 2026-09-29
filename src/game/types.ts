@@ -244,6 +244,14 @@ export interface GameEvent {
   terrain?: TerrainId;
 }
 
+/** A landscape feature: impassable like rock, drawn as what it is (see features.ts). */
+export type FeatureKind = 'volcano' | 'lava' | 'metal' | 'water';
+export interface Feature {
+  kind: FeatureKind;
+  lake?: boolean;
+  tiles: number[];
+}
+
 export interface GameState {
   version: number;
   options: GameOptions;
@@ -251,6 +259,7 @@ export interface GameState {
   width: number;
   height: number;
   terrain: TerrainId[]; // width*height
+  features?: Feature[]; // volcanoes, rivers and lakes (their tiles are 'rock' in terrain)
   buildings: Building[];
   nextId: number;
   inventory: Partial<Record<ItemId, number>>; // items in the Landing Core

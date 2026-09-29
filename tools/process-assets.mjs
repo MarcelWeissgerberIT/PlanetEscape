@@ -79,9 +79,41 @@ async function cutout(src, dst, size) {
   console.log('cutout', dst);
 }
 
+/** Terrain tiles come on a dark square panel with a frame: drop the frame band and flood away the smooth panel colour,
+ *  so rock and deposits lie on the ground as shapes, not as squares. */
+async function terrainCut(src, dst, size) {
+  if (!existsSync(src)) { console.warn('missing', src); return; }
+  const { data, info } = await sharp(src).resize(512, 512).ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+  const w = info.width, h = info.height;
+  const band = Math.round(w * 0.075);
+  let rr = 0, gg = 0, bb = 0, k = 0;
+  for (let t = 0; t < w; t += 8) for (const [x, y] of [[t, band + 4], [band + 4, t], [t, h - band - 5], [w - band - 5, t]]) { const i = (y * w + x) * 4; rr += data[i]; gg += data[i + 1]; bb += data[i + 2]; k++; }
+  rr /= k; gg /= k; bb /= k;
+  const near = (p) => Math.hypot(data[p * 4] - rr, data[p * 4 + 1] - gg, data[p * 4 + 2] - bb) < 13;
+  const seen = new Uint8Array(w * h);
+  const st = [];
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) if (x < band || y < band || x >= w - band || y >= h - band) { data[(y * w + x) * 4 + 3] = 0; seen[y * w + x] = 1; }
+  for (let t = band; t < w - band; t++) st.push(band * w + t, (h - band - 1) * w + t, t * w + band, t * w + w - band - 1);
+  while (st.length) {
+    const p = st.pop();
+    if (seen[p]) continue;
+    seen[p] = 1;
+    if (!near(p)) continue;
+    data[p * 4 + 3] = 0;
+    const x = p % w, y = (p - x) / w;
+    if (x > 0) st.push(p - 1); if (x < w - 1) st.push(p + 1); if (y > 0) st.push(p - w); if (y < h - 1) st.push(p + w);
+  }
+  await sharp(data, { raw: { width: w, height: h, channels: 4 } }).resize(size, size).webp({ quality: 86 }).toFile(dst);
+  console.log('terrain', dst);
+}
+if (process.argv[2] === 'terrain') {
+  for (const t of TERRAIN) await terrainCut(`${RAW}/t_${t}.png`, `${OUT}/terrain/${t}.webp`, 256);
+  process.exit(0);
+}
+
 // map decoration (volcanoes, craters, plants, ...): cut out; the crater comes with its own ground, faded to a circle.
 // `node tools/process-assets.mjs deco` redoes only these.
-const DECO = ['volcano', 'crater', 'plants', 'bones', 'vent', 'lava', 'crystals', 'pebbles'];
+const DECO = ['volcano', 'crater', 'plants', 'bones', 'vent', 'lava', 'crystals', 'pebbles', 'wreck', 'obelisk', 'tree', 'icespire', 'meteor', 'scrap'];
 async function roundFade(src, dst, size) {
   const r = size / 2;
   const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><defs><radialGradient id="g"><stop offset="0.6" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs><circle cx="${r}" cy="${r}" r="${r * 0.86}" fill="url(#g)"/></svg>`);
@@ -95,7 +127,7 @@ for (const d of DECO) {
 if (process.argv[2] === 'deco') process.exit(0);
 
 for (const b of BUILDINGS) await tile(`${RAW}/${b}.png`, `${OUT}/buildings/${b}.webp`, 256);
-for (const t of TERRAIN) await tile(`${RAW}/t_${t}.png`, `${OUT}/terrain/${t}.webp`, 256);
+for (const t of TERRAIN) await terrainCut(`${RAW}/t_${t}.png`, `${OUT}/terrain/${t}.webp`, 256);
 for (const it of ITEMS) await cutout(`${RAW}/i_${it}.png`, `${OUT}/items/${it}.webp`, 128);
 
 if (existsSync(`${RAW}/title_bg.png`)) await sharp(`${RAW}/title_bg.png`).resize(1920).webp({ quality: 82 }).toFile(`${OUT}/ui/title_bg.webp`);

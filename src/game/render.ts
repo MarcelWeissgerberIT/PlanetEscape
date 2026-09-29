@@ -1,6 +1,6 @@
 import { buildingSprite, decoSprite, itemSprite, ready, terrainSprite } from './assets';
 import { Critters } from './critters';
-import { buildScenery, hash, type Scenery } from './scenery';
+import { buildScenery, hash, type LiquidKind, type Scenery } from './scenery';
 import { daylight, drawLavaFlow, NightPass, Weather, type Light } from './atmosphere';
 import { kv } from './storage';
 import { Camera, TILE } from './camera';
@@ -207,7 +207,13 @@ export class Renderer {
       cc.restore();
     }
     let complete = true;
-    if (t !== 'ground') {
+    const sc = this.scenery;
+    const fi = sc?.featureAt.get(i);
+    if (fi !== undefined) {
+      const kind = this.sim.state.features![fi].kind;
+      cc.fillStyle = kind === 'volcano' ? '#2c2427' : LIQUID_FLAT[kind];
+      cc.fillRect(x * P, y * P, P, P);
+    } else if (t !== 'ground') {
       const img = terrainSprite(t);
       if (t === 'rock') {
         if (ready(img)) cc.drawImage(img, x * P, y * P, P, P);
@@ -342,6 +348,7 @@ export class Renderer {
         const i = y * s.width + x;
         const t = s.terrain[i];
         if (t === 'ground') continue;
+        if (t === 'rock' && scenery.hidden.has(i)) continue; // a river, lake or volcano stands here
         const img = terrainSprite(t);
         if (t === 'rock') {
           if (ready(img)) ctx.drawImage(img, x * TILE, y * TILE, TILE, TILE);
@@ -363,6 +370,7 @@ export class Renderer {
       }
     }
 
+    this.drawLiquids(scenery, x0, y0, x1, y1);
     this.drawDecos(scenery, x0, y0, x1, y1, dt);
 
     if (cam.zoom > 0.5) {
@@ -539,6 +547,10 @@ export class Renderer {
     }
     for (const r of this.sim.robots()) add(r.x, r.y, 1.1, '254,249,195', 0.8);
     const [x0, y0] = this.cam.screenToTile(0, 0), [x1, y1] = this.cam.screenToTile(this.cam.width, this.cam.height);
+    for (const l of sc.liquids) {
+      if (l.kind === 'water' || l.x1 < x0 - 2 || l.x0 > x1 + 2 || l.y1 < y0 - 2 || l.y0 > y1 + 2) continue;
+      for (const [gx, gy] of l.glow) add(gx, gy, l.kind === 'lava' ? 1.8 : 1.1, l.kind === 'lava' ? '251,113,40' : '203,213,225', l.kind === 'lava' ? 0.9 : 0.4);
+    }
     for (const d of sc.decos) {
       if (d.kind !== 'lava' && d.kind !== 'volcano' && d.kind !== 'vent') continue;
       if (d.cx < x0 - 2 || d.cx > x1 + 2 || d.cy < y0 - 2 || d.cy > y1 + 2) continue;
@@ -2145,6 +2157,114 @@ export class Renderer {
 
   // ---------- Particles & storm ----------
 
+  private liquidPatterns = new Map<string, CanvasPattern>();
+
+  /** A seamless 256px texture per liquid, made once: molten lava with crust, streaky metal, rippled water. */
+  private liquidPattern(kind: LiquidKind, biome: string): CanvasPattern {
+    const key = kind === 'water' ? `water:${biome}` : kind;
+    const have = this.liquidPatterns.get(key);
+    if (have) return have;
+    const c = document.createElement('canvas');
+    c.width = c.height = 256;
+    const g = c.getContext('2d')!;
+    let seed = kind === 'lava' ? 11 : kind === 'metal' ? 23 : 37;
+    const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
+    const wrap = (draw: (ox: number, oy: number) => void) => { for (const ox of [-256, 0, 256]) for (const oy of [-256, 0, 256]) draw(ox, oy); };
+    const blob = (x: number, y: number, r: number, col: string) => wrap((ox, oy) => {
+      const gr = g.createRadialGradient(x + ox, y + oy, 0, x + ox, y + oy, r);
+      gr.addColorStop(0, col);
+      gr.addColorStop(1, col.replace(/[\d.]+\)$/, '0)'));
+      g.fillStyle = gr;
+      g.fillRect(x + ox - r, y + oy - r, r * 2, r * 2);
+    });
+    if (kind === 'lava') {
+      g.fillStyle = '#b8400d';
+      g.fillRect(0, 0, 256, 256);
+      for (let k = 0; k < 70; k++) blob(rnd() * 256, rnd() * 256, 12 + rnd() * 34, ['rgba(249,115,22,0.8)', 'rgba(251,191,36,0.75)', 'rgba(220,38,38,0.6)', 'rgba(254,240,138,0.6)'][k % 4]);
+      for (let k = 0; k < 26; k++) {
+        const x = rnd() * 256, y = rnd() * 256, r = 5 + rnd() * 14;
+        wrap((ox, oy) => {
+          g.fillStyle = 'rgba(40,18,12,0.55)';
+          g.beginPath();
+          for (let a = 0; a < 7; a++) {
+            const ang = (a / 7) * Math.PI * 2, rr = r * (0.6 + rnd() * 0.5);
+            g.lineTo(x + ox + Math.cos(ang) * rr, y + oy + Math.sin(ang) * rr);
+          }
+          g.fill();
+        });
+      }
+    } else if (kind === 'metal') {
+      g.fillStyle = '#5d6772';
+      g.fillRect(0, 0, 256, 256);
+      for (let k = 0; k < 24; k++) blob(rnd() * 256, rnd() * 256, 20 + rnd() * 40, k % 2 ? 'rgba(30,41,59,0.45)' : 'rgba(148,163,184,0.35)');
+      for (let k = 0; k < 60; k++) {
+        const x = rnd() * 256, y = rnd() * 256, rx = 20 + rnd() * 50, ry = 2 + rnd() * 5;
+        wrap((ox, oy) => {
+          g.fillStyle = k % 3 ? 'rgba(226,232,240,0.28)' : 'rgba(30,41,59,0.4)';
+          g.beginPath();
+          g.ellipse(x + ox, y + oy, rx, ry, 0.15, 0, Math.PI * 2);
+          g.fill();
+        });
+      }
+      for (let k = 0; k < 30; k++) blob(rnd() * 256, rnd() * 256, 3 + rnd() * 6, 'rgba(255,255,255,0.8)');
+    } else {
+      const base = biome === 'ice' ? '#5aa6c6' : biome === 'moss' ? '#146b5b' : '#1d5872';
+      g.fillStyle = base;
+      g.fillRect(0, 0, 256, 256);
+      for (let k = 0; k < 50; k++) blob(rnd() * 256, rnd() * 256, 14 + rnd() * 30, biome === 'moss' ? 'rgba(45,212,191,0.22)' : 'rgba(125,211,252,0.22)');
+      g.strokeStyle = 'rgba(255,255,255,0.16)';
+      g.lineWidth = 1.5;
+      for (let k = 0; k < 40; k++) {
+        const x = rnd() * 256, y = rnd() * 256, r = 6 + rnd() * 14;
+        wrap((ox, oy) => {
+          g.beginPath();
+          g.arc(x + ox, y + oy, r, Math.PI * 1.1, Math.PI * 1.9);
+          g.stroke();
+        });
+      }
+    }
+    const pat = this.ctx.createPattern(c, 'repeat')!;
+    this.liquidPatterns.set(key, pat);
+    return pat;
+  }
+
+  /** Rivers and lakes: a dark bank, the moving liquid, a second layer drifting the other way for shimmer. */
+  private drawLiquids(sc: Scenery, x0: number, y0: number, x1: number, y1: number) {
+    const { ctx } = this;
+    ctx.setTransform(this.worldT!);
+    for (const l of sc.liquids) {
+      if (l.x1 < x0 - 1 || l.x0 > x1 + 1 || l.y1 < y0 - 1 || l.y0 > y1 + 1) continue;
+      ctx.lineJoin = 'round';
+      ctx.strokeStyle = LIQUID_BANK[l.kind];
+      ctx.lineWidth = TILE * 0.26;
+      ctx.stroke(l.path);
+      if (this.lowDetail) {
+        ctx.fillStyle = LIQUID_FLAT[l.kind];
+        ctx.fill(l.path);
+        continue;
+      }
+      const pat = this.liquidPattern(l.kind, sc.biome.id);
+      const speed = l.kind === 'lava' ? 9 : l.kind === 'metal' ? 14 : 7;
+      const t = this.time * speed;
+      const scale = (TILE * 2) / 256;
+      pat.setTransform(new DOMMatrix([scale, 0, 0, scale, l.flow[0] * t, l.flow[1] * t]));
+      ctx.fillStyle = pat;
+      if (l.kind === 'lava') {
+        ctx.shadowColor = 'rgba(255,110,30,0.85)';
+        ctx.shadowBlur = 16;
+      }
+      ctx.fill(l.path);
+      ctx.shadowBlur = 0;
+      // shimmer: the same texture drifting across, added on top
+      pat.setTransform(new DOMMatrix([scale * 1.3, 0, 0, scale * 1.3, -l.flow[1] * t * 0.7 + 40, l.flow[0] * t * 0.7 + 17]));
+      ctx.globalAlpha = l.kind === 'water' ? 0.25 : 0.3;
+      ctx.globalCompositeOperation = l.kind === 'water' ? 'screen' : 'lighter';
+      ctx.fill(l.path);
+      ctx.globalAlpha = 1;
+      ctx.globalCompositeOperation = 'source-over';
+    }
+  }
+
   /** Map decoration under the buildings; volcanoes smoke and spit embers, vents puff steam. */
   private drawDecos(sc: Scenery, x0: number, y0: number, x1: number, y1: number, dt: number) {
     const { ctx } = this;
@@ -2192,6 +2312,53 @@ export class Renderer {
       }
     }
     ctx.setTransform(this.worldT!);
+  }
+
+  /** What of the landscape is at a tile (for a tap): a volcano, river or lake, or a decoration. */
+  sceneryAt(x: number, y: number): { key: string; kind: string; feature?: boolean } | null {
+    const sc = this.scenery;
+    if (!sc) return null;
+    const i = y * this.sim.state.width + x;
+    const fi = sc.featureAt.get(i);
+    if (fi !== undefined) {
+      const f = this.sim.state.features![fi];
+      return { key: f.kind === 'volcano' ? 'volcano' : f.lake ? `${f.kind}_lake` : f.kind, kind: f.kind, feature: true };
+    }
+    if (this.sim.at(x, y)) return null;
+    let d = sc.decoAt.get(i);
+    // big decoration reaches into the tiles around it
+    if (!d) for (let dy = -1; dy <= 1 && !d; dy++) for (let dx = -1; dx <= 1 && !d; dx++) {
+      const n = sc.decoAt.get(i + dy * this.sim.state.width + dx);
+      if (n && n.size > 1.2 && Math.abs(n.cx - (x + 0.5)) < n.size / 2 && Math.abs(n.cy - (y + 0.5)) < n.size / 2) d = n;
+    }
+    return d ? { key: d.kind === 'lava' ? 'crack' : d.kind, kind: d.kind } : null;
+  }
+
+  /** A little reaction when the landscape is tapped: the volcano erupts, water splashes, crystals sparkle... */
+  fxScenery(kind: string, x: number, y: number) {
+    const px = (x + 0.5) * TILE, py = (y + 0.5) * TILE;
+    const burst = (n: number, colors: string[], speed: number, up: number, grav: number, size: [number, number], life: number) => {
+      for (let k = 0; k < n; k++) {
+        const a = Math.random() * Math.PI * 2, sp = speed * (0.4 + Math.random() * 0.6);
+        this.particles.push({ x: px, y: py, vx: Math.cos(a) * sp, vy: Math.sin(a) * sp - up, life: life * (0.6 + Math.random() * 0.4), max: life, size: size[0] + Math.random() * (size[1] - size[0]), color: colors[k % colors.length], grav });
+      }
+    };
+    switch (kind) {
+      case 'volcano': {
+        const top = py - TILE * 1.2;
+        for (let k = 0; k < 70; k++) this.particles.push({ x: px + (Math.random() - 0.5) * 20, y: top, vx: (Math.random() - 0.5) * 160, vy: -140 - Math.random() * 180, life: 1.6, max: 1.6, size: 2 + Math.random() * 3, color: k % 3 ? '#fb923c' : '#fde68a', grav: 220 });
+        for (let k = 0; k < 20; k++) this.particles.push({ x: px + (Math.random() - 0.5) * 30, y: top, vx: (Math.random() - 0.5) * 30, vy: -30 - Math.random() * 30, life: 3, max: 3, size: 8 + Math.random() * 8, color: 'rgba(70,66,70,0.5)' });
+        break;
+      }
+      case 'lava': case 'crack': burst(24, ['#fb923c', '#fde68a'], 90, 60, 180, [1.5, 3], 1); break;
+      case 'metal': burst(24, ['#e5e7eb', '#9ca3af'], 90, 60, 200, [1.5, 3], 0.9); break;
+      case 'water': burst(24, ['rgba(186,230,253,0.9)', 'rgba(125,211,252,0.8)'], 80, 60, 200, [1.5, 3], 0.9); break;
+      case 'vent': for (let k = 0; k < 18; k++) this.particles.push({ x: px + (Math.random() - 0.5) * 10, y: py, vx: (Math.random() - 0.5) * 20, vy: -40 - Math.random() * 40, life: 2, max: 2, size: 6 + Math.random() * 7, color: 'rgba(225,232,240,0.35)' }); break;
+      case 'plants': case 'tree': burst(20, ['#5eead4', '#c084fc'], 40, 40, -10, [1.5, 2.5], 1.8); break;
+      case 'crystals': case 'icespire': case 'obelisk': burst(22, kind === 'icespire' ? ['#e0f2fe', '#7dd3fc'] : ['#e9d5ff', '#c084fc'], 60, 20, 0, [1.2, 2.4], 1.1); break;
+      case 'wreck': case 'scrap': case 'meteor': burst(26, ['#fbbf24', '#fb923c', '#ffffff'], 120, 40, 240, [1, 2], 0.7); break;
+      default: burst(16, ['rgba(160,150,140,0.7)'], 40, 20, 40, [3, 5], 0.8);
+    }
   }
 
   /** A tap on the map: a critter there scurries off with a little squeak of sparks. */
@@ -2317,3 +2484,6 @@ function hexRgb(hex: string): string {
   const n = parseInt(h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6), 16);
   return `${(n >> 16) & 255},${(n >> 8) & 255},${n & 255}`;
 }
+
+const LIQUID_FLAT: Record<LiquidKind, string> = { lava: '#d9531a', metal: '#6b7682', water: '#236a86' };
+const LIQUID_BANK: Record<LiquidKind, string> = { lava: '#1e1512', metal: '#343a42', water: '#26303a' };

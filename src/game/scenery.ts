@@ -1,9 +1,10 @@
 // Planet looks and scenery: every map gets a biome (ground colours, large colour patches) and scattered decoration
 // (volcanoes on rock formations, craters, alien plants, bones, steam vents, lava cracks, crystals, pebbles).
 // Purely visual and derived from the map seed and terrain, so nothing is saved and the game rules do not change.
-import type { GameState } from './types';
+import { TILE } from './camera';
+import type { Feature, GameState } from './types';
 
-export type DecoKind = 'volcano' | 'crater' | 'plants' | 'bones' | 'vent' | 'lava' | 'crystals' | 'pebbles';
+export type DecoKind = 'volcano' | 'crater' | 'plants' | 'bones' | 'vent' | 'lava' | 'crystals' | 'pebbles' | 'wreck' | 'obelisk' | 'tree' | 'icespire' | 'meteor' | 'scrap';
 
 export interface Deco {
   kind: DecoKind;
@@ -33,15 +34,33 @@ export interface Biome {
 }
 
 export const BIOMES: Record<Biome['id'], Biome> = {
-  basalt: { id: 'basalt', ground: '#373d45', speckLight: 'rgba(255,255,255,0.04)', speckDark: 'rgba(0,0,0,0.22)', patch: ['#2b4d5a', '#4d3f36'], deco: { pebbles: 4, crystals: 2, crater: 2, plants: 1.2, lava: 0.8, vent: 0.8, bones: 0.4 }, volcanoes: 0.1, critter: '#5eead4' },
-  rust: { id: 'rust', ground: '#4a3b34', speckLight: 'rgba(255,220,190,0.05)', speckDark: 'rgba(30,10,0,0.22)', patch: ['#70412b', '#2f2524'], deco: { pebbles: 4, crater: 3, bones: 1.3, crystals: 1, vent: 0.5, plants: 0.4 }, volcanoes: 0.05, critter: '#fbbf24' },
-  ice: { id: 'ice', ground: '#3c4855', speckLight: 'rgba(220,240,255,0.06)', speckDark: 'rgba(0,10,30,0.2)', patch: ['#5f7d96', '#2c3845'], deco: { crystals: 3, crater: 2, pebbles: 2, vent: 1.5, bones: 0.4 }, volcanoes: 0.03, critter: '#93c5fd' },
-  moss: { id: 'moss', ground: '#2f3b3a', speckLight: 'rgba(200,255,230,0.05)', speckDark: 'rgba(0,20,10,0.22)', patch: ['#2b5a47', '#46355e'], deco: { plants: 5, crystals: 2, pebbles: 2, bones: 0.8, crater: 1 }, volcanoes: 0.04, critter: '#c084fc' },
-  volcanic: { id: 'volcanic', ground: '#352f30', speckLight: 'rgba(255,180,120,0.05)', speckDark: 'rgba(0,0,0,0.28)', patch: ['#5c2718', '#1e1b1f'], deco: { lava: 4, vent: 3, pebbles: 3, crater: 2, bones: 0.3, crystals: 0.5 }, volcanoes: 0.22, critter: '#fb923c' },
+  basalt: { id: 'basalt', ground: '#373d45', speckLight: 'rgba(255,255,255,0.04)', speckDark: 'rgba(0,0,0,0.22)', patch: ['#2b4d5a', '#4d3f36'], deco: { pebbles: 4, crystals: 2, crater: 2, plants: 1.2, lava: 0.8, vent: 0.8, bones: 0.4, wreck: 0.5, scrap: 0.6, meteor: 0.4, obelisk: 0.3 }, volcanoes: 0.1, critter: '#5eead4' },
+  rust: { id: 'rust', ground: '#4a3b34', speckLight: 'rgba(255,220,190,0.05)', speckDark: 'rgba(30,10,0,0.22)', patch: ['#70412b', '#2f2524'], deco: { pebbles: 4, crater: 3, bones: 1.3, crystals: 1, vent: 0.5, plants: 0.4, scrap: 1.2, wreck: 0.6, meteor: 0.6, obelisk: 0.3 }, volcanoes: 0.05, critter: '#fbbf24' },
+  ice: { id: 'ice', ground: '#3c4855', speckLight: 'rgba(220,240,255,0.06)', speckDark: 'rgba(0,10,30,0.2)', patch: ['#5f7d96', '#2c3845'], deco: { crystals: 3, crater: 2, pebbles: 2, vent: 1.5, bones: 0.4, icespire: 2, wreck: 0.4, meteor: 0.3 }, volcanoes: 0.03, critter: '#93c5fd' },
+  moss: { id: 'moss', ground: '#2f3b3a', speckLight: 'rgba(200,255,230,0.05)', speckDark: 'rgba(0,20,10,0.22)', patch: ['#2b5a47', '#46355e'], deco: { plants: 5, crystals: 2, pebbles: 2, bones: 0.8, crater: 1, tree: 2.2, obelisk: 0.6 }, volcanoes: 0.04, critter: '#c084fc' },
+  volcanic: { id: 'volcanic', ground: '#352f30', speckLight: 'rgba(255,180,120,0.05)', speckDark: 'rgba(0,0,0,0.28)', patch: ['#5c2718', '#1e1b1f'], deco: { lava: 4, vent: 3, pebbles: 3, crater: 2, bones: 0.3, crystals: 0.5, meteor: 1, scrap: 0.4 }, volcanoes: 0.22, critter: '#fb923c' },
 };
 
 /** Size in tiles per kind (volcanoes stand on rock and reach up past their tile). */
-const SIZE: Record<DecoKind, number> = { volcano: 2.3, crater: 1.05, plants: 0.85, bones: 1.6, vent: 0.8, lava: 1, crystals: 0.62, pebbles: 0.75 };
+const SIZE: Record<DecoKind, number> = { volcano: 3.5, crater: 1.05, plants: 0.85, bones: 1.6, vent: 0.8, lava: 1, crystals: 0.62, pebbles: 0.75, wreck: 1.5, obelisk: 1.35, tree: 1.45, icespire: 1.15, meteor: 1, scrap: 0.95 };
+/** Big decoration keeps two tiles from any deposit, small one tile. */
+const BIG = new Set<DecoKind>(['bones', 'wreck', 'obelisk', 'tree', 'icespire', 'meteor', 'crater']);
+
+export type LiquidKind = 'lava' | 'metal' | 'water';
+/** A river or lake, ready to draw: its outline in world pixels, bounds in tiles, the way it flows. */
+export interface Liquid {
+  kind: LiquidKind;
+  lake: boolean;
+  feature: number; // index in state.features
+  path: Path2D;
+  x0: number;
+  y0: number;
+  x1: number;
+  y1: number;
+  flow: [number, number];
+  /** tiles (every few) that light up the night */
+  glow: [number, number][];
+}
 
 // the story chapters wander through different regions of the planet
 const STORY_BIOMES: Record<number, Biome['id']> = { 1101: 'basalt', 1202: 'rust', 1303: 'moss', 1404: 'ice', 1505: 'basalt', 1606: 'volcanic', 1707: 'volcanic' };
@@ -55,9 +74,12 @@ export function hash(a: number, b: number, c: number): number {
   return (h >>> 0) / 4294967296;
 }
 
+export function biomeIdFor(seed: number): Biome['id'] {
+  return STORY_BIOMES[seed] ?? ORDER[Math.floor(hash(seed, 7, 11) * ORDER.length)];
+}
+
 export function biomeFor(s: GameState): Biome {
-  const id = STORY_BIOMES[s.seed] ?? ORDER[Math.floor(hash(s.seed, 7, 11) * ORDER.length)];
-  return BIOMES[id];
+  return BIOMES[biomeIdFor(s.seed)];
 }
 
 /** Smooth value noise in [0, 1] (bilinear over a hashed lattice, two octaves). */
@@ -75,6 +97,13 @@ function noise(seed: number, x: number, y: number): number {
 export interface Scenery {
   biome: Biome;
   decos: Deco[];
+  liquids: Liquid[];
+  /** tiles of landscape features (drawn as liquid or volcano, not as rock) */
+  hidden: Set<number>;
+  /** tile -> index in state.features, for a tap on the map */
+  featureAt: Map<number, number>;
+  /** tile -> decoration standing there, for a tap on the map */
+  decoAt: Map<number, Deco>;
   /** 1 pixel per tile: the soft colour patches, drawn scaled up with smoothing */
   shade: HTMLCanvasElement;
 }
@@ -86,18 +115,36 @@ export function buildScenery(s: GameState): Scenery {
   const decos: Deco[] = [];
   const blank = terrain.every((t) => t === 'ground'); // editor / playground maps stay quiet
   const density = blank ? 0.012 : 0.055;
-  // volcanoes: inside rock formations, never two close together
-  const volcanoes: Deco[] = [];
-  for (let y = 1; y < h - 1; y++) {
-    for (let x = 1; x < w - 1; x++) {
-      if (terrain[y * w + x] !== 'rock') continue;
-      let n = 0;
-      for (let dy = -1; dy <= 1; dy++) for (let dx = -1; dx <= 1; dx++) if ((dx || dy) && terrain[(y + dy) * w + x + dx] === 'rock') n++;
-      if (n < 2 || hash(x, y, seed ^ 0x51ed) >= biome.volcanoes) continue;
-      if (volcanoes.some((v) => Math.abs(v.tx - x) < 5 && Math.abs(v.ty - y) < 5)) continue;
-      volcanoes.push({ kind: 'volcano', tx: x, ty: y, cx: x + 0.5, cy: y + 1 - SIZE.volcano / 2, size: SIZE.volcano, flip: hash(x, y, 3) < 0.5 });
+  // distance (in tiles, up to 3) to the nearest deposit: decoration stays out of mining areas
+  const depDist = new Uint8Array(w * h).fill(9);
+  for (let y = 0; y < h; y++) for (let x = 0; x < w; x++) {
+    const t = terrain[y * w + x];
+    if (t === 'ground' || t === 'rock') continue;
+    for (let dy = -2; dy <= 2; dy++) for (let dx = -2; dx <= 2; dx++) {
+      const nx = x + dx, ny = y + dy;
+      if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+      const d = Math.max(Math.abs(dx), Math.abs(dy));
+      if (d < depDist[ny * w + nx]) depDist[ny * w + nx] = d;
     }
   }
+  // landscape features: volcanoes stand on their own 3x3 ground, rivers and lakes are drawn as liquid
+  const features = s.features ?? [];
+  const hidden = new Set<number>(); // feature tiles: not drawn as rock
+  const featureAt = new Map<number, number>();
+  const liquids: Liquid[] = [];
+  features.forEach((f, fi) => {
+    for (const i of f.tiles) {
+      hidden.add(i);
+      featureAt.set(i, fi);
+    }
+    const xs = f.tiles.map((i) => i % w), ys = f.tiles.map((i) => Math.floor(i / w));
+    const x0 = Math.min(...xs), y0 = Math.min(...ys), x1 = Math.max(...xs), y1 = Math.max(...ys);
+    if (f.kind === 'volcano') {
+      decos.push({ kind: 'volcano', tx: x0 + 1, ty: y0 + 1, cx: x0 + 1.5, cy: y0 + 1.5 - 0.35, size: SIZE.volcano, flip: hash(x0, y0, 3) < 0.5 });
+      return;
+    }
+    liquids.push(liquidShape(f, fi, w, x0, y0, x1, y1));
+  });
   // ground decoration, weighted by the biome
   const kinds = Object.entries(biome.deco) as [Exclude<DecoKind, 'volcano'>, number][];
   const total = kinds.reduce((a, [, k]) => a + k, 0);
@@ -107,20 +154,23 @@ export function buildScenery(s: GameState): Scenery {
       if (terrain[y * w + x] !== 'ground') continue;
       if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) < 6) continue; // the start area stays clear
       if (hash(x, y, seed) >= density) continue;
+      if (depDist[y * w + x] < 2) continue; // never in or at a mining area
       if (taken.has((y - 1) * w + x - 1) || taken.has((y - 1) * w + x) || taken.has((y - 1) * w + x + 1) || taken.has(y * w + x - 1)) continue; // never two side by side
       let r = hash(x, y, seed + 17) * total;
       let kind = kinds[0][0];
       for (const [k, wgt] of kinds) if ((r -= wgt) < 0) { kind = k; break; }
+      if (BIG.has(kind) && depDist[y * w + x] < 3) kind = 'pebbles'; // big things keep a wider berth
       const size = SIZE[kind] * (0.85 + hash(x, y, seed + 29) * 0.3);
       const jx = (hash(x, y, seed + 41) - 0.5) * 0.3, jy = (hash(x, y, seed + 53) - 0.5) * 0.3;
       taken.add(y * w + x);
       decos.push({ kind, tx: x, ty: y, cx: x + 0.5 + jx, cy: y + 0.5 + jy, size, flip: hash(x, y, seed + 67) < 0.5 });
     }
   }
-  // flat things first, standing things later, volcanoes last (they overlap the tile above)
-  const layer: Record<DecoKind, number> = { lava: 0, crater: 0, bones: 1, pebbles: 2, vent: 2, crystals: 3, plants: 3, volcano: 4 };
-  decos.push(...volcanoes);
+  // flat things first, standing things later, volcanoes last (they overlap the tiles above)
+  const layer: Record<DecoKind, number> = { lava: 0, crater: 0, bones: 1, scrap: 1, pebbles: 2, vent: 2, meteor: 2, crystals: 3, plants: 3, wreck: 3, icespire: 3, obelisk: 3, tree: 3, volcano: 4 };
   decos.sort((a, b) => layer[a.kind] - layer[b.kind] || a.cy - b.cy);
+  const decoAt = new Map<number, Deco>();
+  for (const d of decos) if (d.kind !== 'volcano') decoAt.set(d.ty * w + d.tx, d);
   // colour patches
   const shade = document.createElement('canvas');
   shade.width = w;
@@ -142,5 +192,34 @@ export function buildScenery(s: GameState): Scenery {
     }
   }
   g.putImageData(img, 0, 0);
-  return { biome, decos, shade };
+  return { biome, decos, shade, liquids, hidden, featureAt, decoAt };
+}
+
+/** Outline of a river or lake: a round blob per tile, bridged to its neighbours (so the water is one smooth body). */
+function liquidShape(f: Feature, fi: number, w: number, x0: number, y0: number, x1: number, y1: number): Liquid {
+  const set = new Set(f.tiles);
+  const path = new Path2D();
+  const r = (f.lake ? 0.7 : 0.5) * TILE;
+  const hw = (f.lake ? 0.62 : 0.47) * TILE;
+  for (const i of f.tiles) {
+    const x = i % w, y = Math.floor(i / w);
+    const px = (x + 0.5) * TILE, py = (y + 0.5) * TILE;
+    const inner = set.has(i - 1) && set.has(i + 1) && set.has(i - w) && set.has(i + w);
+    if (inner) {
+      path.rect(x * TILE - 1, y * TILE - 1, TILE + 2, TILE + 2); // inside: plain, only the shore is rounded
+      continue;
+    }
+    path.moveTo(px + r, py);
+    path.arc(px, py, r, 0, Math.PI * 2);
+    if (set.has(i + 1) && x < w - 1) path.rect(px, py - hw, TILE, hw * 2);
+    if (set.has(i + w)) path.rect(px - hw, py, hw * 2, TILE);
+  }
+  // rivers flow from their first tile to their last, lakes drift slowly
+  const a = f.tiles[0], b = f.tiles[f.tiles.length - 1];
+  let fx = (b % w) - (a % w), fy = Math.floor(b / w) - Math.floor(a / w);
+  const len = Math.hypot(fx, fy) || 1;
+  fx /= len;
+  fy /= len;
+  const glow: [number, number][] = f.tiles.filter((_, k) => k % 3 === 0).map((i) => [(i % w) + 0.5, Math.floor(i / w) + 0.5]);
+  return { kind: f.kind as LiquidKind, lake: !!f.lake, feature: fi, path, x0, y0, x1, y1, flow: f.lake ? [0.6, 0.35] : [fx, fy], glow };
 }

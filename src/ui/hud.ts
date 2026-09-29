@@ -1,4 +1,4 @@
-import { buildingUrl, terrainUrl, uiUrl } from '../game/assets';
+import { achievementUrl, buildingUrl, decoUrl, terrainUrl, uiUrl } from '../game/assets';
 import { playIntro } from './intro';
 import { fullscreenAvailable, toggleFullscreen } from './fullscreen';
 import { MenuVideo } from './menuVideo';
@@ -483,7 +483,7 @@ export class Hud {
   /** Achievements window (menu). */
   showAchievements() {
     const have = earned();
-    const rows = ACHIEVEMENTS.map((a) => `<div class="ach ${have[a.id] ? 'got' : ''}"><span class="ach-icon">${have[a.id] ? '🏆' : '🔒'}</span><div><b>${t(`ach_${a.id}` as 'ach_FIRST_PLATE')}</b><small>${t(`ach_${a.id}_desc` as 'ach_FIRST_PLATE_desc')}</small></div></div>`).join('');
+    const rows = ACHIEVEMENTS.map((a) => `<div class="ach ${have[a.id] ? 'got' : ''}"><img class="ach-icon" src="${achievementUrl(a.id)}" alt=""><div><b>${t(`ach_${a.id}` as 'ach_FIRST_PLATE')}</b><small>${t(`ach_${a.id}_desc` as 'ach_FIRST_PLATE_desc')}</small></div></div>`).join('');
     this.openModal(`<h2>🏆 ${t('achievements')} · ${Object.keys(have).length}/${ACHIEVEMENTS.length}</h2><div class="ach-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`);
   }
 
@@ -1494,8 +1494,41 @@ export class Hud {
   }
 
   /** Info for an empty tile: deposit, rock or ground. */
+  /** A tap on the landscape: what it is, a line about it, and for rivers, lakes and volcanoes that nothing stands there. */
+  private showScenery(x: number, y: number, s: { key: string; kind: string; feature?: boolean }) {
+    this.selected = null;
+    this.renderer.selected = null;
+    this.renderer.selectedTile = { x, y };
+    this.renderer.fxScenery(s.key, x, y);
+    this.floating.classList.add('hidden');
+    const liquid = s.kind === 'lava' || s.kind === 'metal' || s.kind === 'water';
+    const img = liquid && s.feature ? `<span class="liquid-swatch ${s.kind}"></span>` : `<img src="${decoUrl(s.kind)}" alt="" draggable="false">`;
+    const blocked = s.feature ? `<div class="status bad">${t(s.key.endsWith('_lake') || s.key === 'volcano' ? 'sc_blocked' : 'sc_blocked_river')}</div>` : '';
+    this.info.innerHTML = `
+      <div class="info-head">
+        ${img}
+        <div class="info-title"><b>${t(`sc_${s.key}` as 'sc_volcano')}</b><small>${t('sc_landscape')} · ${x}, ${y}</small></div>
+        <button class="iconbtn" data-act="close">${icon('close')}</button>
+      </div>
+      <div class="info-body"><p class="sc-text">${t(`sc_${s.key}_d` as 'sc_volcano_d')}</p>${blocked}</div>`;
+    const wasHidden = this.info.classList.contains('hidden');
+    this.info.classList.remove('hidden');
+    if (wasHidden) this.panelOpenedAt = performance.now();
+    requestAnimationFrame(() => this.ensureVisible(x, y, 1, 1));
+    this.info.onclick = (e) => {
+      if (this.panelJustOpened()) return;
+      const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+      if (target?.dataset.act === 'close') this.selectBuilding(null);
+    };
+  }
+
   selectTile(x: number, y: number) {
     const st = this.sim.state;
+    const scenery = this.renderer.sceneryAt(x, y);
+    if (scenery) {
+      this.showScenery(x, y, scenery);
+      return;
+    }
     const terrain = st.terrain[y * st.width + x];
     if (terrain === 'ground') {
       // plain ground: just clear the selection

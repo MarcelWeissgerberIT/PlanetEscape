@@ -31,6 +31,14 @@ export function itemSprite(id: ItemId): HTMLImageElement {
   return load(`i:${key}`, `${base}/assets/items/${key}.webp${V}`);
 }
 
+export function achievementUrl(id: string): string {
+  return `${base}/assets/ach/${id}.webp${V}`;
+}
+
+export function decoUrl(kind: string): string {
+  return `${base}/assets/deco/${kind}.webp${V}`;
+}
+
 export function decoSprite(kind: string): HTMLImageElement {
   return load(`d:${kind}`, `${base}/assets/deco/${kind}.webp${V}`);
 }
