@@ -1,70 +1,130 @@
 {
-  "note": "Veo 3.1 (image2video, 8 s, 1080p, audio, mode fast) on OpenArt; start frames made with Nano Banana Pro from the game's story art. Download to tools/trailer/clips/c1..c8.mp4 and menu.mp4.",
-  "clips": [
-    {
-      "id": "c1",
-      "scene": "crash through the atmosphere",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680902682_691f5aad.mp4"
-    },
-    {
-      "id": "c2",
-      "scene": "wreck, the AI core lights up",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680892998_d029e3bb.mp4"
-    },
-    {
-      "id": "c3",
-      "scene": "KORA awakens (close-up)",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680892578_c3bc7e0c.mp4"
-    },
-    {
-      "id": "c4",
-      "scene": "first print: a drill, ore on the belt",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680912485_99f5f916.mp4"
-    },
-    {
-      "id": "c5",
-      "scene": "aerial over the factory",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680928387_bea19c88.mp4"
-    },
-    {
-      "id": "c6",
-      "scene": "ship blueprint hologram",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680915894_a6e99b3f.mp4"
-    },
-    {
-      "id": "c7",
-      "scene": "building the ship in the storm",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680925244_4a8a0c2e.mp4"
-    },
-    {
-      "id": "c8",
-      "scene": "launch into space",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680925354_59bf499a.mp4"
-    },
-    {
-      "id": "menu",
-      "scene": "menu background loop (conveyor, no audio, start frame = end frame)",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790681950540_69e03d2c.mp4"
-    },
-    {
-      "id": "menu_robot",
-      "scene": "menu: a cargo robot loses a crate and picks it up",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790686697326_615580cd.mp4"
-    },
-    {
-      "id": "menu_drone",
-      "scene": "menu: a drone carries a crate across the sky, a meteor",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790686695533_fc23249a.mp4"
-    },
-    {
-      "id": "menu_critter",
-      "scene": "menu: a small alien critter sniffs a plate, a steam puff scares it off",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790686731640_e632f2f1.mp4"
-    },
-    {
-      "id": "menu_smoke",
-      "scene": "menu: the smelter coughs a ring, lightning, a light flickers",
-      "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790686727278_895d72b3.mp4"
-    }
-  ]
+ "note": "Veo 3.1 (image2video, 8 s, 1080p, audio, mode fast) on OpenArt; start frames made with Nano Banana Pro from the game's story art. Download to tools/trailer/clips/c1..c8.mp4 and menu.mp4; menu_m01..m12 (silent, start = end frame) and story_chN_{intro,done} (with sound, start frames from Nano Banana) likewise.",
+ "clips": [
+  {
+   "id": "c1",
+   "scene": "crash through the atmosphere",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680902682_691f5aad.mp4"
+  },
+  {
+   "id": "c2",
+   "scene": "wreck, the AI core lights up",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680892998_d029e3bb.mp4"
+  },
+  {
+   "id": "c3",
+   "scene": "KORA awakens (close-up)",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680892578_c3bc7e0c.mp4"
+  },
+  {
+   "id": "c4",
+   "scene": "first print: a drill, ore on the belt",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680912485_99f5f916.mp4"
+  },
+  {
+   "id": "c5",
+   "scene": "aerial over the factory",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680928387_bea19c88.mp4"
+  },
+  {
+   "id": "c6",
+   "scene": "ship blueprint hologram",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680915894_a6e99b3f.mp4"
+  },
+  {
+   "id": "c7",
+   "scene": "building the ship in the storm",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680925244_4a8a0c2e.mp4"
+  },
+  {
+   "id": "c8",
+   "scene": "launch into space",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680925354_59bf499a.mp4"
+  },
+  {
+   "id": "menu",
+   "scene": "menu background loop (conveyor, no audio, start frame = end frame)",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790681950540_69e03d2c.mp4"
+  },
+  {
+   "id": "menu_robot",
+   "scene": "menu: a cargo robot loses a crate and picks it up",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790686697326_615580cd.mp4"
+  },
+  {
+   "id": "menu_drone",
+   "scene": "menu: a drone carries a crate across the sky, a meteor",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790686695533_fc23249a.mp4"
+  },
+  {
+   "id": "menu_critter",
+   "scene": "menu: a small alien critter sniffs a plate, a steam puff scares it off",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790686731640_e632f2f1.mp4"
+  },
+  {
+   "id": "menu_smoke",
+   "scene": "menu: the smelter coughs a ring, lightning, a light flickers",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790686727278_895d72b3.mp4"
+  },
+  {
+   "id": "menu_m01",
+   "scene": "menu: two cargo robots bump into each other",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790698785811_7aa32506.mp4"
+  },
+  {
+   "id": "menu_m02",
+   "scene": "menu: a critter family waddles past",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790698794723_d41e154d.mp4"
+  },
+  {
+   "id": "menu_m03",
+   "scene": "menu: meteor shower",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790698789151_7c0ce185.mp4"
+  },
+  {
+   "id": "menu_m04",
+   "scene": "menu: a drone misses its landing",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790698797971_4b5346f0.mp4"
+  },
+  {
+   "id": "menu_m05",
+   "scene": "menu: a plate flips like a pancake",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790698793959_18cefb00.mp4"
+  },
+  {
+   "id": "menu_m06",
+   "scene": "menu: aurora",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790698797257_d45a55b6.mp4"
+  },
+  {
+   "id": "menu_m07",
+   "scene": "menu: a maintenance robot waves",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790698807918_6b5686d2.mp4"
+  },
+  {
+   "id": "menu_m08",
+   "scene": "menu: dust devil",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790698843046_5c35aec0.mp4"
+  },
+  {
+   "id": "menu_m09",
+   "scene": "menu: a critter surfs the belt",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699096457_4337422f.mp4"
+  },
+  {
+   "id": "menu_m10",
+   "scene": "menu: a giant creature on the ridge",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699101499_d7fca93c.mp4"
+  },
+  {
+   "id": "menu_m11",
+   "scene": "menu: welding sparks scare a critter",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699096327_dcd6d13a.mp4"
+  },
+  {
+   "id": "menu_m12",
+   "scene": "menu: a jellyfish floater and a drone",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699116666_459d4b1c.mp4"
+  }
+ ]
 }
