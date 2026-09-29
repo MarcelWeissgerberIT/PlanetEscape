@@ -85,6 +85,9 @@ export class Hud {
   private hintedIds = new Map<number, number>(); // building id -> game time of the last hint about it
   private storyIndex = 0;
   private minimapOpen = window.innerWidth > 900;
+  /** header: the mission card below it and the drawer with view switches, controls and the whole store (remembered) */
+  private missionOpen = true;
+  private drawerOpen = false;
   private panelOpenedAt = 0;
   private undoStack: { id: number; t: number }[] = [];
   private clipboard: Blueprint | null = null;
@@ -103,6 +106,7 @@ export class Hud {
     this.root = document.getElementById('ui')!;
     this.title = el('div', 'title-screen');
     this.story = el('div', 'story hidden');
+    this.loadHudPrefs();
     this.top = el('div', 'hud-top');
     this.bottom = el('div', 'hud-bottom');
     this.info = el('div', 'info-panel hidden');
@@ -990,33 +994,73 @@ export class Hud {
     const nProblems = this.problems.length;
     const openContracts = st.contracts.filter((c) => !c.accepted).length;
     const playground = (st.options.mode === 'playground' || st.options.mode === 'challenge') && !tut;
+    const hasCard = !(playground && !this.editor && st.options.mode !== 'challenge');
+    const missionShown = hasCard && (this.missionOpen || !!tut);
+    // the header chip: chapter and title, with how many goals are done
+    const chipTop = tut ? `${t('tutorial_title')} ${st.tutorialStep + 1}/${steps.length}` : this.editor ? t('editor') : m ? (this.sim.challenge() ? t('mode_challenge') : st.launched ? t('flight') : `${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}`) : '';
+    const chipTitle = tut ? tut.title : this.editor ? `${st.width}×${st.height}` : m ? (this.sim.challenge() ? t(`ch_${m.id}` as 'ch_c_drills') : tMission(m.id).title) : t('launch_title');
+    let goalsDone = 0, goalsAll = 0;
+    if (m) for (const [k, n] of Object.entries(m.deliver)) {
+      goalsAll++;
+      if ((st.launched ? st.delivered[k as ItemId] ?? 0 : Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0)) >= n!) goalsDone++;
+    }
+    const inv = st.inventory;
+    const invIds = ITEM_ORDER.filter((id) => (inv[id] ?? 0) > 0);
+    const resHtml = this.editor
+      ? `<span class="inv-empty">∞ ${t('ed_free')}</span>`
+      : invIds.map((id) => `<button class="inv-item" data-chain="${id}" title="${tItem(id)}">${itemImg(id, 'icon sm')}<b>${inv[id]}</b></button>`).join('') || `<span class="inv-empty">${t('inventory')}</span>`;
+    const tog = (act: string, ico: string, label: string, on: boolean) => `<button class="hd-toggle ${on ? 'on' : ''}" data-act="${act}">${icon(ico, 'sm')}<span>${label}</span><i>${on ? t('on') : t('off')}</i></button>`;
+    const drawerHtml = !this.drawerOpen ? '' : `<div class="hud-drawer">
+        <section><h4>${t('hud_view')}</h4>
+          ${hasCard ? tog('toggle-mission', 'flag', t('hud_goals'), this.missionOpen) : ''}
+          ${tog('minimap', 'minimap', t('minimap'), this.minimapOpen)}
+          ${tog('overlay', 'scan', t('overlay'), this.renderer.overlay)}
+        </section>
+        <section><h4>${t('hud_controls')}</h4>
+          ${playground ? '' : `<button class="hd-btn ${openContracts ? 'badge' : ''}" data-act="contracts" data-badge="${openContracts}">${icon('contracts', 'sm')}<span>${t('contracts')}</span></button>
+          <button class="hd-btn" data-act="upgrades">${icon('research', 'sm')}<span>${t('upgrades')}</span></button>`}
+          <button class="hd-btn" data-act="speed">${icon('fast', 'sm')}<span>${t('speed')} ${Math.max(1, this.cb.getSpeed())}×</span></button>
+          <button class="hd-btn" data-act="center">${icon('center', 'sm')}<span>${t('reset_view')}</span></button>
+          ${fullscreenAvailable() ? `<button class="hd-btn" data-act="fullscreen">${icon('fullscreen', 'sm')}<span>${t('fullscreen')}</span></button>` : ''}
+          <button class="hd-btn" data-act="menu">${icon('menu', 'sm')}<span>${t('menu')}</span></button>
+        </section>
+        ${this.editor ? '' : `<section class="wide"><h4>${t('inventory')}</h4><div class="hd-store">${invIds.map((id) => `<button class="hd-item" data-chain="${id}">${itemImg(id, 'icon sm')}<span>${tItem(id)}</span><b>${inv[id]}</b></button>`).join('') || `<span class="inv-empty">—</span>`}</div></section>`}
+      </div>`;
     const topHtml = `
-      ${playground && !this.editor && st.options.mode !== 'challenge' ? '' : `<button class="kora-card" data-act="missions">
+      <div class="hud-bar">
+        ${hasCard ? `<button class="hb-mission ${missionShown ? 'open' : ''} ${!missionShown && this.koraMsgT > 0 ? 'talk' : ''}" data-act="toggle-mission" title="${t('hud_goals')}">
+          <img src="${uiUrl('kora.webp')}" alt="">
+          <span class="hb-mtext"><small>${chipTop}</small><b>${chipTitle}</b></span>
+          <em class="hb-short">${tut ? `${st.tutorialStep + 1}/${steps.length}` : m && !this.sim.challenge() && !st.launched ? `${st.missionIndex + 1}/${MISSIONS.length}` : goalsAll ? `${goalsDone}/${goalsAll}` : ''}</em>
+          ${goalsAll ? `<span class="hb-prog ${goalsDone === goalsAll ? 'done' : ''}">${goalsDone}/${goalsAll}</span>` : ''}
+          <span class="hb-chev">${icon('chevron', 'sm')}</span>
+        </button>` : `<span class="hb-mode">${t('mode_playground')} <small>${st.width}×${st.height}</small></span>`}
+        <div class="hb-res">${resHtml}${this.printStripHtml()}</div>
+        <div class="hb-right">
+          <div class="power ${low ? 'low' : ''} ${st.storm > 0 ? 'storm' : ''}" title="${t('power')}">
+            <span class="plabel">${st.storm > 0 ? icon('storm', 'sm') : icon('bolt', 'sm')} ${demand}/${supply}</span>
+            <div class="pbar"><div class="pfill" style="width:${ratio * 100}%"></div></div>
+          </div>
+          <button class="pill ${nProblems ? 'warn' : 'ok'}" data-act="diag">${nProblems ? `${icon('warn')} ${nProblems}` : icon('check')}</button>
+          <button class="iconbtn ${this.cb.getSpeed() === 0 ? 'active' : ''}" data-act="pause" title="${t('pause')} (Space)">${this.cb.getSpeed() === 0 ? icon('play') : icon('pause')}</button>
+          <button class="iconbtn speed ${this.cb.getSpeed() > 1 ? 'active' : ''}" data-act="speed" title="${t('speed')} (F)">${this.cb.getSpeed() > 1 ? `<b>${this.cb.getSpeed()}×</b>` : icon('fast')}</button>
+          <button class="iconbtn hb-menu" data-act="menu" title="${t('menu')}">${icon('menu')}</button>
+          <button class="iconbtn hb-expand ${this.drawerOpen ? 'active' : ''}" data-act="drawer" title="${t('hud_more')}">${icon('chevron')}</button>
+        </div>
+      </div>
+      ${drawerHtml}
+      ${missionShown ? `<button class="kora-card" data-act="missions">
         <img class="kora-avatar ${tut ? 'talk' : ''}" src="${uiUrl('kora.webp')}" alt="KORA">
         <div class="kora-body">${body}</div>
-      </button>`}
-      <div class="top-right">
-        <div class="power ${low ? 'low' : ''} ${st.storm > 0 ? 'storm' : ''}" title="${t('power')}">
-          <span class="plabel">${st.storm > 0 ? icon('storm', 'sm') : icon('bolt', 'sm')} ${demand}/${supply}</span>
-          <div class="pbar"><div class="pfill" style="width:${ratio * 100}%"></div></div>
-        </div>
-        <button class="pill ${nProblems ? 'warn' : 'ok'}" data-act="diag">${nProblems ? `${icon('warn')} ${nProblems}` : icon('check')}</button>
-        <button class="iconbtn ${this.cb.getSpeed() === 0 ? 'active' : ''}" data-act="pause" title="${t('pause')} (Space)">${this.cb.getSpeed() === 0 ? icon('play') : icon('pause')}</button>
-        <button class="iconbtn speed ${this.cb.getSpeed() > 1 ? 'active' : ''}" data-act="speed" title="${t('speed')} (F)">${this.cb.getSpeed() > 1 ? `<b>${this.cb.getSpeed()}×</b>` : icon('fast')}</button>
-        <button class="iconbtn ${this.renderer.overlay ? 'active' : ''}" data-act="overlay" title="${t('overlay')}">${icon('scan')}</button>
-        ${playground ? '' : `<button class="iconbtn ${openContracts ? 'badge' : ''}" data-act="contracts" title="${t('contracts')}" data-badge="${openContracts}">${icon('contracts')}</button>
-        <button class="iconbtn" data-act="upgrades" title="${t('upgrades')}">${icon('research')}</button>`}
-        <button class="iconbtn ${this.minimapOpen ? 'active' : ''}" data-act="minimap" title="${t('minimap')}">${icon('minimap')}</button>
-        <button class="iconbtn" data-act="center" title="${t('reset_view')}">${icon('center')}</button>
-        <button class="iconbtn" data-act="menu" title="${t('menu')}">${icon('menu')}</button>
-      </div>`;
+      </button>` : ''}`;
     if (topHtml === this.lastTopHtml) return;
     this.lastTopHtml = topHtml;
     this.top.innerHTML = topHtml;
     this.top.onclick = (e) => {
-      const target = (e.target as HTMLElement).closest('[data-act]') as HTMLElement | null;
+      const target = (e.target as HTMLElement).closest('[data-act], [data-chain]') as HTMLElement | null;
       if (!target) return;
       const act = target.dataset.act;
+      if (!act && target.dataset.chain) return this.showChain(target.dataset.chain as ItemId);
       if (act === 'kora-action') {
         e.stopPropagation();
         this.koraAction?.run();
@@ -1036,10 +1080,40 @@ export class Hud {
       else if (act === 'minimap') {
         this.minimapOpen = !this.minimapOpen;
         this.minimapBox.classList.toggle('hidden', !this.minimapOpen);
+        this.saveHudPrefs();
         this.lastTopHtml = '';
         this.renderTop();
-      }
+      } else if (act === 'toggle-mission' || act === 'drawer') {
+        if (act === 'drawer') this.drawerOpen = !this.drawerOpen;
+        else this.missionOpen = !this.missionOpen;
+        sfx.select();
+        this.saveHudPrefs();
+        this.lastTopHtml = '';
+        this.renderTop();
+      } else if (act === 'fullscreen') toggleFullscreen();
+      else if (act === 'printer') this.openPrinter();
+      else if (target.dataset.chain) this.showChain(target.dataset.chain as ItemId);
     };
+  }
+
+  private saveHudPrefs() {
+    try {
+      localStorage.setItem('pe_hud', JSON.stringify({ mission: this.missionOpen, drawer: this.drawerOpen, minimap: this.minimapOpen }));
+    } catch {
+      /* private mode: the defaults next time */
+    }
+  }
+
+  private loadHudPrefs() {
+    try {
+      const p = JSON.parse(localStorage.getItem('pe_hud') ?? 'null') as { mission?: boolean; drawer?: boolean; minimap?: boolean } | null;
+      if (!p) return;
+      this.missionOpen = p.mission ?? true;
+      this.drawerOpen = p.drawer ?? false;
+      this.minimapOpen = p.minimap ?? this.minimapOpen;
+    } catch {
+      /* ignore */
+    }
   }
 
   koraSay(msg: string, seconds = 8, action: { label: string; run: () => void } | null = null) {
@@ -1158,9 +1232,6 @@ export class Hud {
   private renderBottom() {
     const st = this.sim.state;
     const inv = st.inventory;
-    const invHtml = ITEM_ORDER.filter((id) => (inv[id] ?? 0) > 0)
-      .map((id) => `<button class="inv-item" data-chain="${id}" title="${tItem(id)}">${itemImg(id, 'icon sm')}<b>${inv[id]}</b></button>`)
-      .join('');
     const tutStep = st.tutorialStep;
     const hint: BuildingId | null = tutStep === 0 ? 'miner' : tutStep === 1 ? 'conveyor' : tutStep === 3 ? 'smelter' : tutStep === 5 ? 'printer' : null;
     // tabs: only groups with something unlocked; the flat list stays when a single group is available
@@ -1199,7 +1270,6 @@ export class Hud {
       : '';
     const bottomHtml = `
       ${editorBar}
-      <div class="inv-strip">${this.editor ? `<span class="inv-empty">∞ ${t('ed_free')}</span>` : invHtml || `<span class="inv-empty">${t('inventory')}</span>`}${this.printStripHtml()}</div>
       ${this.editor && this.editorTab === 'terrain' ? '' : tabsHtml}
       <div class="build-row">
         <div class="build-bar">${this.editor && this.editorTab === 'terrain' ? paletteHtml : buildHtml}</div>
