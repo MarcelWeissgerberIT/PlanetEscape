@@ -15,8 +15,7 @@ export function videoHeight(): 1080 | 720 {
 const APPLE = /Apple/.test(navigator.vendor) || /iPad|iPhone|iPod/.test(navigator.userAgent);
 
 /** <source> tags for a video: VP9/WebM first (Chromium, Firefox), H.264/MP4 first on Apple devices. */
-export function videoSources(name: string): string {
-  const h = videoHeight();
+export function videoSources(name: string, h: number = videoHeight()): string {
   const webm = `<source src="${videoUrl(`${name}_${h}.webm`)}" type="video/webm">`;
   const mp4 = `<source src="${videoUrl(`${name}_${h}.mp4`)}" type="video/mp4">`;
   return APPLE ? mp4 + webm : webm + mp4;

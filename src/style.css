@@ -65,12 +65,8 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 /* ---------- Title ---------- */
 .title-screen { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; overflow: hidden; }
 .title-bg { position: absolute; inset: 0; background-size: cover; background-position: center; }
-.title-video, .title-video-cover { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; }
-.title-video { opacity: 0; transition: opacity 1.2s ease; }
+.title-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 0.45s ease; }
 .title-video.on { opacity: 1; }
-.title-video-cover { opacity: 0; pointer-events: none; }
-.title-video-cover.show { opacity: 1; }
-.title-video-cover.show.fade { opacity: 0; transition: opacity 0.6s ease; }
 .title-host { display: contents; }
 /* intro: the cinematic over everything, skippable */
 .intro-overlay { position: fixed; inset: 0; z-index: 1000; background: #000; display: flex; align-items: center; justify-content: center; transition: opacity 0.7s ease; }
@@ -787,7 +783,7 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
    the bottom (titles only, each on its own glass), so the scene stays visible in the middle. */
 @media (max-width: 640px) and (orientation: portrait) {
   /* the upright screen shows a narrow strip of the wide video: pan slowly across it so every little event comes by */
-  .title-video, .title-video-cover { object-position: 66% 50%; animation: menupan 38s ease-in-out infinite alternate; }
+  .title-video { object-position: 66% 50%; animation: menupan 38s ease-in-out infinite alternate; }
   @keyframes menupan { from { object-position: 22% 50%; } to { object-position: 92% 50%; } }
   .title-bg { background-position: 66% 50%; }
   .title-bg::after { background: linear-gradient(180deg, rgba(8, 10, 15, 0.6) 0%, rgba(8, 10, 15, 0) 24%, rgba(8, 10, 15, 0) 42%, rgba(8, 10, 15, 0.72) 100%); }
@@ -845,3 +841,11 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .liquid-swatch.metal { background: radial-gradient(circle at 35% 30%, #ffffff, #cbd5e1 35%, #64748b); }
 .liquid-swatch.water { background: radial-gradient(circle at 35% 30%, #bae6fd, #38bdf8 40%, #1d5872); }
 .sc-text { margin: 2px 0 6px; line-height: 1.45; color: var(--text); font-size: 13px; }
+
+/* story clips in the chapter cards */
+.story-video { position: relative; margin: 0 0 12px; aspect-ratio: 16 / 9; background: #05080d; border: 1px solid var(--line); border-radius: 12px; overflow: hidden; cursor: pointer; }
+.story-video video { display: block; width: 100%; height: 100%; object-fit: cover; }
+.story-video .sv-replay { position: absolute; inset: 0; display: grid; place-items: center; font-size: 40px; color: #fff; text-shadow: 0 2px 10px #000; background: rgba(5, 8, 13, 0.35); opacity: 0; transition: opacity 0.3s; pointer-events: none; }
+.story-video.ended .sv-replay { opacity: 1; }
+.video-pair { display: grid; gap: 8px; }
+.video-pair h3 { margin: 4px 0; font-size: 13px; color: var(--muted); }

@@ -95,7 +95,7 @@ Danach die Achievements in Steamworks **veröffentlichen** (Publish), sonst meld
 - **Content Survey**:
   - *KI-generierte Inhalte*: **Ja angeben.** Die Grafiken der ersten Version (Gebäude, Items, Gelände, Titelbild, KORA,
     Story-Bilder, Raumschiff) die Karten-Deko (Vulkane, Krater, Pflanzen, Wracks, Obelisken usw.) und die Achievement-Icons wurden mit OpenArt erzeugt (`tools/process-assets.mjs`). Neuere Bauteil-Sprites sind
-    prozedural gezeichnet (`tools/sprites-parts.mjs`). Trailer, Intro und das Menü-Hintergrundvideo sind KI-generiert
+    prozedural gezeichnet (`tools/sprites-parts.mjs`). Trailer, Intro, die Menü-Hintergrundclips und die Story-Clips (Einweisung und Belohnung pro Kapitel) sind KI-generiert
     (Standbilder mit Nano Banana Pro, Video mit Ton und Musik mit Veo 3.1, über OpenArt). Im Spiel selbst wird zur
     Laufzeit nichts generiert. Das Formular
     fragt nach vorab erzeugten Inhalten und Guardrails – ehrlich ausfüllen, es wird auf der Shop-Seite angezeigt.

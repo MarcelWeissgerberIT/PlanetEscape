@@ -17,7 +17,7 @@ for c in "${ORDER[@]}"; do
     vf="trim=0.08:7.92,setpts=PTS-STARTPTS,fps=30,scale=-2:$h,format=yuv420p"
     ffmpeg -y -loglevel error -i clips/$c.mp4 -vf "$vf" -an -c:v libx264 -profile:v high -preset slow -b:v $br -maxrate $br -bufsize $br -movflags +faststart $out/${id}_$h.mp4
     ffmpeg -y -loglevel error -i clips/$c.mp4 -vf "$vf" -an -c:v libvpx-vp9 -b:v $br -deadline good -cpu-used 4 -row-mt 1 -pass 1 -passlogfile /tmp/menu_$h -f webm /dev/null
-    ffmpeg -y -loglevel error -i clips/$c.mp4 -vf "$vf" -an -c:v libvpx-vp9 -b:v $br -deadline good -cpu-used 2 -row-mt 1 -pass 2 -passlogfile /tmp/menu_$h $out/${id}_$h.webm
+    ffmpeg -y -loglevel error -i clips/$c.mp4 -vf "$vf" -an -c:v libvpx-vp9 -b:v $br -deadline good -cpu-used 4 -row-mt 1 -pass 2 -passlogfile /tmp/menu_$h $out/${id}_$h.webm
   done
   echo "$id <- $c"
 done

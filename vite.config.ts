@@ -1,4 +1,4 @@
-import { readFileSync, rmSync, writeFileSync } from 'node:fs';
+import { readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { defineConfig } from 'vite';
 
 const stamp = Date.now().toString(36);
@@ -19,7 +19,10 @@ export default defineConfig(({ mode }) => {
           if (desktop) {
             rmSync(f);
             // the app plays the full-size WebM videos (Electron always has VP9); the web's smaller and MP4 copies stay out
-            for (const v of ['intro_720.mp4', 'menu_720.mp4', 'intro_720.webm', 'menu_720.webm', 'intro_1080.mp4', 'menu_1080.mp4']) rmSync(`desktop/app/video/${v}`, { force: true });
+            // (story clips only come in 720p: their WebM stays)
+            for (const dir of ['', 'menu/', 'story/'])
+              for (const v of readdirSync(`desktop/app/video/${dir}`))
+                if (v.endsWith('.mp4') || (dir !== 'story/' && v.includes('_720.'))) rmSync(`desktop/app/video/${dir}${v}`, { force: true });
           }
           else writeFileSync(f, readFileSync(f, 'utf8').replace('__SW_VERSION__', stamp));
         } catch {

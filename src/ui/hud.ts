@@ -2,6 +2,7 @@ import { achievementUrl, buildingUrl, decoUrl, terrainUrl, uiUrl } from '../game
 import { playIntro } from './intro';
 import { fullscreenAvailable, toggleFullscreen } from './fullscreen';
 import { MenuVideo } from './menuVideo';
+import { storyVideoHtml, wireStoryVideos } from './storyVideo';
 import { EXAMPLES } from '../game/examples';
 import { SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
@@ -488,12 +489,12 @@ export class Hud {
   }
 
   /** Demo: the end of what it contains, with the way to the full game. */
-  showDemoEnd() {
+  showDemoEnd(finished = 0) {
     // the Steam demo and the full game share their save folder; from the web the progress goes along as a code
     const carry = IS_DESKTOP
       ? `<p>${t('demo_carry_desktop')}</p>`
       : `<p>${t('demo_carry_web')}</p><div class="row2"><button class="btn" data-act="progress-copy">${icon('copy', 'sm')} ${t('progress_copy')}</button><button class="btn" data-act="progress-file">${icon('download', 'sm')} ${t('progress_file')}</button></div>`;
-    this.openModal(`<div class="launch"><h2>${t('demo_end_title')}</h2><p>${t('demo_end_text', { n: DEMO_CHAPTERS })}</p>${carry}
+    this.openModal(`<div class="launch">${finished ? storyVideoHtml(finished, 'done') : ''}<h2>${t('demo_end_title')}</h2><p>${t('demo_end_text', { n: DEMO_CHAPTERS })}</p>${carry}
       ${STORE_URL ? `<button class="btn primary" data-act="store">${t('demo_store')}</button>` : `<p><b>${t('demo_soon')}</b></p>`}
       ${CAN_UNLOCK ? `<button class="btn" data-act="unlock">🔑 ${t('unlock_full')}</button>` : ''}
       <button class="btn" data-act="close">${t('close')}</button></div>`, (target) => {
@@ -734,13 +735,30 @@ export class Hud {
         <div class="cnum">${i + 1}</div>
         <div class="cbody"><b>${mt.title}</b><small>${lvl.size}×${lvl.size} · ${best !== undefined ? `${t('best_time')} ${fmtTime(best)} · ` : ''}${t('par_time', { time: fmtTime(lvl.par) })}</small></div>
         <div class="cstars ${stars === 3 ? 'gold' : ''}">${starString(stars)}</div>
+        ${open ? `<button class="btn small ghost" data-clips="${i + 1}" title="${t('chapter_clips')}">🎬</button>` : ''}
         <button class="btn small ${open ? 'primary' : ''}" data-chapter="${i + 1}" ${open ? '' : 'disabled'} title="${open ? '' : t('chapter_locked')}">${t('play')}</button>
       </div>`;
     }).join('');
     this.openModal(`<h2>${t('chapter_select')}</h2><div class="chapter-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
+      const clips = Number(target.dataset.clips);
+      if (clips) return this.showChapterClips(clips);
       const ch = Number(target.dataset.chapter);
       if (ch) void this.confirmNewGame().then((yes) => yes && this.cb.onPlayChapter(ch));
     });
+  }
+
+  /** The chapter's two clips again: the explanation, and the reward once the chapter has been finished. */
+  private showChapterClips(ch: number) {
+    const done = (loadProgress().stars[ch - 1] ?? 0) > 0;
+    this.openModal(
+      `<h2>${t('chapter')} ${ch}: ${tMission(MISSIONS[ch - 1].id).title}</h2>
+      <div class="video-pair"><h3>${t('clip_intro')}</h3>${storyVideoHtml(ch, 'intro')}
+      ${done ? `<h3>${t('clip_done')}</h3>${storyVideoHtml(ch, 'done')}` : `<p class="save-hint">${t('clip_done_locked')}</p>`}</div>
+      <button class="btn" data-act="back">‹ ${t('back')}</button>`,
+      (target) => {
+        if (target.dataset.act === 'back') this.showChapters();
+      },
+    );
   }
 
   showStory() {
@@ -772,6 +790,7 @@ export class Hud {
         this.story.classList.add('hidden');
         this.cb.onSave();
         this.refresh();
+        if (this.sim.state.options.mode === 'story') this.showBriefing();
       } else {
         this.storyIndex++;
         this.renderStory();
@@ -2637,6 +2656,7 @@ export class Hud {
   private openModal(html: string, onClick?: (target: HTMLButtonElement) => void) {
     this.modal.innerHTML = `<div class="modal-card">${html}</div>`;
     this.modal.classList.remove('hidden');
+    wireStoryVideos(this.modal);
     this.modal.onclick = (e) => {
       if (e.target === this.modal) this.closeModal();
       const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
@@ -2648,6 +2668,7 @@ export class Hud {
 
   closeModal() {
     this.modal.classList.add('hidden');
+    this.modal.querySelectorAll('video').forEach((v) => v.pause());
     this.modal.innerHTML = '';
   }
 
@@ -3070,7 +3091,7 @@ export class Hud {
     const line = (label: string, v: number) => `<div class="menu-row"><span>${label}</span><span class="mono">${v}</span></div>`;
     this.openModal(
       `<div class="launch">
-      <img class="ship" src="${uiUrl('ship.webp')}" alt="">
+      ${st.options.mode === 'story' ? storyVideoHtml(MISSIONS.length, 'done') : `<img class="ship" src="${uiUrl('ship.webp')}" alt="">`}
       <h2>🚀 ${t('launch_title')}</h2>
       <p>${t('launch_text', { time: fmtTime(st.time) })}</p>
       <div class="score-box">
@@ -3133,7 +3154,7 @@ export class Hud {
     const st = this.sim.state;
     if (st.options.mode === 'story' && EDITION === 'demo' && index + 1 >= DEMO_CHAPTERS) {
       recordChapter(index, st.time - (st.chapterStart ?? 0), this.sim.efficiency());
-      this.showDemoEnd();
+      this.showDemoEnd(index + 1);
       return;
     }
     if (st.options.mode === 'story' && index < MISSIONS.length - 1) {
@@ -3146,6 +3167,7 @@ export class Hud {
       const rec = recordChapter(index, seconds, eff);
       this.openModal(
         `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('chapter_done', { n: index + 1 })}</small></div></div>
+        ${storyVideoHtml(index + 1, 'done')}
         <h2>✓ ${mt.title}</h2>
         <div class="stars-big ${rec.stars === 3 ? 'gold' : ''}">${starString(rec.stars)}</div>
         <p class="stars-line">${t('stars_earned', { time: fmtTime(seconds), stars: `${rec.stars}/3` })}${rec.improved ? ` · ${t('new_record')}` : ''}<br><small>${t('par_time', { time: fmtTime(LEVELS[Math.min(index, LEVELS.length - 1)].par) })} · ${t('efficiency_line', { p: Math.round(eff * 100), need: Math.round(STAR_EFFICIENCY * 100) })}</small></p>
@@ -3183,6 +3205,21 @@ export class Hud {
     }
   }
 
+  /** Story: the chapter's explanation clip with its order, before the player starts building. */
+  showBriefing() {
+    const i = this.sim.state.missionIndex;
+    const m = MISSIONS[i];
+    if (!m) return;
+    const mt = tMission(m.id);
+    this.openModal(
+      `<div class="kora-head"><img src="${uiUrl('kora.webp')}" alt=""><div><b>${t('kora')}</b><small>${t('chapter')} ${i + 1}/${MISSIONS.length}</small></div></div>
+      ${storyVideoHtml(i + 1, 'intro')}
+      <h2>${mt.title}</h2>
+      <p>${mt.text}</p>
+      <button class="btn primary" data-act="close">${t('play')}</button>`,
+    );
+  }
+
   /** Called when a new chapter map has been loaded. */
   chapterStart() {
     const st = this.sim.state;
@@ -3192,6 +3229,8 @@ export class Hud {
       this.koraSay(mt.text, 20);
       this.toast(`▶ ${t('chapter')} ${st.missionIndex + 1}: <b>${mt.title}</b>`, 4000);
     }
+    // the story slides (first start) come first and hand over to the briefing themselves
+    if (st.options.mode === 'story' && this.story.classList.contains('hidden')) this.showBriefing();
     this.lastTutorialStep = -2;
     this.lastTopHtml = '';
     this.lastBottomHtml = '';

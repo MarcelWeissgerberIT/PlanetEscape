@@ -125,6 +125,76 @@
    "id": "menu_m12",
    "scene": "menu: a jellyfish floater and a drone",
    "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699116666_459d4b1c.mp4"
+  },
+  {
+   "id": "story_ch1_intro",
+   "scene": "briefing 1: drill, belt, core",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699147995_46753ae8.mp4"
+  },
+  {
+   "id": "story_ch2_intro",
+   "scene": "briefing 2: smelter",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699136010_2ab83474.mp4"
+  },
+  {
+   "id": "story_ch3_intro",
+   "scene": "briefing 3: 3D printer",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699139667_2ea9b17e.mp4"
+  },
+  {
+   "id": "story_ch4_intro",
+   "scene": "briefing 4: assemblers",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699160945_636f5590.mp4"
+  },
+  {
+   "id": "story_ch5_intro",
+   "scene": "briefing 5: circuits and glass",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699243564_7cba46ae.mp4"
+  },
+  {
+   "id": "story_ch6_intro",
+   "scene": "briefing 6: liquids",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699266302_a103342a.mp4"
+  },
+  {
+   "id": "story_ch7_intro",
+   "scene": "briefing 7: ship parts",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699270154_5bc78562.mp4"
+  },
+  {
+   "id": "story_ch1_done",
+   "scene": "reward 1",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699273976_4a05e14e.mp4"
+  },
+  {
+   "id": "story_ch2_done",
+   "scene": "reward 2",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699285415_7d955b8c.mp4"
+  },
+  {
+   "id": "story_ch3_done",
+   "scene": "reward 3",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699293454_044e7001.mp4"
+  },
+  {
+   "id": "story_ch4_done",
+   "scene": "reward 4",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699335274_4aa61417.mp4"
+  },
+  {
+   "id": "story_ch5_done",
+   "scene": "reward 5",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699341650_601f02de.mp4"
+  },
+  {
+   "id": "story_ch6_done",
+   "scene": "reward 6",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699630573_1abfd01b.mp4"
+  },
+  {
+   "id": "story_ch7_done",
+   "scene": "reward 7: lift-off",
+   "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790699636132_9b17aa4a.mp4"
   }
  ]
 }
