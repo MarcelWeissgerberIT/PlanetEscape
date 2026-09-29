@@ -31,6 +31,10 @@ export function itemSprite(id: ItemId): HTMLImageElement {
   return load(`i:${key}`, `${base}/assets/items/${key}.webp${V}`);
 }
 
+export function decoSprite(kind: string): HTMLImageElement {
+  return load(`d:${kind}`, `${base}/assets/deco/${kind}.webp${V}`);
+}
+
 export function terrainUrl(id: TerrainId): string {
   return `${base}/assets/terrain/${id}.webp${V}`;
 }

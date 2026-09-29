@@ -1,4 +1,6 @@
-import { buildingSprite, itemSprite, ready, terrainSprite } from './assets';
+import { buildingSprite, decoSprite, itemSprite, ready, terrainSprite } from './assets';
+import { Critters } from './critters';
+import { buildScenery, type Scenery } from './scenery';
 import { Camera, TILE } from './camera';
 import { SERVICE_RANGE, BELT_SPACING, BUILDINGS, MIXER_RATIOS, ORE_PER_TILE, RECIPE_BY_ID, TERRAIN_ITEM } from './data';
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from './chip8';
@@ -6,7 +8,7 @@ import { audioLevel } from './video';
 import { ARITH } from './sim';
 import { RADIO_RANGE, CORE_REACH, kitOf, printSeconds, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, crateOf, itemColor, DOCK_CAP, BATTERY_CAP, BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, MATRIX_SIZE, OSCILLATOR_CRYSTALS, SCREEN_BUDGET_MAX, matrixSize, TERMINAL_CRYSTALS, TERMINAL_RAM_BANKS } from './data';
 import type { Sim } from './sim';
-import type { Blueprint, Building, BuildingId, Dir, ItemId } from './types';
+import type { Blueprint, Building, BuildingId, Dir, GameState, ItemId } from './types';
 import { DX, DY } from './types';
 import { t } from '../i18n';
 
@@ -66,6 +68,11 @@ export class Renderer {
   private cacheT = 0;
   private dirtyTiles: { x: number; y: number }[] = [];
   lowDetail = false;
+  /** biome, decoration and colour patches of the current map (visual only, rebuilt when the game changes) */
+  private scenery: Scenery | null = null;
+  private sceneryOf: GameState | null = null;
+  private groundColor = '#373d45';
+  private critters = new Critters();
   private worldT: DOMMatrix | null = null;
   static readonly CACHE_PX = 12;
   static readonly CACHE_ZOOM = 0.45;
@@ -76,17 +83,30 @@ export class Renderer {
     this.makeGround();
   }
 
-  private makeGround() {
+  /** The scenery of the running game; a new game (or a loaded one) gets its own planet look. */
+  private sceneryNow(): Scenery {
+    const s = this.sim.state;
+    if (!this.scenery || this.sceneryOf !== s) {
+      this.scenery = buildScenery(s);
+      this.sceneryOf = s;
+      this.makeGround(this.scenery.biome);
+      this.terrainCache = null;
+    }
+    return this.scenery;
+  }
+
+  private makeGround(biome?: Scenery['biome']) {
     const c = document.createElement('canvas');
     c.width = c.height = 256;
     const g = c.getContext('2d')!;
-    g.fillStyle = '#373d45';
+    this.groundColor = biome?.ground ?? '#373d45';
+    g.fillStyle = this.groundColor;
     g.fillRect(0, 0, 256, 256);
     let seed = 7;
     const rnd = () => ((seed = (seed * 16807) % 2147483647) / 2147483647);
     for (let i = 0; i < 900; i++) {
       const x = rnd() * 256, y = rnd() * 256, r = rnd() * 1.6 + 0.3;
-      g.fillStyle = rnd() > 0.5 ? 'rgba(255,255,255,0.04)' : 'rgba(0,0,0,0.22)';
+      g.fillStyle = rnd() > 0.5 ? (biome?.speckLight ?? 'rgba(255,255,255,0.04)') : (biome?.speckDark ?? 'rgba(0,0,0,0.22)');
       g.beginPath();
       g.arc(x, y, r, 0, Math.PI * 2);
       g.fill();
@@ -169,7 +189,7 @@ export class Renderer {
     cc.beginPath();
     cc.rect(x * P, y * P, P, P);
     cc.clip();
-    cc.fillStyle = '#373d45';
+    cc.fillStyle = this.groundColor;
     cc.fillRect(x * P, y * P, P, P);
     if (this.ground) {
       // draw the ground pattern at the cache scale so it matches the live rendering
@@ -269,6 +289,7 @@ export class Renderer {
       if (Math.hypot(this.panTarget.x - cam.x, this.panTarget.y - cam.y) < 0.5) this.panTarget = null;
     }
     const s = this.sim.state;
+    const scenery = this.sceneryNow();
     ctx.setTransform(this.dpr, 0, 0, this.dpr, 0, 0);
     ctx.fillStyle = '#1a1d23';
     ctx.fillRect(0, 0, cam.width, cam.height);
@@ -302,8 +323,11 @@ export class Renderer {
       if (this.dirtyTiles.length > 400) this.terrainCache = null;
     }
 
-    ctx.fillStyle = this.ground ?? '#373d45';
+    ctx.fillStyle = this.ground ?? this.groundColor;
     if (!useCache) ctx.fillRect(x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE);
+    // large soft colour patches: one pixel per tile, smoothed as it is scaled up
+    ctx.imageSmoothingEnabled = true;
+    ctx.drawImage(scenery.shade, x0, y0, x1 - x0 + 1, y1 - y0 + 1, x0 * TILE, y0 * TILE, (x1 - x0 + 1) * TILE, (y1 - y0 + 1) * TILE);
 
     // terrain features
     for (let y = useCache ? y1 + 1 : y0; y <= y1; y++) {
@@ -330,6 +354,8 @@ export class Renderer {
         ctx.globalAlpha = 1;
       }
     }
+
+    this.drawDecos(scenery, x0, y0, x1, y1, dt);
 
     if (cam.zoom > 0.5) {
       ctx.strokeStyle = 'rgba(0,0,0,0.13)';
@@ -361,6 +387,12 @@ export class Renderer {
     this.flushArrows();
     for (const b of visible) if (b.site) this.drawSite(b);
     this.drawRobots(x0, y0, x1, y1);
+    this.critters.sync(this.sim);
+    if (!this.paused) this.critters.update(dt, this.sim);
+    if (!this.lowDetail) {
+      ctx.setTransform(this.worldT!);
+      this.critters.draw(ctx, x0, y0, x1, y1, scenery.biome.critter, this.time);
+    }
     this.drawDrones();
     if (this.overlay || this.selected?.type === 'radio' || this.selected?.type === 'mast') this.drawRadioLinks();
 
@@ -1072,7 +1104,7 @@ export class Renderer {
       if (scale !== 1) ctx.scale(scale, scale);
       if (b.dir) ctx.rotate((b.dir * Math.PI) / 2);
       ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
-      ctx.setTransform(this.worldT);
+      ctx.setTransform(this.worldT!);
     } else {
       ctx.save();
       ctx.globalAlpha = alpha;
@@ -2031,6 +2063,61 @@ export class Renderer {
   }
 
   // ---------- Particles & storm ----------
+
+  /** Map decoration under the buildings; volcanoes smoke and spit embers, vents puff steam. */
+  private drawDecos(sc: Scenery, x0: number, y0: number, x1: number, y1: number, dt: number) {
+    const { ctx } = this;
+    const live = !this.paused && !this.lowDetail;
+    for (const d of sc.decos) {
+      const h = d.size / 2;
+      if (d.cx + h < x0 || d.cx - h > x1 + 1 || d.cy + h < y0 || d.cy - h > y1 + 1) continue;
+      if (this.lowDetail && (d.kind === 'pebbles' || d.kind === 'crystals' || d.kind === 'plants')) continue;
+      if (d.kind !== 'volcano' && this.sim.at(d.tx, d.ty)) continue; // built over
+      const img = decoSprite(d.kind);
+      if (!ready(img)) continue;
+      const px = d.cx * TILE, py = d.cy * TILE, sz = d.size * TILE;
+      ctx.setTransform(this.worldT!);
+      if (d.flip) {
+        ctx.translate(px, py);
+        ctx.scale(-1, 1);
+        ctx.drawImage(img, -sz / 2, -sz / 2, sz, sz);
+      } else ctx.drawImage(img, px - sz / 2, py - sz / 2, sz, sz);
+      if (d.kind === 'volcano' || d.kind === 'lava') {
+        // a slow pulse of heat
+        ctx.setTransform(this.worldT!);
+        const gy = d.kind === 'volcano' ? py - sz * 0.3 : py;
+        const pulse = 0.5 + 0.5 * Math.sin(this.time * 1.7 + d.tx * 1.3 + d.ty);
+        const r = sz * (d.kind === 'volcano' ? 0.28 : 0.4);
+        const g = ctx.createRadialGradient(px, gy, 0, px, gy, r);
+        g.addColorStop(0, `rgba(255,140,40,${0.18 + 0.2 * pulse})`);
+        g.addColorStop(1, 'rgba(255,90,20,0)');
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = g;
+        ctx.fillRect(px - r, gy - r, r * 2, r * 2);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      if (!live) continue;
+      if (d.kind === 'volcano') {
+        const top = py - sz * 0.36;
+        if (Math.random() < dt * 2.2) this.particles.push({ x: px + (Math.random() - 0.5) * 8, y: top, vx: (Math.random() - 0.3) * 10, vy: -16 - Math.random() * 14, life: 2.6, max: 2.6, size: 5 + Math.random() * 6, color: 'rgba(70,66,70,0.45)' });
+        if (Math.random() < dt * 0.9) this.particles.push({ x: px, y: top, vx: (Math.random() - 0.5) * 60, vy: -70 - Math.random() * 50, life: 1.1, max: 1.1, size: 1.8 + Math.random() * 1.5, color: '#fb923c', grav: 140 });
+      } else if (d.kind === 'vent' && Math.random() < dt * 1.3) {
+        this.particles.push({ x: px + (Math.random() - 0.5) * 6, y: py - sz * 0.1, vx: (Math.random() - 0.5) * 6, vy: -14 - Math.random() * 10, life: 2, max: 2, size: 4 + Math.random() * 5, color: 'rgba(225,232,240,0.28)' });
+      }
+    }
+    ctx.setTransform(this.worldT!);
+  }
+
+  /** A tap on the map: a critter there scurries off with a little squeak of sparks. */
+  pokeCritters(wx: number, wy: number) {
+    const hit = this.critters.poke(wx, wy);
+    if (!hit) return;
+    const color = this.scenery?.biome.critter ?? '#5eead4';
+    for (let i = 0; i < 8; i++) {
+      const a = Math.random() * Math.PI * 2;
+      this.particles.push({ x: hit.x, y: hit.y - 6, vx: Math.cos(a) * 40, vy: Math.sin(a) * 40 - 30, life: 0.6, max: 0.6, size: 1.6 + Math.random() * 1.4, color, grav: 60 });
+    }
+  }
 
   private drawParticles(dt: number) {
     const { ctx } = this;

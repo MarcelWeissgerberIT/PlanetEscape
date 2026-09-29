@@ -91,7 +91,7 @@ Danach die Achievements in Steamworks **veröffentlichen** (Publish), sonst meld
   GPU mit WebGL-Unterstützung nicht nötig (Canvas 2D), 400 MB Speicher.
 - **Content Survey**:
   - *KI-generierte Inhalte*: **Ja angeben.** Die Grafiken der ersten Version (Gebäude, Items, Gelände, Titelbild, KORA,
-    Story-Bilder, Raumschiff) wurden mit OpenArt erzeugt (`tools/process-assets.mjs`). Neuere Bauteil-Sprites sind
+    Story-Bilder, Raumschiff) und die Karten-Deko (Vulkane, Krater, Pflanzen usw.) wurden mit OpenArt erzeugt (`tools/process-assets.mjs`). Neuere Bauteil-Sprites sind
     prozedural gezeichnet (`tools/sprites-parts.mjs`). Trailer, Intro und das Menü-Hintergrundvideo sind KI-generiert
     (Standbilder mit Nano Banana Pro, Video mit Ton und Musik mit Veo 3.1, über OpenArt). Im Spiel selbst wird zur
     Laufzeit nichts generiert. Das Formular

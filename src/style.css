@@ -89,12 +89,12 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
 /* wide screens: the menu on the left, the scene (where the little events happen) stays free in the middle and right */
 @media (min-width: 900px) and (min-aspect-ratio: 4/3) {
   .title-screen { justify-content: flex-start; padding-left: max(32px, 4vw); }
-  .title-bg::after { background: linear-gradient(90deg, rgba(8, 10, 15, 0.82) 0%, rgba(8, 10, 15, 0.5) 28%, rgba(8, 10, 15, 0) 52%), linear-gradient(180deg, rgba(8, 10, 15, 0) 65%, rgba(8, 10, 15, 0.45)); }
+  .title-bg::after { background: linear-gradient(90deg, rgba(8, 10, 15, 0.55) 0%, rgba(8, 10, 15, 0.25) 28%, rgba(8, 10, 15, 0) 48%), linear-gradient(180deg, rgba(8, 10, 15, 0) 65%, rgba(8, 10, 15, 0.45)); }
 }
 .title-content {
   position: relative; width: min(440px, calc(100% - 32px)); padding: 22px 22px calc(22px + var(--sab));
-  background: rgba(14, 17, 23, 0.72); border: 1px solid var(--line); border-radius: 20px;
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); text-align: center;
+  background: rgba(14, 17, 23, 0.4); border: 1px solid var(--line); border-radius: 20px;
+  backdrop-filter: blur(8px) saturate(1.2); -webkit-backdrop-filter: blur(8px) saturate(1.2); text-align: center;
   max-height: calc(100% - 24px - var(--sat)); overflow-y: auto;
 }
 .logo { margin: 0; font-size: 38px; letter-spacing: 0.12em; line-height: 1; font-weight: 900; display: flex; flex-direction: column; gap: 4px; }
@@ -440,7 +440,7 @@ label.btn { text-align: center; }
   backdrop-filter: blur(14px) saturate(1.2); -webkit-backdrop-filter: blur(14px) saturate(1.2);
 }
 .kora-card, .inv-strip, .minimap-box { box-shadow: var(--glass-glow); }
-.title-content { background: rgba(14, 17, 23, 0.58); border-color: var(--glass-line); box-shadow: var(--glass-glow); }
+.title-content { background: rgba(14, 17, 23, 0.34); border-color: var(--glass-line); box-shadow: var(--glass-glow); }
 .text-input { width: 100%; padding: 12px 14px; border-radius: 12px; border: 1px solid var(--glass-line); background: rgba(255, 255, 255, 0.06); color: var(--text); font: inherit; margin: 8px 0 12px; outline: none; }
 .text-input:focus { border-color: var(--accent); box-shadow: 0 0 0 3px rgba(34, 211, 238, 0.15); }
 .modal-card .row2 .btn { margin: 4px 0 0; }
@@ -596,6 +596,8 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
     linear-gradient(var(--base), var(--base)) padding-box,
     linear-gradient(var(--edge), var(--edge)) border-box !important;
 }
+/* the main menu lets its background video show through */
+.title-content { --fill: linear-gradient(180deg, rgba(24, 31, 42, 0.46), rgba(10, 13, 19, 0.56)); --base: rgba(8, 11, 16, 0.08); }
 .modal-card::before, .modal-card::after, .info-panel::before, .info-panel::after { border-radius: 0 !important; border-color: rgba(34, 211, 238, 0.55) !important; }
 
 /* light plates inside a window */
@@ -618,6 +620,7 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
 .iconbtn.danger-active { --edge: #fecaca; --fill: linear-gradient(180deg, #ef4444, #991b1b); }
 .btn.danger { --edge: rgba(248, 113, 113, 0.7); --fill: linear-gradient(180deg, rgba(127, 29, 29, 0.55), rgba(40, 10, 12, 0.7)); }
 .btn.ghost { --fill: linear-gradient(180deg, rgba(20, 25, 34, 0.4), rgba(10, 13, 19, 0.4)); }
+.title-content .btn:not(.primary):not(.ghost) { --fill: linear-gradient(180deg, rgba(46, 56, 72, 0.5), rgba(20, 25, 34, 0.55)); --base: rgba(8, 11, 16, 0.12); }
 .toast.success { --edge: var(--ok); }
 .toast.error, .power.low { --edge: var(--danger); }
 .ed-tabs { --edge: rgba(245, 158, 11, 0.55); --fill: linear-gradient(180deg, rgba(66, 44, 10, 0.6), rgba(30, 20, 6, 0.6)); }

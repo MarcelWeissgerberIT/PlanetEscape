@@ -5,7 +5,7 @@ import { existsSync, mkdirSync } from 'node:fs';
 
 const RAW = 'tools/raw';
 const OUT = 'public/assets';
-for (const d of ['buildings', 'items', 'terrain', 'ui']) mkdirSync(`${OUT}/${d}`, { recursive: true });
+for (const d of ['buildings', 'items', 'terrain', 'ui', 'deco']) mkdirSync(`${OUT}/${d}`, { recursive: true });
 
 const BUILDINGS = ['core', 'conveyor', 'tunnel', 'miner', 'smelter', 'assembler', 'refinery', 'solar', 'generator', 'storage', 'splitter', 'fabricator', 'printer', 'sorter', 'overflow', 'mixer', 'valve', 'core_0', 'core_1', 'core_2'];
 const TERRAIN = ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil', 'rock'];
@@ -78,6 +78,21 @@ async function cutout(src, dst, size) {
   await sharp(squared).resize(size, size).webp({ quality: 88 }).toFile(dst);
   console.log('cutout', dst);
 }
+
+// map decoration (volcanoes, craters, plants, ...): cut out; the crater comes with its own ground, faded to a circle.
+// `node tools/process-assets.mjs deco` redoes only these.
+const DECO = ['volcano', 'crater', 'plants', 'bones', 'vent', 'lava', 'crystals', 'pebbles'];
+async function roundFade(src, dst, size) {
+  const r = size / 2;
+  const mask = Buffer.from(`<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}"><defs><radialGradient id="g"><stop offset="0.6" stop-color="#fff"/><stop offset="1" stop-color="#fff" stop-opacity="0"/></radialGradient></defs><circle cx="${r}" cy="${r}" r="${r * 0.86}" fill="url(#g)"/></svg>`);
+  await sharp(src).resize(size, size).ensureAlpha().composite([{ input: mask, blend: 'dest-in' }]).webp({ quality: 88 }).toFile(dst);
+  console.log('round', dst);
+}
+for (const d of DECO) {
+  if (d === 'crater') await roundFade(`${RAW}/d_${d}.png`, `${OUT}/deco/${d}.webp`, 256);
+  else await cutout(`${RAW}/d_${d}.png`, `${OUT}/deco/${d}.webp`, 256);
+}
+if (process.argv[2] === 'deco') process.exit(0);
 
 for (const b of BUILDINGS) await tile(`${RAW}/${b}.png`, `${OUT}/buildings/${b}.webp`, 256);
 for (const t of TERRAIN) await tile(`${RAW}/t_${t}.png`, `${OUT}/terrain/${t}.webp`, 256);

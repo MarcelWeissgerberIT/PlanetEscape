@@ -338,6 +338,7 @@ export class Input {
     if (e.button !== 0 && e.pointerType === 'mouse') return;
     // tap
     const [tx, ty] = this.cam.screenToTile(e.clientX, e.clientY);
+    if (this.tool.kind === 'none') this.renderer.pokeCritters(...this.cam.screenToWorld(e.clientX, e.clientY)); // a critter there runs off
     this.tap(tx, ty);
     if (e.pointerType !== 'mouse') {
       this.hoverTile = null;
