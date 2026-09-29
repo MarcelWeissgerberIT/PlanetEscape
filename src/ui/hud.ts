@@ -1048,7 +1048,7 @@ export class Hud {
           ${fullscreenAvailable() ? `<button class="hd-btn" data-act="fullscreen">${icon('fullscreen', 'sm')}<span>${t('fullscreen')}</span></button>` : ''}
           <button class="hd-btn" data-act="menu">${icon('menu', 'sm')}<span>${t('menu')}</span></button>
         </section>
-        ${this.editor ? '' : `<section class="wide"><h4>${t('inventory')}</h4><div class="hd-store">${invIds.map((id) => `<button class="hd-item" data-chain="${id}">${itemImg(id, 'icon sm')}<span>${tItem(id)}</span><b>${inv[id]}</b></button>`).join('') || `<span class="inv-empty">—</span>`}</div></section>`}
+        ${this.editor ? '' : `<section class="wide"><h4>${t('inventory')}</h4>${this.printStripHtml()}<div class="hd-store">${invIds.map((id) => `<button class="hd-item" data-chain="${id}">${itemImg(id, 'icon sm')}<span>${tItem(id)}</span><b>${inv[id]}</b></button>`).join('') || `<span class="inv-empty">—</span>`}</div></section>`}
       </div>`;
     const topHtml = `
       <div class="hud-bar">
