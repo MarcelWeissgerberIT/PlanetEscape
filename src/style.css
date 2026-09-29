@@ -68,6 +68,22 @@ button { font: inherit; color: inherit; cursor: pointer; border: 0; background: 
   position: absolute; inset: 0; background-size: cover; background-position: center;
   animation: slowzoom 30s ease-in-out infinite alternate;
 }
+.title-video { position: absolute; inset: 0; width: 100%; height: 100%; object-fit: cover; opacity: 0; transition: opacity 1.2s ease; }
+.title-video.on { opacity: 1; }
+.title-host { display: contents; }
+/* intro: the cinematic over everything, skippable */
+.intro-overlay { position: fixed; inset: 0; z-index: 1000; background: #000; display: flex; align-items: center; justify-content: center; transition: opacity 0.7s ease; }
+.intro-overlay.out { opacity: 0; pointer-events: none; }
+.intro-video { width: 100%; height: 100%; object-fit: contain; background: #000; }
+.intro-skip { position: absolute; width: auto; min-width: 0; padding: 10px 18px; right: calc(20px + var(--sar, 0px)); bottom: calc(20px + var(--sab, 0px)); opacity: 0.75; }
+.intro-skip:hover { opacity: 1; }
+.intro-start { position: absolute; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 14px; background: radial-gradient(circle at 50% 45%, #0b1b2b, #000 70%); border: 0; color: var(--text, #e2e8f0); cursor: pointer; font: inherit; }
+.intro-start.hidden { display: none; }
+.intro-start b { font-size: clamp(28px, 6vw, 56px); letter-spacing: 0.14em; font-weight: 900; }
+.intro-start .accent { color: var(--accent, #22d3ee); text-shadow: 0 0 18px rgba(34, 211, 238, 0.6); }
+.intro-start small { color: var(--muted, #94a3b8); font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; }
+.intro-play { width: 76px; height: 76px; border-radius: 50%; display: flex; align-items: center; justify-content: center; font-size: 30px; padding-left: 6px; border: 2px solid rgba(34, 211, 238, 0.8); color: #22d3ee; box-shadow: 0 0 30px rgba(34, 211, 238, 0.35); animation: pulse 2s ease-in-out infinite; }
+@keyframes pulse { 50% { transform: scale(1.06); box-shadow: 0 0 44px rgba(34, 211, 238, 0.55); } }
 .title-bg::after { content: ''; position: absolute; inset: 0; background: linear-gradient(180deg, rgba(10, 12, 18, 0.35), rgba(10, 12, 18, 0.85)); }
 @keyframes slowzoom { from { transform: scale(1); } to { transform: scale(1.08); } }
 .title-content {

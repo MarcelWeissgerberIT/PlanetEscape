@@ -1,5 +1,6 @@
 // Planet Escape desktop app (Electron): serves the built game from desktop/app over app://, keeps saves as files
 // (so Steam Cloud can sync them) and talks to Steam when it is running.
+const { Readable } = require('node:stream');
 const { app, BrowserWindow, ipcMain, protocol, net, shell, Menu } = require('electron');
 const path = require('node:path');
 const fs = require('node:fs');
@@ -29,8 +30,11 @@ function initSteam() {
   }
 }
 
+// the intro starts with sound without a click first (a browser would wait for one)
+app.commandLine.appendSwitch('autoplay-policy', 'no-user-gesture-required');
+
 // ---------- the game files over app:// (a real origin: modules, storage and relative paths behave like on the web) ----------
-protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true } }]);
+protocol.registerSchemesAsPrivileged([{ scheme: 'app', privileges: { standard: true, secure: true, supportFetchAPI: true, stream: true } }]);
 
 function serveApp() {
   protocol.handle('app', (req) => {
@@ -39,7 +43,34 @@ function serveApp() {
     if (rel === '/' || rel === '') rel = '/index.html';
     const file = path.normalize(path.join(APP_DIR, rel));
     if (!file.startsWith(APP_DIR)) return new Response('forbidden', { status: 403 });
+    const range = req.headers.get('range');
+    if (range && /\.(webm|mp4)$/.test(file)) return videoRange(file, range);
     return net.fetch(pathToFileURL(file).toString());
+  });
+}
+
+/** Byte ranges of a video (206), so the player can stream and seek (a file fetch would answer the whole file). */
+function videoRange(file, range) {
+  let size;
+  try {
+    size = fs.statSync(file).size;
+  } catch {
+    return new Response('not found', { status: 404 });
+  }
+  const m = /bytes=(\d*)-(\d*)/.exec(range) || [];
+  let start = m[1] ? Number(m[1]) : 0;
+  let end = m[2] ? Math.min(Number(m[2]), size - 1) : size - 1;
+  if (!m[1] && m[2]) [start, end] = [Math.max(0, size - Number(m[2])), size - 1]; // "bytes=-N": the last N bytes
+  if (start > end || start >= size) return new Response(null, { status: 416, headers: { 'Content-Range': `bytes */${size}` } });
+  const body = Readable.toWeb(fs.createReadStream(file, { start, end }));
+  return new Response(body, {
+    status: 206,
+    headers: {
+      'Content-Type': file.endsWith('.webm') ? 'video/webm' : 'video/mp4',
+      'Content-Range': `bytes ${start}-${end}/${size}`,
+      'Content-Length': String(end - start + 1),
+      'Accept-Ranges': 'bytes',
+    },
   });
 }
 

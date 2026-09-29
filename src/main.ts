@@ -1,4 +1,5 @@
 import { DEMO_CHALLENGES, DEMO_CHAPTERS, EDITION, IS_DESKTOP } from './game/desktop';
+import { introWanted, playIntro } from './ui/intro';
 import { syncAchievementsToSteam } from './game/achievements';
 import './style.css';
 import { preloadAll } from './game/assets';
@@ -258,8 +259,16 @@ document.addEventListener('dblclick', (e) => e.preventDefault(), { passive: fals
 renderer.resize();
 renderer.centerOnCore();
 exposeDebug();
+// the cinematic intro on every start (skippable); the menu is ready behind it, its video waits until the intro ends
+const intro = introWanted();
+hud.holdMenuVideo = intro;
 hud.showTitle();
 syncAchievementsToSteam();
+if (intro)
+  void playIntro().then(() => {
+    hud.holdMenuVideo = false;
+    if (!document.querySelector('.title-screen.hidden')) hud.menuVideo(true);
+  });
 // the desktop app saves when the window closes
 window.addEventListener('beforeunload', () => { if (playing) Save.save(sim.state); });
 // a shared challenge link (?ch=PE-C1-…): show the comparison over the title screen, then drop it from the address

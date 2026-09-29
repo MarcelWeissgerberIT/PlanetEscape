@@ -16,7 +16,11 @@ export default defineConfig(({ mode }) => {
         const f = `${desktop ? 'desktop/app' : 'dist'}/sw.js`;
         try {
           // the desktop app loads its files from disk: no service worker there
-          if (desktop) rmSync(f);
+          if (desktop) {
+            rmSync(f);
+            // the app plays the full-size WebM videos (Electron always has VP9); the web's smaller and MP4 copies stay out
+            for (const v of ['intro_720.mp4', 'menu_720.mp4', 'intro_720.webm', 'menu_720.webm', 'intro_1080.mp4', 'menu_1080.mp4']) rmSync(`desktop/app/video/${v}`, { force: true });
+          }
           else writeFileSync(f, readFileSync(f, 'utf8').replace('__SW_VERSION__', stamp));
         } catch {
           /* no service worker in this build */

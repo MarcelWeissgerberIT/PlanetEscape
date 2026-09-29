@@ -1,0 +1,14 @@
+{
+  "note": "Veo 3.1 (image2video, 8 s, 1080p, audio, mode fast) on OpenArt; start frames made with Nano Banana Pro from the game's story art. Download to tools/trailer/clips/c1..c8.mp4 and menu.mp4.",
+  "clips": [
+    { "id": "c1", "scene": "crash through the atmosphere", "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680902682_691f5aad.mp4" },
+    { "id": "c2", "scene": "wreck, the AI core lights up", "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680892998_d029e3bb.mp4" },
+    { "id": "c3", "scene": "KORA awakens (close-up)", "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680892578_c3bc7e0c.mp4" },
+    { "id": "c4", "scene": "first print: a drill, ore on the belt", "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680912485_99f5f916.mp4" },
+    { "id": "c5", "scene": "aerial over the factory", "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680928387_bea19c88.mp4" },
+    { "id": "c6", "scene": "ship blueprint hologram", "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680915894_a6e99b3f.mp4" },
+    { "id": "c7", "scene": "building the ship in the storm", "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680925244_4a8a0c2e.mp4" },
+    { "id": "c8", "scene": "launch into space", "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790680925354_59bf499a.mp4" },
+    { "id": "menu", "scene": "menu background loop (conveyor, no audio, start frame = end frame)", "url": "https://cdn.openart.ai/openart-ai/production/2026-09/create-video/wRD6PTxSzjxZwjWN69MC/sample_0_1790681950540_69e03d2c.mp4" }
+  ]
+}

@@ -82,8 +82,9 @@ Danach die Achievements in Steamworks **veröffentlichen** (Publish), sonst meld
   brauchbar zum Starten, für den Verkauf lohnt sich eigene Key-Art. Wichtig: Kapseln dürfen nur Logo + Art zeigen
   (keine Wertungen, „Sale“ o. Ä.).
 - **Screenshots**: mind. 5 Stück, `steam-assets/screenshots/` (EN und DE getrennt hochladen, Steam kann pro Sprache).
-- **Trailer**: sehr empfohlen. `npm run trailer:check` prüft das vorhandene Trailer-Skript im Spiel; aufnehmen z. B. per
-  OBS im Vollbild der Desktop-App.
+- **Trailer**: fertig in `steam-assets/trailer/` (58 s, 1080p, mit Ton und Schlusstafel, EN und DE:
+  `planet-escape-trailer-en.mp4` / `-de.mp4`). Als ersten Trailer hochladen. Neu schneiden: `tools/trailer/README.md`.
+  Ergänzend lohnt sich ein kurzes Gameplay-Video (z. B. per OBS im Vollbild der Desktop-App aufgenommen).
 - **Texte**: Kurzbeschreibung (max. 300 Zeichen), Beschreibung, Features, Sprachen (Deutsch + Englisch: Oberfläche und
   Untertitel, kein Voice-Over).
 - **Systemanforderungen** (Vorschlag): Windows 10 64-bit / macOS 11 / Ubuntu 22.04, 2-Kern-CPU, 4 GB RAM,
@@ -91,7 +92,9 @@ Danach die Achievements in Steamworks **veröffentlichen** (Publish), sonst meld
 - **Content Survey**:
   - *KI-generierte Inhalte*: **Ja angeben.** Die Grafiken der ersten Version (Gebäude, Items, Gelände, Titelbild, KORA,
     Story-Bilder, Raumschiff) wurden mit OpenArt erzeugt (`tools/process-assets.mjs`). Neuere Bauteil-Sprites sind
-    prozedural gezeichnet (`tools/sprites-parts.mjs`). Im Spiel selbst wird zur Laufzeit nichts generiert. Das Formular
+    prozedural gezeichnet (`tools/sprites-parts.mjs`). Trailer, Intro und das Menü-Hintergrundvideo sind KI-generiert
+    (Standbilder mit Nano Banana Pro, Video mit Ton und Musik mit Veo 3.1, über OpenArt). Im Spiel selbst wird zur
+    Laufzeit nichts generiert. Das Formular
     fragt nach vorab erzeugten Inhalten und Guardrails – ehrlich ausfüllen, es wird auf der Shop-Seite angezeigt.
   - Keine Gewalt, keine Käufe im Spiel, keine Datenerhebung.
 - **Altersfreigabe**: IARC-Fragebogen in Steamworks (kostenlos, wenige Minuten).

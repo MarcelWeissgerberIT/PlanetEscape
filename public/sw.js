@@ -35,6 +35,7 @@ self.addEventListener('fetch', (e) => {
   if (req.method !== 'GET') return;
   const url = new URL(req.url);
   if (url.origin !== location.origin) return;
+  if (/\.(mp4|webm)$/.test(url.pathname)) return; // videos stream from the network (range requests)
   if (req.mode === 'navigate' || !/\/assets\/|\.(webp|png|js|css|woff2?|json)$/.test(url.pathname)) {
     e.respondWith(page(req));
     return;

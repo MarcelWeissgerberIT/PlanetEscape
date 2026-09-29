@@ -1,4 +1,5 @@
 import { buildingUrl, terrainUrl, uiUrl } from '../game/assets';
+import { videoSources } from './intro';
 import { EXAMPLES } from '../game/examples';
 import { SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
@@ -174,6 +175,7 @@ export class Hud {
   showTitle() {
     this.renderTitle();
     this.title.classList.remove('hidden');
+    this.menuVideo(!this.holdMenuVideo);
     this.top.classList.add('hidden');
     this.bottom.classList.add('hidden');
     this.info.classList.add('hidden');
@@ -184,10 +186,41 @@ export class Hud {
   hideTitle() {
     startAmbient();
     this.title.classList.add('hidden');
+    this.menuVideo(false);
     this.top.classList.remove('hidden');
     this.bottom.classList.remove('hidden');
     this.minimapBox.classList.toggle('hidden', !this.minimapOpen);
     if (!this.sim.state.introSeen) this.showStory();
+  }
+
+  /** The menu's background (a silent looping factory shot) stays in place while the menu itself re-renders. */
+  private titleHost: HTMLElement | null = null;
+  /** true while the intro plays: the menu video waits so it does not compete for the download */
+  holdMenuVideo = false;
+
+  private titleShell(): HTMLElement {
+    if (!this.titleHost) {
+      const still = matchMedia('(prefers-reduced-motion: reduce)').matches;
+      this.title.innerHTML = `<div class="title-bg" style="background-image:url('${uiUrl('menu_bg.webp')}')">${still ? '' : '<video class="title-video" muted loop playsinline preload="none"></video>'}</div><div class="title-host"></div>`;
+      this.titleHost = this.title.querySelector('.title-host') as HTMLElement;
+    }
+    return this.titleHost;
+  }
+
+  /** Run or pause the menu background video (loaded on first use, in the size that fits the screen). */
+  menuVideo(on: boolean) {
+    const v = this.title.querySelector('.title-video') as HTMLVideoElement | null;
+    if (!v) return;
+    if (!on) {
+      v.pause();
+      return;
+    }
+    if (!v.querySelector('source')) {
+      v.innerHTML = videoSources('menu');
+      v.load();
+    }
+    v.addEventListener('playing', () => v.classList.add('on'), { once: true });
+    void v.play().catch(() => undefined); // muted autoplay is allowed; if not, the still image stays
   }
 
   private freeOptions: GameOptions = { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
@@ -252,8 +285,7 @@ export class Hud {
           <button class="btn primary" data-act="free">${t('start_free')}</button>
           <button class="btn ghost" data-act="back">${t('back')}</button>
         </div>`;
-    this.title.innerHTML = `
-      <div class="title-bg" style="background-image:url('${uiUrl('title_bg.webp')}')"></div>
+    this.titleShell().innerHTML = `
       <div class="title-content">
         <h1 class="logo"><span>PLANET</span><span class="accent">ESCAPE</span></h1>
         <p class="tagline">${t('tagline')}</p>

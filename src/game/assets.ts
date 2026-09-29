@@ -47,6 +47,11 @@ export function uiUrl(name: string): string {
   return `${base}/assets/ui/${name}`;
 }
 
+/** Videos (intro, menu background) live outside /assets/: the service worker leaves them to the browser. */
+export function videoUrl(name: string): string {
+  return `${base}/video/${name}`;
+}
+
 export function ready(img: HTMLImageElement): boolean {
   return img.complete && img.naturalWidth > 0;
 }
