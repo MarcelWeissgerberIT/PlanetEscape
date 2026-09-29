@@ -98,6 +98,8 @@ export interface Problem {
 }
 
 const JAM_SECONDS = 2;
+/** a machine counts as starved in the problem list only after this many seconds without input */
+const STARVE_REPORT = 20;
 const RATE_WINDOW = 10;
 const MINER_BUFFER = 4;
 
@@ -245,7 +247,7 @@ export class Sim {
 
   /** The playground has no ship to build: the core stays in the save as the base power source but takes no tiles. */
   get coreHidden(): boolean {
-    return this.state.options.mode === 'playground';
+    return this.state.options.mode === 'playground' && !this.state.showCore; // megafactory examples deliver into it
   }
 
   rebuildGrid() {
@@ -895,6 +897,9 @@ export class Sim {
 
   // ---------- Tick ----------
 
+  /** seconds each machine has been starved in a row (not saved) */
+  private starveT = new Map<number, number>();
+
   tick(dt: number) {
     const st = this.state;
     st.time += dt;
@@ -902,6 +907,9 @@ export class Sim {
     let supply = 0;
     let demand = 0;
     for (const b of st.buildings) {
+      // how long a machine has been waiting for input without a break (a short wait between batches is normal)
+      if (b.status === 'starved') this.starveT.set(b.id, (this.starveT.get(b.id) ?? 0) + dt);
+      else if (this.starveT.size) this.starveT.delete(b.id);
       if (b.site) continue;
       const p = BUILDINGS[b.type].power;
       if (p < 0) {
@@ -3507,6 +3515,13 @@ export class Sim {
       if (s === 'worn' && this.serviced(b)) continue; // a service station handles it
       if (s === 'low_power') continue; // reported globally
       if (s === 'blocked' && BUILDINGS[b.type].kind === 'logic') continue; // a full belt behind a module is normal
+      // a full belt in front of a machine that is busy (working, or waiting to hand on its output) is a queue, not a fault
+      if (s === 'jammed' && (b.type === 'conveyor' || b.type === 'tunnel')) {
+        const from = b.type === 'tunnel' && !b.exit ? this.byId(b.pair) ?? b : b; // an entrance hands on through its exit
+        const end = this.traceFlow(from).target;
+        if (end && (end.type === 'core' || end.status === 'ok' || end.status === 'blocked' || end.status === 'low_power' || (end.status === 'starved' && (this.starveT.get(end.id) ?? 0) < STARVE_REPORT))) continue;
+      }
+      if (s === 'starved' && (this.starveT.get(b.id) ?? 0) < STARVE_REPORT) continue; // between two batches
       if (s === 'blocked' && (b.type === 'miner' || BUILDINGS[b.type].kind === 'machine')) {
         // only report blocked machines that have nowhere to output; a full buffer on a busy belt is normal
         if (this.hasOutputTarget(b)) continue;

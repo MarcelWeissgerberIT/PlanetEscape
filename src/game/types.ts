@@ -299,6 +299,7 @@ export interface GameState {
   eventsSeen?: number;
   note?: { de?: string; en?: string; title?: string }; // shown once when a shared save is imported
   focus?: { x: number; y: number; zoom: number }; // camera position to show when the save is loaded
+  showCore?: boolean; // playground map whose chains end in the core (the megafactory examples)
   robots?: Robot[]; // transport robots (depots)
   kits?: Partial<Record<BuildingId, number>>; // printed building kits in stock
   printQueue?: PrintJob[]; // the core's print jobs, first one is printing

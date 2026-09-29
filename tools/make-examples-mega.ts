@@ -13,7 +13,8 @@ const only = process.argv[2];
 mkdirSync('public/examples', { recursive: true });
 for (const m of MEGA) {
   if (only && m.id !== only) continue;
-  let best: { st: GameState; ok: number; n: number; seed: number } | null = null;
+  // every seed is built and run; the pick: no problems, then the most chains, then the biggest factory
+  let best: { st: GameState; ok: number; n: number; seed: number; probs: number } | null = null;
   for (const seed of m.seeds) {
     const opts: GameOptions = { mode: 'free', mapSize: m.size, infiniteOre: true, allUnlocked: true, storms: false };
     const st = newGame(seed, opts);
@@ -42,18 +43,17 @@ for (const m of MEGA) {
       if (pb.supply >= pb.demand * 1.15) break;
       for (let yy = bl.y; yy < bl.y + 6; yy++) for (let xx = bl.x; xx < bl.x + 8; xx++) sim.place('solar', xx, yy, 0);
     }
-    const pb = powerBalance(sim);
-    console.log(`  power ${pb.supply}/${pb.demand}`);
-    console.log(`${m.id} seed ${seed}: ${ok}/${m.chains.length} chains, ${st.buildings.length} buildings`);
-    if (!best || ok > best.ok || (ok === best.ok && st.buildings.length > best.n)) best = { st, ok, n: st.buildings.length, seed };
-    if (ok === m.chains.length) break;
+    for (let i = 0; i < 30 * m.warm; i++) sim.tick(1 / 30);
+    const probs = sim.analyze().length;
+    console.log(`${m.id} seed ${seed}: ${ok}/${m.chains.length} chains, ${st.buildings.length} buildings, ${probs} problems`);
+    const better = !best || (probs === 0) !== (best.probs === 0) ? !best || probs === 0 : ok > best.ok || (ok === best.ok && (probs < best.probs || (probs === best.probs && st.buildings.length > best.n)));
+    if (better) best = { st, ok, n: st.buildings.length, seed, probs };
+    if (ok === m.chains.length && probs === 0) break;
   }
   const st = best!.st;
-  const sim = new Sim(st);
-  sim.creative = true;
-  for (let i = 0; i < 30 * m.warm; i++) sim.tick(1 / 30);
   // hand it over as a playground map: free building, no orders
   st.options = { ...st.options, mode: 'playground' };
+  st.showCore = true; // the chains end in the core
   st.time = 0;
   st.note = m.note;
   const core = st.buildings[0];
@@ -61,5 +61,5 @@ for (const m of MEGA) {
   st.inventory = { iron_plate: 999, copper_plate: 999, copper_wire: 500, machine_part: 300, circuit: 200, glass: 200 };
   const json = serialize(st);
   writeFileSync(`public/examples/${m.id}.json`, json);
-  console.log(`=> ${m.id}: seed ${best!.seed}, ${best!.ok}/${m.chains.length}, ${st.buildings.length} buildings, produced ${JSON.stringify(st.stats.produced)}, ${(json.length / 1024).toFixed(0)} KB`);
+  console.log(`=> ${m.id}: seed ${best!.seed}, ${best!.ok}/${m.chains.length}, ${best!.probs} problems, ${st.buildings.length} buildings, produced ${JSON.stringify(st.stats.produced)}, ${(json.length / 1024).toFixed(0)} KB`);
 }
