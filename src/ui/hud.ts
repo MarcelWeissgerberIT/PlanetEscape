@@ -89,6 +89,7 @@ export class Hud {
   private missionOpen = true;
   private drawerOpen = false;
   private lastInv: Partial<Record<ItemId, number>> = {};
+  private hudAnim: 'drawer' | 'mission' | null = null;
   private panelOpenedAt = 0;
   private undoStack: { id: number; t: number }[] = [];
   private clipboard: Blueprint | null = null;
@@ -1034,7 +1035,7 @@ export class Hud {
         }).join('') || `<span class="inv-empty">${t('inventory')}</span>`;
     this.lastInv = { ...inv };
     const tog = (act: string, ico: string, label: string, on: boolean) => `<button class="hd-toggle ${on ? 'on' : ''}" data-act="${act}">${icon(ico, 'sm')}<span>${label}</span><i>${on ? t('on') : t('off')}</i></button>`;
-    const drawerHtml = !this.drawerOpen ? '' : `<div class="hud-drawer">
+    const drawerHtml = !this.drawerOpen ? '' : `<div class="hud-drawer ${this.hudAnim === 'drawer' ? 'anim' : ''}">
         <section><h4>${t('hud_view')}</h4>
           ${hasCard ? tog('toggle-mission', 'flag', t('hud_goals'), this.missionOpen) : ''}
           ${tog('minimap', 'minimap', t('minimap'), this.minimapOpen)}
@@ -1066,7 +1067,7 @@ export class Hud {
             <div class="pbar"><div class="pfill" style="width:${ratio * 100}%"></div></div>
           </div>
           <button class="pill ${nProblems ? 'warn' : 'ok'}" data-act="diag">${nProblems ? `${icon('warn')} ${nProblems}` : icon('check')}</button>
-          <span class="hb-clock" title="${t('playtime')}">${fmtTime(st.time)}</span>
+          <span class="hb-clock" title="${t('playtime')}"></span>
           <div class="hb-pod">
             <button class="iconbtn ${this.cb.getSpeed() === 0 ? 'active' : ''}" data-act="pause" title="${t('pause')} (Space)">${this.cb.getSpeed() === 0 ? icon('play') : icon('pause')}</button>
             <button class="iconbtn speed ${this.cb.getSpeed() > 1 ? 'active' : ''}" data-act="speed" title="${t('speed')} (F)">${this.cb.getSpeed() > 1 ? `<b>${this.cb.getSpeed()}×</b>` : icon('fast')}</button>
@@ -1076,13 +1077,20 @@ export class Hud {
         </div>
       </div>
       ${drawerHtml}
-      ${missionShown ? `<button class="kora-card" data-act="missions">
+      ${missionShown ? `<button class="kora-card ${this.hudAnim === 'mission' ? 'anim' : ''}" data-act="missions">
         <img class="kora-avatar ${tut ? 'talk' : ''}" src="${uiUrl('kora.webp')}" alt="KORA">
         <div class="kora-body">${body}</div>
       </button>` : ''}`;
+    this.hudAnim = null;
     if (topHtml === this.lastTopHtml) return;
     this.lastTopHtml = topHtml;
     this.top.innerHTML = topHtml;
+    // looping glows (KORA, warnings) continue on the same beat instead of starting over with the new elements
+    const now = performance.now() / 1000;
+    this.top.querySelectorAll<HTMLElement>('.kora-avatar, .hb-mission img, .pill.warn').forEach((e) => {
+      const dur = parseFloat(getComputedStyle(e).animationDuration) || 0;
+      if (dur > 0) e.style.animationDelay = `-${(now % dur).toFixed(3)}s`;
+    });
     this.top.onclick = (e) => {
       const target = (e.target as HTMLElement).closest('[data-act], [data-chain]') as HTMLElement | null;
       if (!target) return;
@@ -1113,6 +1121,7 @@ export class Hud {
       } else if (act === 'toggle-mission' || act === 'drawer') {
         if (act === 'drawer') this.drawerOpen = !this.drawerOpen;
         else this.missionOpen = !this.missionOpen;
+        this.hudAnim = act === 'drawer' ? 'drawer' : 'mission'; // slides in once, not on every refresh
         sfx.select();
         this.saveHudPrefs();
         this.lastTopHtml = '';
@@ -3528,7 +3537,9 @@ export class Hud {
     this.renderBottom();
     this.renderTop();
     const job = this.sim.printQueue()[0];
-    const fill = this.bottom.querySelector('#printfill') as HTMLElement | null;
+    const fill = this.top.querySelector('#printfill') as HTMLElement | null; // the printer sits in the header
+    const clock = this.top.querySelector('.hb-clock');
+    if (clock) clock.textContent = fmtTime(this.sim.state.time); // outside the header HTML: no rebuild every second
     if (fill && job) fill.style.width = `${Math.round((1 - job.left / job.total) * 100)}%`;
     if (this.printerOpen) this.renderPrinter();
     if (this.selected?.site) this.showInfo(this.selected);
