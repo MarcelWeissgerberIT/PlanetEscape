@@ -1421,3 +1421,31 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
   .hb-res .print-strip { display: none; } /* the printer sits in the drawer's store on phones */
 }
 .hb-res { min-width: 0; }
+
+/* =====================================================================================
+   Overlays, compact: tooltips as small cards, objectives with progress bars, descriptions
+   cut to a line or two (tap opens them in full)
+   ===================================================================================== */
+.tip { width: 280px; max-width: calc(100vw - 20px); padding: 12px 14px; --edge: rgba(34, 211, 238, 0.45); }
+.tip .tip-head b { display: block; font-family: var(--disp); font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; }
+.tip-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 3px; }
+.tip-chips i { font-style: normal; font-family: var(--disp); font-size: 10.5px; letter-spacing: 0.06em; padding: 1px 6px; color: #cbd5e1; border: 1px solid rgba(148, 163, 184, 0.3); }
+.tip-chips .ok { color: var(--ok); }
+.tip p.tip-desc { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; margin: 8px 0; }
+.tip .tip-recipe.more { color: var(--muted); }
+.tip-link { display: inline-block; margin-top: 8px; padding: 0; background: none; border: 0; cursor: pointer; font-family: var(--disp); font-size: 11.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: var(--accent); }
+.tip-link:hover { text-shadow: 0 0 8px rgba(34, 211, 238, 0.8); }
+.clamp1 { display: -webkit-box; -webkit-line-clamp: 1; -webkit-box-orient: vertical; overflow: hidden; }
+.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; cursor: pointer; }
+.clamp2.open { -webkit-line-clamp: unset; display: block; }
+.kora-card .mtext.kora-says { color: #e0f2fe; }
+/* objectives: each row carries its own progress as a thin bar along the bottom */
+.mrow { position: relative; padding: 3px 0 5px; }
+.mrow::after { content: ''; position: absolute; left: 24px; right: 0; bottom: 1px; height: 2px; background: linear-gradient(90deg, var(--accent) var(--p, 0%), rgba(148, 163, 184, 0.18) var(--p, 0%)); }
+.mrow.done::after { background: var(--ok); box-shadow: 0 0 6px rgba(52, 211, 153, 0.6); }
+.mrow.more::after { display: none; }
+.kora-card { max-width: min(330px, 66vw); }
+.kora-card .mtitle { font-size: 15px; }
+.info-title small.clamp2 { display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.info-title small.clamp2.open { display: block; }
+.info-title b { font-family: var(--disp); letter-spacing: 0.1em; }

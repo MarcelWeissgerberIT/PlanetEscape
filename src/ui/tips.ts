@@ -5,7 +5,6 @@ import type { Sim } from '../game/sim';
 import type { BuildingId, ItemId, TerrainId } from '../game/types';
 import { t, tBuilding, tBuildingDesc, tItem } from '../i18n';
 import { costHtml, itemImg } from './dom';
-import { icon } from './icons';
 
 /** Compact production chain for a tip: every node links to its blueprint. */
 export function miniTree(id: ItemId, n: number, depth: number, seen: Set<ItemId>): string {
@@ -30,13 +29,12 @@ export function buildingTipHtml(sim: Sim, id: BuildingId): string {
   const cost = Object.keys(def.cost).length ? costHtml(def.cost, st.inventory) : '–';
   const power = def.power ? `<span class="${def.power < 0 ? 'ok' : ''}">⚡ ${def.power < 0 ? '+' : '−'}${Math.abs(def.power)}</span>` : '';
   const rate = def.kind === 'miner' ? `${Math.round((60 / MINE_SECONDS) * sim.factor('miner'))}/min` : def.kind === 'conveyor' ? `${Math.round(sim.beltCapacity())}/min` : '';
-  return `<div class="tip-head"><img src="${buildingUrl(id)}" alt="" data-building="${id}"><div><b>${tBuilding(id)}</b><small>${def.size}×${def.size} ${power} ${rate ? '· ' + rate : ''}</small></div></div>
-    <p>${tBuildingDesc(id)}</p>
+  // compact card: name and key figures, two lines of description, cost, recipes; the full chain lives in the blueprint
+  return `<div class="tip-head"><img src="${buildingUrl(id)}" alt="" data-building="${id}"><div><b>${tBuilding(id)}</b><span class="tip-chips"><i>${def.size}×${def.size}</i>${power ? `<i>${power}</i>` : ''}${rate ? `<i>${rate}</i>` : ''}</span></div></div>
+    <p class="tip-desc">${tBuildingDesc(id)}</p>
     <div class="tip-line"><span>${t('cost')}</span>${cost}</div>
-    ${recipes.length ? `<div class="tip-line"><span>${t('recipes')}</span></div>${recipes.map((r) => recipeRow(r)).join('')}` : ''}
-    ${Object.keys(def.cost).length ? `<div class="tip-line"><span>${t('tip_chain_kit')}</span></div><ul class="mini-tree">${Object.entries(def.cost).map(([k, n]) => miniTree(k as ItemId, n!, 0, new Set())).join('')}</ul>` : ''}
-    <button class="btn small" data-bp-building="${id}">${icon('research', 'sm')} ${t('bp_title')}</button>
-    <small class="dim">${t('tip_hint')}</small>`;
+    ${recipes.slice(0, 3).map((r) => recipeRow(r)).join('')}${recipes.length > 3 ? `<div class="tip-recipe more">+${recipes.length - 3}</div>` : ''}
+    <button class="tip-link" data-bp-building="${id}">${t('bp_title')} ›</button>`;
 }
 
 export function itemTipHtml(id: ItemId): string {
@@ -45,10 +43,9 @@ export function itemTipHtml(id: ItemId): string {
   const terrain = (Object.keys(TERRAIN_ITEM) as TerrainId[]).find((k) => TERRAIN_ITEM[k] === id);
   const usedIn = used.map((r) => `${itemImg(r.output, 'icon xs')}`).join(' ');
   const costOf = BUILD_ORDER.filter((b) => id in BUILDINGS[b].cost).map((b) => tBuilding(b)).join(', ');
-  return `<div class="tip-head">${itemImg(id, 'icon')}<div><b>${tItem(id)}</b><small>${SHIP_PARTS[id] ? `🚀 ${t('ship_part')} · ${SHIP_PARTS[id]}` : ''}</small></div></div>
-    ${terrain ? `<p>${t('tip_mined', { m: tBuilding('miner') })}</p>` : made.map((r) => `<div class="tip-line"><span>${tBuilding(r.machine)}</span></div>${recipeRow(r)}`).join('')}
+  return `<div class="tip-head">${itemImg(id, 'icon')}<div><b>${tItem(id)}</b>${SHIP_PARTS[id] ? `<span class="tip-chips"><i>🚀 ${t('ship_part')} · ${SHIP_PARTS[id]}</i></span>` : ''}</div></div>
+    ${terrain ? `<p class="tip-desc">${t('tip_mined', { m: tBuilding('miner') })}</p>` : made.slice(0, 2).map((r) => `<div class="tip-line"><span>${tBuilding(r.machine)}</span></div>${recipeRow(r)}`).join('')}
     ${usedIn ? `<div class="tip-line"><span>${t('tip_used_in')}</span><span>${usedIn}</span></div>` : ''}
-    ${costOf ? `<div class="tip-line"><span>${t('tip_builds')}</span><span class="wrap">${costOf}</span></div>` : ''}
-    ${made.length ? `<div class="tip-line"><span>${t('tip_chain')}</span></div><ul class="mini-tree">${miniTree(id, 1, 0, new Set())}</ul>` : ''}
-    <button class="btn small" data-chain="${id}">${icon('research', 'sm')} ${t('bp_title')}</button>`;
+    ${costOf ? `<div class="tip-line"><span>${t('tip_builds')}</span><span class="wrap clamp1">${costOf}</span></div>` : ''}
+    <button class="tip-link" data-chain="${id}">${t('bp_title')} ›</button>`;
 }

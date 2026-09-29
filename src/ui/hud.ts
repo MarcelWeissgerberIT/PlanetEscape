@@ -969,14 +969,14 @@ export class Hud {
           shown
             .map(([k, n]) => {
               const have = Math.min(n!, st.launched ? st.delivered[k as ItemId] ?? 0 : Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0));
-              return `<div class="mrow ${have >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
+              return `<div class="mrow ${have >= n! ? 'done' : ''}" style="--p:${Math.round((have / n!) * 100)}%">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
             })
             .join('') + (entries.length > shown.length ? `<div class="mrow more">+${entries.length - shown.length} …</div>` : '');
         const builds = m.build
           ? Object.entries(m.build)
               .map(([k, n]) => {
                 const have = Math.min(n!, this.sim.countBuildings(k as BuildingId));
-                return `<div class="mrow ${have >= n! ? 'done' : ''}"><img class="icon sm" src="${buildingUrl(k as BuildingId)}" alt=""><span class="mname">${t('build_req')}: ${tBuilding(k)}</span><span class="mcount">${have}/${n}</span></div>`;
+                return `<div class="mrow ${have >= n! ? 'done' : ''}" style="--p:${Math.round((have / n!) * 100)}%"><img class="icon sm" src="${buildingUrl(k as BuildingId)}" alt=""><span class="mname">${t('build_req')}: ${tBuilding(k)}</span><span class="mcount">${have}/${n}</span></div>`;
               })
               .join('')
           : '';
@@ -984,8 +984,8 @@ export class Hud {
         const rateRows = rs && m.rate
           ? Object.entries(m.rate).map(([k, n]) => {
               const r = this.sim.deliveryRate(k as ItemId);
-              return `<div class="mrow rate ${r >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${t('rate_row', { item: tItem(k as ItemId) })}</span><span class="mcount">${r}/${n}</span></div>`;
-            }).join('') + `<div class="mrow rate ${rs.held >= rs.hold ? 'done' : ''}"><span class="mname">⏱ ${t('rate_hold')}</span><span class="mcount">${Math.floor(Math.min(rs.held, rs.hold))}/${rs.hold} s</span></div>`
+              return `<div class="mrow rate ${r >= n! ? 'done' : ''}" style="--p:${Math.min(100, Math.round((r / n!) * 100))}%">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${t('rate_row', { item: tItem(k as ItemId) })}</span><span class="mcount">${r}/${n}</span></div>`;
+            }).join('') + `<div class="mrow rate ${rs.held >= rs.hold ? 'done' : ''}" style="--p:${Math.min(100, Math.round((rs.held / rs.hold) * 100))}%"><span class="mname">⏱ ${t('rate_hold')}</span><span class="mcount">${Math.floor(Math.min(rs.held, rs.hold))}/${rs.hold} s</span></div>`
           : '';
       mrows = `<div class="mrows">${builds}${rows}${rateRows}</div>`;
     }
@@ -996,7 +996,7 @@ export class Hud {
       const mt = this.sim.challenge() ? { title: t(`ch_${m.id}` as 'ch_c_drills'), text: challengeRules(m.id) } : tMission(m.id);
       const num = this.sim.challenge() ? `🏁 ${st.challengeDone !== undefined ? `${MEDALS[challengeMedal(st.challenge!, st.challengeDone)] || '✓'} ${fmtTime(st.challengeDone)}` : `⏱ ${fmtTime(st.time)}`}` : st.launched ? `🚀 ${t('flight')} ${(st.flights ?? 0) + 1}` : `${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}`;
       body = `<div class="mtitle"><span class="mnum">${num}</span> ${mt.title}</div>
-        <div class="mtext">${this.koraMsg && this.koraMsgT > 0 ? this.koraMsg : mt.text}</div>
+        <div class="mtext ${this.koraMsg && this.koraMsgT > 0 ? 'kora-says' : 'clamp1'}">${this.koraMsg && this.koraMsgT > 0 ? this.koraMsg : mt.text}</div>
         ${this.koraMsg && this.koraMsgT > 0 && this.koraAction ? `<div class="mact"><span class="btn small primary" data-act="kora-action">${this.koraAction.label}</span></div>` : ''}
         ${mrows}`;
     } else body = `<div class="mtitle">🚀 ${t('launch_title')}</div>`;
@@ -1854,7 +1854,7 @@ export class Hud {
       const parts = Object.entries(SHIP_PARTS)
         .map(([k, n]) => {
           const have = Math.min(n!, st.ship[k as ItemId] ?? 0);
-          return `<div class="mrow ${have >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
+          return `<div class="mrow ${have >= n! ? 'done' : ''}" style="--p:${Math.round((have / n!) * 100)}%">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
         })
         .join('');
       const p = Math.round(this.sim.shipProgress() * 100);
@@ -2135,6 +2135,11 @@ export class Hud {
     this.info.addEventListener('pointercancel', up);
     this.info.addEventListener('pointerleave', up);
     // keyboard building: the text field (phones) forwards every key
+    // a shortened description opens in full on a tap
+    this.info.addEventListener('click', (e) => {
+      const more = (e.target as HTMLElement).closest('[data-more]');
+      if (more) more.classList.toggle('open');
+    });
     this.info.addEventListener('keydown', (e) => {
       const b = this.selected;
       const input = (e.target as HTMLElement).closest('#kbinput') as HTMLInputElement | null;
@@ -2241,7 +2246,7 @@ export class Hud {
     this.info.innerHTML = `
       <div class="info-head">
         <img src="${buildingUrl(b.type)}" alt="" draggable="false" data-building="${b.type}" title="${t('bp_title')}">
-        <div class="info-title"><b>${tBuilding(b.type)}</b><small>${tBuildingDesc(b.type)}</small></div>
+        <div class="info-title"><b>${tBuilding(b.type)}</b><small class="clamp2" data-more>${tBuildingDesc(b.type)}</small></div>
         <button class="iconbtn" data-act="close">${icon('close')}</button>
       </div>
       <div class="info-body">${b.site ? siteLine(this.sim, b) : ''}${this.infoBody(b)}</div>
@@ -2842,7 +2847,7 @@ export class Hud {
           : Object.entries(m.deliver)
               .map(([k, n]) => {
                 const have = state === 'done' ? n! : Math.min(n!, Math.max(st.delivered[k as ItemId] ?? 0, st.ship[k as ItemId] ?? 0));
-                return `<div class="mrow ${have >= n! ? 'done' : ''}">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
+                return `<div class="mrow ${have >= n! ? 'done' : ''}" style="--p:${Math.round((have / n!) * 100)}%">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
               })
               .join('');
       const unlocks = [...m.unlocks.map((u) => tBuilding(u)), ...m.unlockRecipes.map((r) => tItem(RECIPE_BY_ID[r].output))];
@@ -3441,7 +3446,6 @@ export class Hud {
     if (m) {
       const mt = tMission(m.id);
       this.koraSay(mt.text, 20);
-      this.toast(`▶ ${t('chapter')} ${st.missionIndex + 1}: <b>${mt.title}</b>`, 4000);
     }
     // the story slides (first start) come first and hand over to the briefing themselves
     if (st.options.mode === 'story' && this.story.classList.contains('hidden')) this.showBriefing();
