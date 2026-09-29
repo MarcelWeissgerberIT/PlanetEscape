@@ -205,6 +205,7 @@ export const sfx = {
   remove: () => tone(300, 0.12, 'sawtooth', 0.05, -150),
   error: () => tone(160, 0.18, 'square', 0.06, -40),
   select: () => tone(700, 0.05, 'sine', 0.04),
+  hover: () => tone(1250, 0.03, 'sine', 0.018),
   mission: () => {
     tone(523, 0.15, 'triangle', 0.08);
     setTimeout(() => tone(659, 0.15, 'triangle', 0.08), 120);

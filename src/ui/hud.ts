@@ -208,6 +208,25 @@ export class Hud {
     if (!this.titleHost) {
       this.title.innerHTML = `<div class="title-bg" style="background-image:url('${uiUrl('menu_bg.webp')}')"></div><div class="title-host"></div>${fullscreenAvailable() ? `<button class="iconbtn title-fs" data-act="fullscreen" title="${t('fullscreen')}" aria-label="${t('fullscreen')}">${icon('fullscreen')}</button>` : ''}`;
       this.titleHost = this.title.querySelector('.title-host') as HTMLElement;
+      this.title.insertAdjacentHTML('beforeend', `<div class="title-frame" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i><span class="title-build">${EDITION === 'demo' ? 'DEMO · ' : ''}BUILD ${__BUILD__}</span></div>`);
+      // menu entries: a soft tick on hover, arrow keys move between them (Enter / Space press the focused one)
+      let lastHover: Element | null = null;
+      this.title.addEventListener('pointerover', (e) => {
+        const b = (e.target as HTMLElement).closest('.aaa-item, .aaa-alt');
+        if (b && b !== lastHover) sfx.hover();
+        lastHover = b;
+      });
+      window.addEventListener('keydown', (e) => {
+        if (this.title.classList.contains('hidden') || !this.modal.classList.contains('hidden')) return;
+        if (e.key !== 'ArrowDown' && e.key !== 'ArrowUp') return;
+        const items = [...this.title.querySelectorAll<HTMLButtonElement>('.aaa-item, .aaa-alt')];
+        if (!items.length) return;
+        e.preventDefault();
+        const at = items.indexOf(document.activeElement as HTMLButtonElement);
+        const next = at < 0 ? 0 : (at + (e.key === 'ArrowDown' ? 1 : items.length - 1)) % items.length;
+        items[next].focus();
+        sfx.hover();
+      });
       // with reduced motion the still picture stays
       if (!matchMedia('(prefers-reduced-motion: reduce)').matches) this.bgVideo = new MenuVideo(this.title.querySelector('.title-bg') as HTMLElement);
     }
@@ -230,6 +249,18 @@ export class Hud {
     });
   }
 
+  /** What "continue" leads back to: mode, chapter or challenge, play time. */
+  private saveLine(): string {
+    const st = this.sim.state;
+    const m = MISSIONS[st.missionIndex];
+    const what =
+      st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}${m ? `: ${tMission(m.id).title}` : ''}`
+      : st.options.mode === 'playground' ? t('mode_playground')
+      : st.options.mode === 'challenge' && st.challenge ? `${t('mode_challenge')} · ${t(`ch_${st.challenge}` as 'ch_c_drills')}`
+      : `${t('mode_free')}${m ? ` · ${tMission(m.id).title}` : ''}`;
+    return `${what} · ${fmtTime(st.time)}`;
+  }
+
   private freeOptions: GameOptions = { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
   private titleView: 'main' | 'free' | 'playground' | 'challenges' = 'main';
 
@@ -238,26 +269,30 @@ export class Hud {
     const o = this.freeOptions;
     const seedInput = `<div class="seed-row"><input id="seed" type="text" inputmode="numeric" placeholder="${t('seed')}" maxlength="12"></div>`;
     const resume = resumeChapter();
+    // main menu: big numbered entries without boxes, a glass slab slides in behind the one in focus; the rest in a footer
+    let n = 0;
+    const item = (act: string, title: string, desc: string, cls = '') =>
+      `<button class="aaa-item ${cls}" data-act="${act}" style="--i:${n}"><span class="aaa-num">${String(++n).padStart(2, '0')}</span><span class="aaa-label"><b>${title}</b><small>${desc}</small></span><span class="aaa-chev" aria-hidden="true">›</span></button>`;
+    const resumeTitle = MISSIONS[resume - 1] ? tMission(MISSIONS[resume - 1].id).title : '';
     const mainView = `
-        <div class="title-buttons main-menu">
-          ${hasSave() ? `<button class="btn primary" data-act="continue">${t('continue')}</button>` : ''}
+        <nav class="aaa-nav main-menu">
+          ${hasSave() ? item('continue', t('continue'), this.saveLine(), 'primary') : ''}
           ${resume > 1
-            ? `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story-resume"><b>${t('mode_story')} · ${t('story_resume', { n: resume })}</b><small>${MISSIONS[resume - 1] ? tMission(MISSIONS[resume - 1].id).title + ' · ' : ''}${t('story_resume_desc')}</small></button>
-               <button class="btn ghost small-line" data-act="story">${t('story_restart')}</button>`
-            : `<button class="btn mode ${hasSave() ? '' : 'primary'}" data-act="story"><b>${t('mode_story')}</b><small>${t('mode_story_desc')}</small></button>`}
-          ${EDITION === 'demo' ? `<button class="btn mode locked" data-act="demo-locked"><b>🔒 ${t('mode_free')}</b><small>${t('demo_full_only')}</small></button>` : `<button class="btn mode" data-act="freeview"><b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small></button>`}
-          <button class="btn mode" data-act="playview"><b>${t('mode_playground')}</b><small>${t('mode_playground_desc')}</small></button>
-          <button class="btn mode" data-act="challview"><b>🏁 ${t('mode_challenge')} ${medalSummary()}</b><small>${t('mode_challenge_desc')}</small></button>
-          ${seedInput}
-          <div class="row2">
-            <button class="btn ghost" data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
-            <button class="btn ghost" data-act="howto">${t('how_to')}</button>
-          </div>
-          <button class="btn ghost small-line" data-act="replay-intro">🎬 ${t('intro_watch')}</button>
-          ${EDITION === 'demo' && STORE_URL ? `<button class="btn ghost" data-act="store">${t('demo_store')} →</button>` : ''}
-          ${EDITION === 'demo' && CAN_UNLOCK ? `<button class="btn ghost small-line" data-act="unlock">🔑 ${t('unlock_full')}</button>` : ''}
-          ${EDITION !== 'demo' && IS_DESKTOP && !Object.keys(loadProgress().stars).length ? `<button class="btn ghost" data-act="progress-import">${t('progress_import_title')}</button>` : ''}
-          ${IS_DESKTOP ? '' : `<a class="btn ghost ai-link" href="./ai/">${t('ai_page')} →</a>`}
+            ? item('story-resume', t('mode_story'), `${t('story_resume', { n: resume })}${resumeTitle ? ` · ${resumeTitle}` : ''}`, hasSave() ? '' : 'primary') + `<button class="aaa-alt" data-act="story" style="--i:${n}">↺ ${t('story_restart')}</button>`
+            : item('story', t('mode_story'), t('mode_story_desc'), hasSave() ? '' : 'primary')}
+          ${EDITION === 'demo' ? item('demo-locked', `🔒 ${t('mode_free')}`, t('demo_full_only'), 'locked') : item('freeview', t('mode_free'), t('mode_free_desc'))}
+          ${item('playview', t('mode_playground'), t('mode_playground_desc'))}
+          ${item('challview', `${t('mode_challenge')} ${medalSummary()}`, t('mode_challenge_desc'))}
+          ${EDITION === 'demo' && STORE_URL ? item('store', `${t('demo_store')} →`, '', 'accent2') : ''}
+        </nav>
+        <div class="aaa-foot">
+          <button data-act="chapters">${t('chapter_list')} ${this.starsSummary()}</button>
+          <button data-act="howto">${t('how_to')}</button>
+          <button data-act="replay-intro">🎬 ${t('intro_watch')}</button>
+          ${EDITION === 'demo' && CAN_UNLOCK ? `<button data-act="unlock">🔑 ${t('unlock_full')}</button>` : ''}
+          ${EDITION !== 'demo' && IS_DESKTOP && !Object.keys(loadProgress().stars).length ? `<button data-act="progress-import">${t('progress_import_title')}</button>` : ''}
+          ${IS_DESKTOP ? '' : `<a class="ai-link" href="./ai/">${t('ai_page')} →</a>`}
+          <span class="aaa-lang"><button class="${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span>
         </div>`;
     const playView = `
         <div class="title-buttons">
@@ -294,17 +329,16 @@ export class Hud {
           <button class="btn primary" data-act="free">${t('start_free')}</button>
           <button class="btn ghost" data-act="back">${t('back')}</button>
         </div>`;
+    const main = this.titleView === 'main';
     this.titleShell().innerHTML = `
-      <div class="title-content">
+      <div class="title-content aaa ${main ? '' : 'sub'}">
         <h1 class="logo"><span>PLANET</span><span class="accent">ESCAPE</span></h1>
         <p class="tagline">${t('tagline')}</p>
-        ${this.titleView === 'main' ? `<p class="intro">${t('intro')}</p>` : this.titleView === 'challenges' ? `<p class="intro"><b>🏁 ${t('mode_challenge')}</b> · ${t('ch_intro')}</p>` : this.titleView === 'playground' ? `<p class="intro"><b>${t('mode_playground')}</b> · ${t('mode_playground_desc')}</p>` : `<p class="intro"><b>${t('mode_free')}</b> · ${t('mode_free_desc')}</p>`}
-        ${this.titleView === 'main' ? mainView : this.titleView === 'playground' ? playView : this.titleView === 'challenges' ? challView : freeView}
-        <div class="lang-switch">
-          <button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">Deutsch</button>
-          <button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">English</button>
-        </div>
-        <p class="save-hint">${t('seed_hint')}<br>${t('save_hint')}</p>
+        ${main ? mainView : `<section class="aaa-panel">
+          <header class="aaa-panel-head">${this.titleView === 'challenges' ? `<b>${t('mode_challenge')}</b><small>${t('ch_intro')}</small>` : this.titleView === 'playground' ? `<b>${t('mode_playground')}</b><small>${t('mode_playground_desc')}</small>` : `<b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small>`}</header>
+          ${this.titleView === 'playground' ? playView : this.titleView === 'challenges' ? challView : freeView}
+          ${this.titleView === 'free' ? `<p class="save-hint">${t('seed_hint')}</p>` : ''}
+        </section>`}
       </div>`;
     this.title.onclick = (e) => {
       const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
