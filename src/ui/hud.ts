@@ -88,6 +88,7 @@ export class Hud {
   /** header: the mission card below it and the drawer with view switches, controls and the whole store (remembered) */
   private missionOpen = true;
   private drawerOpen = false;
+  private lastInv: Partial<Record<ItemId, number>> = {};
   private panelOpenedAt = 0;
   private undoStack: { id: number; t: number }[] = [];
   private clipboard: Blueprint | null = null;
@@ -107,6 +108,23 @@ export class Hud {
     this.title = el('div', 'title-screen');
     this.story = el('div', 'story hidden');
     this.loadHudPrefs();
+    window.addEventListener(
+      'keydown',
+      (e) => {
+        if (!this.title.classList.contains('hidden') || !this.modal.classList.contains('hidden')) return;
+        if (/^[1-9]$/.test(e.key) && !this.pauseOpen && !this.input.captureKeys && !(e.target as HTMLElement)?.closest?.('input, textarea') && !e.ctrlKey && !e.metaKey && !e.altKey) {
+          const btn = this.bottom.querySelectorAll<HTMLButtonElement>('.build-bar .build-btn[data-build]')[Number(e.key) - 1];
+          if (btn && !btn.disabled) btn.click();
+          return;
+        }
+        if (e.key !== 'Escape') return;
+        if (this.pauseOpen) {
+          e.stopPropagation();
+          this.resumeGame();
+        } else if (this.tool.kind === 'none' && !this.selected) this.showMenu();
+      },
+      true,
+    );
     this.top = el('div', 'hud-top');
     this.bottom = el('div', 'hud-bottom');
     this.info = el('div', 'info-panel hidden');
@@ -1008,7 +1026,13 @@ export class Hud {
     const invIds = ITEM_ORDER.filter((id) => (inv[id] ?? 0) > 0);
     const resHtml = this.editor
       ? `<span class="inv-empty">∞ ${t('ed_free')}</span>`
-      : invIds.map((id) => `<button class="inv-item" data-chain="${id}" title="${tItem(id)}">${itemImg(id, 'icon sm')}<b>${inv[id]}</b></button>`).join('') || `<span class="inv-empty">${t('inventory')}</span>`;
+      : invIds.map((id) => {
+          // a count that just changed flashes once (green up, amber down)
+          const prev = this.lastInv[id];
+          const ch = prev === undefined || prev === inv[id] ? '' : inv[id]! > prev ? 'up' : 'down';
+          return `<button class="inv-item ${ch}" data-chain="${id}" title="${tItem(id)}">${itemImg(id, 'icon sm')}<b>${inv[id]}</b></button>`;
+        }).join('') || `<span class="inv-empty">${t('inventory')}</span>`;
+    this.lastInv = { ...inv };
     const tog = (act: string, ico: string, label: string, on: boolean) => `<button class="hd-toggle ${on ? 'on' : ''}" data-act="${act}">${icon(ico, 'sm')}<span>${label}</span><i>${on ? t('on') : t('off')}</i></button>`;
     const drawerHtml = !this.drawerOpen ? '' : `<div class="hud-drawer">
         <section><h4>${t('hud_view')}</h4>
@@ -1042,10 +1066,13 @@ export class Hud {
             <div class="pbar"><div class="pfill" style="width:${ratio * 100}%"></div></div>
           </div>
           <button class="pill ${nProblems ? 'warn' : 'ok'}" data-act="diag">${nProblems ? `${icon('warn')} ${nProblems}` : icon('check')}</button>
-          <button class="iconbtn ${this.cb.getSpeed() === 0 ? 'active' : ''}" data-act="pause" title="${t('pause')} (Space)">${this.cb.getSpeed() === 0 ? icon('play') : icon('pause')}</button>
-          <button class="iconbtn speed ${this.cb.getSpeed() > 1 ? 'active' : ''}" data-act="speed" title="${t('speed')} (F)">${this.cb.getSpeed() > 1 ? `<b>${this.cb.getSpeed()}×</b>` : icon('fast')}</button>
-          <button class="iconbtn hb-menu" data-act="menu" title="${t('menu')}">${icon('menu')}</button>
-          <button class="iconbtn hb-expand ${this.drawerOpen ? 'active' : ''}" data-act="drawer" title="${t('hud_more')}">${icon('chevron')}</button>
+          <span class="hb-clock" title="${t('playtime')}">${fmtTime(st.time)}</span>
+          <div class="hb-pod">
+            <button class="iconbtn ${this.cb.getSpeed() === 0 ? 'active' : ''}" data-act="pause" title="${t('pause')} (Space)">${this.cb.getSpeed() === 0 ? icon('play') : icon('pause')}</button>
+            <button class="iconbtn speed ${this.cb.getSpeed() > 1 ? 'active' : ''}" data-act="speed" title="${t('speed')} (F)">${this.cb.getSpeed() > 1 ? `<b>${this.cb.getSpeed()}×</b>` : icon('fast')}</button>
+            <button class="iconbtn hb-menu" data-act="menu" title="${t('menu')} (Esc)">${icon('menu')}</button>
+            <button class="iconbtn hb-expand ${this.drawerOpen ? 'active' : ''}" data-act="drawer" title="${t('hud_more')}">${icon('chevron')}</button>
+          </div>
         </div>
       </div>
       ${drawerHtml}
@@ -1239,14 +1266,16 @@ export class Hud {
     if (!groups.some((g) => g.id === this.buildTab) && groups.length) this.buildTab = groups[0].id;
     const tabItems = groups.length > 1 ? new Set(groups.find((g) => g.id === this.buildTab)!.items) : null;
     const tabsHtml = groups.length > 1 ? `<div class="build-tabs">${groups.map((g) => `<button class="chip ${g.id === this.buildTab ? 'active' : ''}" data-btab="${g.id}">${t(`group_${g.id}` as 'group_logistics')}</button>`).join('')}</div>` : '';
+    let slot = 0; // number keys 1–9 pick the first nine parts of the open tab
     const buildHtml = BUILD_ORDER.filter((id) => !tabItems || tabItems.has(id)).map((id) => {
       const def = BUILDINGS[id];
       const unlocked = this.editor || st.unlockedBuildings.includes(id);
       const affordable = this.editor || this.sim.canBuild(id);
       const kitN = this.editor || this.sim.creative ? 0 : st.kits?.[id] ?? 0;
       const active = this.tool.kind === 'build' && this.tool.type === id;
+      const key = ++slot <= 9 ? `<kbd class="bkey">${slot}</kbd>` : '';
       return `<button class="build-btn ${active ? 'active' : ''} ${unlocked ? '' : 'locked'} ${affordable ? '' : 'poor'} ${hint === id ? 'hint' : ''}" data-build="${id}" ${unlocked ? '' : 'disabled'}>
-          <img src="${buildingUrl(id)}" alt="" draggable="false">
+          ${key}<img src="${buildingUrl(id)}" alt="" draggable="false">
           <span class="bname">${tBuilding(id)}</span>
           <span class="bcost">${unlocked ? costHtml(def.cost, inv) : '🔒'}</span>
           ${def.power ? `<span class="bpower ${def.power < 0 ? 'gen' : ''}">⚡${Math.abs(def.power)}</span>` : ''}
@@ -1274,10 +1303,10 @@ export class Hud {
       <div class="build-row">
         <div class="build-bar">${this.editor && this.editorTab === 'terrain' ? paletteHtml : buildHtml}</div>
         <div class="tool-col">
-          <button class="iconbtn big" data-act="rotate" title="${t('rotate')} (R)">${icon('rotate')}</button>
-          <button class="iconbtn big ${delActive ? 'danger-active' : ''}" data-act="delete" title="${t('delete')} (X)">${icon('close')}</button>
-          <button class="iconbtn big ${this.undoStack.length ? '' : 'dim'}" data-act="undo" title="${t('undo')} (Z)">${icon('undo')}</button>
-          <button class="iconbtn big ${this.tool.kind === 'select' ? 'active' : ''}" data-act="copy" title="${t('copy')} (C)">${icon('copy')}</button>
+          <button class="iconbtn big" data-act="rotate" title="${t('rotate')} (R)">${icon('rotate')}<kbd>R</kbd></button>
+          <button class="iconbtn big ${delActive ? 'danger-active' : ''}" data-act="delete" title="${t('delete')} (X)">${icon('close')}<kbd>X</kbd></button>
+          <button class="iconbtn big ${this.undoStack.length ? '' : 'dim'}" data-act="undo" title="${t('undo')} (Z)">${icon('undo')}<kbd>Z</kbd></button>
+          <button class="iconbtn big ${this.tool.kind === 'select' ? 'active' : ''}" data-act="copy" title="${t('copy')} (C)">${icon('copy')}<kbd>C</kbd></button>
         </div>
       </div>`;
     if (bottomHtml === this.lastBottomHtml) return;
@@ -3040,83 +3069,146 @@ export class Hud {
     });
   }
 
+  // ---------- Pause screen: the in-game menu in the main menu's style, the game stands still behind it ----------
+
+  private pauseEl: HTMLElement | null = null;
+  private pauseTab: 'stats' | 'settings' = 'stats';
+  private pauseSpeed = 1;
+
+  get pauseOpen(): boolean {
+    return !!this.pauseEl && !this.pauseEl.classList.contains('hidden');
+  }
+
   showMenu() {
+    if (!this.pauseEl) {
+      this.pauseEl = el('div', 'pause-screen hidden');
+      this.modal.before(this.pauseEl); // under the dialogs it opens (blueprints, achievements …)
+      this.pauseEl.addEventListener('pointerover', (e) => {
+        const b = (e.target as HTMLElement).closest('.aaa-item');
+        if (b && b !== this.pauseHover) sfx.hover();
+        this.pauseHover = b;
+      });
+    }
+    if (!this.pauseOpen) {
+      this.pauseSpeed = this.cb.getSpeed() || 1;
+      this.cb.onSpeed(0);
+      this.pauseTab = 'stats';
+    }
+    this.pauseEl.classList.remove('hidden');
+    this.renderPause();
+  }
+
+  private pauseHover: Element | null = null;
+
+  /** Back to the game at the speed it had. */
+  resumeGame() {
+    if (!this.pauseOpen) return;
+    this.pauseEl!.classList.add('hidden');
+    this.cb.onSpeed(this.pauseSpeed || 1);
+    this.lastTopHtml = '';
+    this.renderTop();
+  }
+
+  private renderPause() {
+    const el0 = this.pauseEl!;
     const lang = getLang();
     const st = this.sim.state;
-    const produced = Object.entries(st.stats.produced)
-      .sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0))
-      .slice(0, 8)
-      .map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon xs')}${n}</span>`)
-      .join(' ');
-    this.openModal(
-      `<h2>${icon('menu', 'sm')} ${t('menu')}</h2>
-      <div class="mgrid">
-        <div class="stat"><small>${t('mode')}</small><b>${st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}/${MISSIONS.length}` : st.options.mode === 'playground' ? t('mode_playground') : st.options.mode === 'challenge' ? `${t('mode_challenge')} · ${t(`ch_${st.challenge}` as 'ch_c_drills')}` : t('mode_free')}</b></div>
-        <div class="stat"><small>${t('playtime')}</small><b>${fmtTime(st.time)}</b></div>
-        <div class="stat"><small>${t('seed')}</small><b class="mono">${st.seed}</b></div>
-        <div class="stat"><small>Build</small><b class="mono">${__BUILD__}</b></div>
+    const m = MISSIONS[st.missionIndex];
+    const where = st.options.mode === 'story' ? `${t('mode_story')} · ${t('chapter')} ${st.missionIndex + 1}/${MISSIONS.length}${m ? ` · ${tMission(m.id).title}` : ''}`
+      : st.options.mode === 'playground' ? `${t('mode_playground')}${st.note?.title ? ` · ${st.note.title.split(' · ')[lang === 'de' ? 0 : 1] ?? st.note.title}` : ''}`
+      : st.options.mode === 'challenge' ? `${t('mode_challenge')} · ${t(`ch_${st.challenge}` as 'ch_c_drills')}` : t('mode_free');
+    let n = 0;
+    const item = (act: string, title: string, desc: string, cls = '') =>
+      `<button class="aaa-item ${cls}" data-act="${act}" style="--i:${n}"><span class="aaa-num">${String(++n).padStart(2, '0')}</span><span class="aaa-label"><b>${title}</b><small>${desc}</small></span><span class="aaa-chev" aria-hidden="true">›</span></button>`;
+    const got = Object.keys(earned()).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
+    const produced = Object.entries(st.stats.produced).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0)).slice(0, 12);
+    const seg = (key: string, on: boolean) => `<span class="seg"><button class="chip ${on ? 'active' : ''}" data-${key}="on">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-${key}="off">${t('off')}</button></span>`;
+    const side = this.pauseTab === 'settings'
+      ? `<header class="aaa-panel-head"><b>${t('settings')}</b><small>${t('pause_settings_desc')}</small></header>
+        <div class="mset">
+          <div class="menu-row"><span>${t('language')}</span><span class="seg"><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
+          <div class="menu-row"><span>${t('sound')}</span>${seg('sound', soundEnabled())}</div>
+          <div class="menu-row"><span>${t('ambience')}</span>${seg('ambient', ambientEnabled())}</div>
+          <div class="menu-row"><span>${t('day_night')}</span>${seg('daynight', Renderer.dayNight)}</div>
+          ${fullscreenAvailable() ? `<div class="menu-row"><span>${t('fullscreen')}</span><span class="seg"><button class="chip" data-act="fullscreen">${icon('fullscreen', 'sm')}</button></span></div>` : ''}
+        </div>`
+      : `<header class="aaa-panel-head"><b>${t('pause_status')}</b><small>${where}</small></header>
+        <div class="pause-stats">
+          <div><small>${t('playtime')}</small><b>${fmtTime(st.time)}</b></div>
+          <div><small>${t('pause_buildings')}</small><b>${st.buildings.length}</b></div>
+          <div><small>${t('achievements')}</small><b>${got}/${ACHIEVEMENTS.length}</b></div>
+          <div><small>${t('seed')}</small><b>${st.seed}</b></div>
+        </div>
+        ${produced.length ? `<h4 class="pause-h4">${t('produced')}</h4><div class="pause-prod">${produced.map(([k, v]) => `<span>${itemImg(k as ItemId, 'icon sm')}<b>${v}</b><small>${tItem(k as ItemId)}</small></span>`).join('')}</div>` : ''}`;
+    const editorItem = st.options.mode === 'free' || st.options.mode === 'playground'
+      ? this.editor ? item('edtoggle', t('ed_play'), t('pause_editor_play')) + item('ednote', t('ed_note'), t('pause_ednote')) : item('edtoggle', t('editor'), t('pause_editor'))
+      : '';
+    el0.innerHTML = `
+      <div class="pause-shade"></div>
+      <div class="title-frame" aria-hidden="true"><i class="tl"></i><i class="tr"></i><i class="bl"></i><i class="br"></i><span class="title-build">BUILD ${__BUILD__}</span></div>
+      <div class="pause-col title-content aaa">
+        <div class="pause-tag"><span class="pause-bars"><i></i><i></i></span>${t('pause_title')}</div>
+        <h1 class="logo"><span>PLANET</span><span class="accent">ESCAPE</span></h1>
+        <p class="tagline">${where}</p>
+        <nav class="aaa-nav">
+          ${item('resume', t('resume'), t('pause_resume_desc'), 'primary')}
+          ${item('save', t('save_now'), t('save_hint'))}
+          ${item('settings', t('settings'), t('pause_settings_desc'), this.pauseTab === 'settings' ? 'sel' : '')}
+          ${item('blueprints', t('blueprints'), t('pause_blueprints'))}
+          ${item('achievements', t('achievements'), `${got}/${ACHIEVEMENTS.length}`)}
+          ${editorItem}
+          ${item('howto', t('how_to'), t('pause_howto'))}
+          ${item('new', t('to_main_menu'), t('pause_main_desc'), 'accent2')}
+          ${desktop() ? item('quit', t('quit'), t('pause_quit_desc')) : ''}
+        </nav>
+        <div class="aaa-foot">
+          <button data-act="transfer">${t('transfer_short')}</button>
+          ${st.note && !this.editor ? `<button data-act="note">${t('save_note')}</button>` : ''}
+          ${IS_DESKTOP ? '' : `<a class="ai-link" href="./ai/">${t('ai_page')} →</a>`}
+          <span class="aaa-lang"><button class="${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span>
+        </div>
       </div>
-      <h3>${icon('settings', 'sm')} ${t('settings')}</h3>
-      <div class="mset">
-        <div class="menu-row"><span>${t('language')}</span><span class="seg"><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
-        <div class="menu-row"><span>${t('sound')}</span><span class="seg"><button class="chip ${soundEnabled() ? 'active' : ''}" data-sound="on">${t('on')}</button><button class="chip ${soundEnabled() ? '' : 'active'}" data-sound="off">${t('off')}</button></span></div>
-        <div class="menu-row"><span>${t('ambience')}</span><span class="seg"><button class="chip ${ambientEnabled() ? 'active' : ''}" data-ambient="on">${t('on')}</button><button class="chip ${ambientEnabled() ? '' : 'active'}" data-ambient="off">${t('off')}</button></span></div>
-        <div class="menu-row"><span>${t('day_night')}</span><span class="seg"><button class="chip ${Renderer.dayNight ? 'active' : ''}" data-daynight="on">${t('on')}</button><button class="chip ${Renderer.dayNight ? '' : 'active'}" data-daynight="off">${t('off')}</button></span></div>
-      </div>
-      <h3>${icon('save', 'sm')} ${t('section_save')}</h3>
-      <div class="mtiles">
-        <button class="tile" data-act="save">${icon('save')}<span>${t('save_now')}</span></button>
-        <button class="tile" data-act="transfer">${icon('transfer')}<span>${t('transfer_short')}</span></button>
-        <button class="tile" data-act="blueprints">${icon('blueprint')}<span>${t('blueprints')}</span></button>
-        ${st.note && !this.editor ? `<button class="tile" data-act="note">${icon('note')}<span>${t('save_note')}</span></button>` : ''}
-        ${st.options.mode === 'free' || st.options.mode === 'playground' ? (this.editor ? `<button class="tile" data-act="ednote">${icon('note')}<span>${t('ed_note')}</span></button><button class="tile primary" data-act="edtoggle">${icon('play')}<span>${t('ed_play')}</span></button>` : `<button class="tile" data-act="edtoggle">${icon('pencil')}<span>${t('editor')}</span></button>`) : ''}
-        <button class="tile" data-act="howto">${icon('help')}<span>${t('how_to')}</span></button>
-        ${IS_DESKTOP ? '' : `<a class="tile" href="./ai/">${icon('spark')}<span>${t('ai_page')}</span></a>`}
-        <button class="tile" data-act="achievements">${icon('trophy')}<span>${t('achievements')}</span></button>
-        ${fullscreenAvailable() ? `<button class="tile" data-act="fullscreen">${icon('fullscreen')}<span>${t('fullscreen')}</span></button>` : ''}
-        ${desktop() ? `<button class="tile" data-act="quit">${icon('power')}<span>${t('quit')}</span></button>` : ''}
-      </div>
-      <div class="row2"><button class="btn" data-act="new">‹ ${t('to_main_menu')}</button><button class="btn primary" data-act="close">${t('close')}</button></div>
-      <p class="save-hint">${t('save_hint')}${produced ? ` · ${t('produced')}: ${produced}` : ''}</p>`,
-      (target) => {
-        if (target.dataset.lang) {
-          setLang(target.dataset.lang as Lang);
-          this.renderAll();
-          this.showMenu();
-        } else if (target.dataset.sound) {
-          setSound(target.dataset.sound === 'on');
-          this.showMenu();
-        } else if (target.dataset.ambient) {
-          setAmbient(target.dataset.ambient === 'on');
-          this.showMenu();
-        } else if (target.dataset.daynight) {
-          Renderer.dayNight = target.dataset.daynight === 'on';
-          kv.set('pe_daynight', Renderer.dayNight ? '1' : '0');
-          this.showMenu();
-        } else if (target.dataset.act === 'howto') this.showHowTo();
-        else if (target.dataset.act === 'note') this.showNote();
-        else if (target.dataset.act === 'edtoggle') {
-          this.closeModal();
-          this.setEditor(!this.editor);
-        } else if (target.dataset.act === 'ednote') this.editNote();
-        else if (target.dataset.act === 'transfer') this.showTransfer();
-        else if (target.dataset.act === 'achievements') this.showAchievements();
-        else if (target.dataset.act === 'fullscreen') toggleFullscreen();
-        else if (target.dataset.act === 'quit') {
-          this.cb.onSave();
-          desktop()?.quit();
-        } else if (target.dataset.act === 'blueprints') this.showBlueprints();
-        else if (target.dataset.act === 'save') {
-          this.cb.onSave();
-          this.toast(`${icon('save', 'sm')} ${t('saved')}`, 1500, 'success');
-        } else if (target.dataset.act === 'new') {
-          this.closeModal();
-          this.cb.onSave();
-          this.titleView = 'main';
-          this.showTitle();
-        }
-      },
-    );
+      <aside class="pause-side aaa-panel">${side}</aside>`;
+    el0.onclick = (e) => {
+      const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
+      if (!target) return;
+      const act = target.dataset.act;
+      if (target.dataset.lang) {
+        setLang(target.dataset.lang as Lang);
+        this.renderAll();
+      } else if (target.dataset.sound) setSound(target.dataset.sound === 'on');
+      else if (target.dataset.ambient) setAmbient(target.dataset.ambient === 'on');
+      else if (target.dataset.daynight) {
+        Renderer.dayNight = target.dataset.daynight === 'on';
+        kv.set('pe_daynight', Renderer.dayNight ? '1' : '0');
+      } else if (act === 'resume') return this.resumeGame();
+      else if (act === 'settings') this.pauseTab = this.pauseTab === 'settings' ? 'stats' : 'settings';
+      else if (act === 'save') {
+        this.cb.onSave();
+        this.toast(`${icon('save', 'sm')} ${t('saved')}`, 1500, 'success');
+      } else if (act === 'howto') return this.showHowTo();
+      else if (act === 'note') return this.showNote();
+      else if (act === 'edtoggle') {
+        this.resumeGame();
+        return this.setEditor(!this.editor);
+      } else if (act === 'ednote') return this.editNote();
+      else if (act === 'transfer') return this.showTransfer();
+      else if (act === 'achievements') return this.showAchievements();
+      else if (act === 'fullscreen') toggleFullscreen();
+      else if (act === 'quit') {
+        this.cb.onSave();
+        desktop()?.quit();
+      } else if (act === 'blueprints') return this.showBlueprints();
+      else if (act === 'new') {
+        this.pauseEl!.classList.add('hidden');
+        this.cb.onSpeed(this.pauseSpeed || 1);
+        this.cb.onSave();
+        this.titleView = 'main';
+        return this.showTitle();
+      } else return;
+      sfx.select();
+      this.renderPause();
+    };
   }
 
   /** Export / import the save as text or file so it can move between devices. */

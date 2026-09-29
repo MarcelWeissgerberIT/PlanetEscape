@@ -1251,3 +1251,107 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
   .hb-short { display: inline; }
   .hb-mission { flex: none; }
 }
+
+/* =====================================================================================
+   Pause screen: the main menu's look over the frozen, blurred game
+   ===================================================================================== */
+.pause-screen { position: absolute; inset: 0; z-index: 46; display: flex; align-items: center; gap: 4vw; padding: 0 calc(max(32px, 4vw) + var(--sar)) 0 calc(max(32px, 4vw) + var(--sal)); overflow: hidden; }
+.pause-screen.hidden { display: none; }
+.pause-shade {
+  position: absolute; inset: 0; z-index: 0;
+  background: linear-gradient(90deg, rgba(4, 6, 10, 0.92) 0%, rgba(4, 6, 10, 0.78) 34%, rgba(4, 6, 10, 0.45) 62%, rgba(4, 6, 10, 0.7) 100%);
+  backdrop-filter: blur(10px) saturate(0.7); -webkit-backdrop-filter: blur(10px) saturate(0.7); animation: pausefade 0.3s ease-out both;
+}
+@keyframes pausefade { from { opacity: 0; } }
+.pause-screen .title-frame { z-index: 1; }
+.pause-screen .logo, .pause-screen .tagline, .pause-tag { font-family: var(--disp); }
+.pause-col { position: relative; z-index: 2; height: auto !important; max-height: 100%; overflow-y: auto !important; padding: calc(20px + var(--sat)) 0 calc(20px + var(--sab)) !important; scrollbar-width: none; }
+.pause-col::-webkit-scrollbar { display: none; }
+.pause-col .logo { font-size: clamp(38px, 4.4vw, 60px); }
+.pause-col .tagline { margin-bottom: 22px; font-size: 12px; letter-spacing: 0.24em; }
+.pause-tag { display: inline-flex; align-items: center; gap: 10px; margin-bottom: 14px; font-size: 13px; font-weight: 700; letter-spacing: 0.4em; text-transform: uppercase; color: var(--accent-2); animation: rise 0.5s ease-out both; }
+.pause-bars { display: inline-flex; gap: 4px; }
+.pause-bars i { width: 5px; height: 16px; background: var(--accent-2); box-shadow: 0 0 10px rgba(245, 158, 11, 0.8); animation: pauseblink 1.6s ease-in-out infinite; }
+@keyframes pauseblink { 50% { opacity: 0.35; } }
+.aaa-item.sel .aaa-label b { color: var(--accent); }
+.aaa-item.sel::after { height: 70%; }
+.aaa-item.accent2 .aaa-label b { color: #fde68a; }
+
+.pause-side { position: relative; z-index: 2; width: min(400px, 36vw); margin-left: auto; max-height: calc(100% - 80px - var(--sat) - var(--sab)); }
+.pause-stats { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.pause-stats div { padding: 10px 12px; background: rgba(255, 255, 255, 0.04); border-left: 2px solid rgba(34, 211, 238, 0.6); }
+.pause-stats small { display: block; font-family: var(--disp); font-size: 10.5px; letter-spacing: 0.18em; text-transform: uppercase; color: #94a3b8; }
+.pause-stats b { font-family: var(--disp); font-size: 22px; letter-spacing: 0.04em; }
+.pause-h4 { margin: 16px 0 8px; display: flex; align-items: center; gap: 10px; font-family: var(--disp); font-size: 11.5px; letter-spacing: 0.22em; text-transform: uppercase; color: var(--accent); }
+.pause-h4::after { content: ''; flex: 1; height: 1px; background: linear-gradient(90deg, rgba(34, 211, 238, 0.45), transparent); }
+.pause-prod { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 6px; }
+.pause-prod span { display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; column-gap: 8px; align-items: center; padding: 6px 8px; background: rgba(255, 255, 255, 0.035); }
+.pause-prod .icon { grid-row: span 2; }
+.pause-prod b { font-family: var(--disp); font-size: 15px; }
+.pause-prod small { color: #94a3b8; font-size: 11px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.pause-side .mset .menu-row { padding: 8px 0; border-bottom: 1px solid rgba(148, 163, 184, 0.12); }
+
+@media (max-width: 899px), (max-aspect-ratio: 4/3) {
+  .pause-screen { flex-direction: column; align-items: stretch; gap: 12px; padding: 0 18px; overflow-y: auto; }
+  .pause-col { overflow: visible !important; padding-bottom: 0 !important; width: 100% !important; }
+  .pause-side { width: auto; margin: 0 0 calc(24px + var(--sab)); max-height: none; }
+  .pause-screen .aaa-item:not(.primary) .aaa-label small { display: none; }
+  .pause-col .logo { font-size: 36px; }
+}
+
+/* =====================================================================================
+   Header and build bar, second pass: a control pod, a segmented power gauge, a clock,
+   flashing resource counts; the build bar as a hotbar with key caps, lifted cards and
+   a scanning frame on the chosen part.
+   ===================================================================================== */
+.hb-pod { display: flex; align-items: stretch; padding: 3px; gap: 2px; background: rgba(4, 7, 11, 0.55); border: 1px solid rgba(34, 211, 238, 0.25); clip-path: polygon(8px 0, 100% 0, 100% calc(100% - 8px), calc(100% - 8px) 100%, 0 100%, 0 8px); }
+.hb-pod .iconbtn { --edge: transparent; --fill: transparent; width: 38px !important; height: 38px !important; }
+.hb-pod .iconbtn + .iconbtn { box-shadow: -1px 0 0 rgba(148, 163, 184, 0.18) !important; }
+.hb-pod .iconbtn:hover, .hb-pod .iconbtn.active { --fill: linear-gradient(0deg, rgba(34, 211, 238, 0.3), rgba(34, 211, 238, 0.04)); box-shadow: inset 0 -2px 0 var(--accent) !important; }
+.hb-clock { font-family: var(--disp); font-size: 15px; font-weight: 700; letter-spacing: 0.08em; color: #e2e8f0; padding: 0 6px; font-variant-numeric: tabular-nums; text-shadow: 0 0 10px rgba(34, 211, 238, 0.35); }
+.hb-right .power { --edge: rgba(250, 204, 21, 0.35); min-width: 104px; }
+.hb-right .power .pbar { height: 6px; background: rgba(255, 255, 255, 0.08); -webkit-mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 9px); mask: repeating-linear-gradient(90deg, #000 0 7px, transparent 7px 9px); }
+.hb-right .power .pfill { background: linear-gradient(90deg, #22d3ee, #a5f3fc); box-shadow: 0 0 8px rgba(34, 211, 238, 0.8); }
+.hb-right .power.low .pfill { background: linear-gradient(90deg, #f97316, #ef4444); }
+.hb-res .inv-item { padding: 2px 10px 2px 0; border-right: 1px solid rgba(148, 163, 184, 0.16); }
+.hb-res .inv-item .icon { filter: drop-shadow(0 2px 4px rgba(0, 0, 0, 0.6)); }
+.hb-res .inv-item.up b { animation: countup 0.9s ease-out; }
+.hb-res .inv-item.down b { animation: countdown 0.9s ease-out; }
+@keyframes countup { 0% { color: #4ade80; text-shadow: 0 0 12px #4ade80; } }
+@keyframes countdown { 0% { color: #fbbf24; text-shadow: 0 0 12px #fbbf24; } }
+
+/* build bar: one glass deck with a lit top edge */
+.build-tabs { margin: 0 8px; border-bottom: 0 !important; }
+.build-bar { gap: 8px; padding: 10px 10px 8px; box-shadow: inset 0 1px 0 rgba(165, 243, 252, 0.25), 0 -10px 30px rgba(0, 0, 0, 0.35) !important; }
+.build-btn {
+  width: 88px; padding: 8px 4px 6px; transition: transform 0.18s cubic-bezier(0.2, 0.8, 0.2, 1), box-shadow 0.18s, filter 0.18s;
+  background-image: radial-gradient(circle at 50% 38%, rgba(34, 211, 238, 0.16), transparent 58%) !important;
+}
+.build-btn:not(.locked):hover { transform: translateY(-4px); }
+.build-btn img { filter: drop-shadow(0 6px 8px rgba(0, 0, 0, 0.6)); transition: transform 0.18s; }
+.build-btn:not(.locked):hover img { transform: scale(1.08); }
+.build-btn.active { transform: translateY(-4px); }
+.build-btn.active::after {
+  content: ''; position: absolute; inset: 0; pointer-events: none;
+  background: linear-gradient(180deg, transparent 0%, rgba(34, 211, 238, 0.28) 50%, transparent 100%) 0 -100% / 100% 50% no-repeat;
+  animation: scanline 1.6s linear infinite;
+}
+@keyframes scanline { to { background-position: 0 200%; } }
+.build-btn .bname { text-transform: uppercase; font-size: 10.5px; letter-spacing: 0.08em; }
+.bkey, .tool-col kbd {
+  position: absolute; left: 5px; bottom: 5px; min-width: 15px; height: 15px; padding: 0 3px; display: grid; place-items: center;
+  font: 700 10px/1 var(--disp); color: #cbd5e1; background: rgba(4, 7, 11, 0.75); border: 1px solid rgba(148, 163, 184, 0.4); pointer-events: none;
+}
+.build-btn .bkey { left: 4px; bottom: 4px; }
+.build-btn.active .bkey { color: #03141a; background: var(--accent); border-color: var(--accent); }
+.tool-col .iconbtn { position: relative; }
+.tool-col kbd { left: auto; right: 4px; bottom: 4px; font-size: 9px; }
+@media (hover: none) { .bkey, .tool-col kbd { display: none; } }
+@media (prefers-reduced-motion: reduce) { .build-btn.active::after { animation: none; } }
+@media (max-width: 899px) {
+  .hb-clock { display: none; }
+  .hb-pod { padding: 2px; }
+  .hb-pod .iconbtn { width: 32px !important; height: 32px !important; }
+  .hb-right .power { min-width: 0; }
+  .build-btn { width: 78px; }
+}
