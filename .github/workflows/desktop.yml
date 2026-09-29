@@ -57,16 +57,33 @@ jobs:
       - run: npm install --no-audit --no-fund
         working-directory: desktop
       # macOS is signed and notarized when the Apple secrets are set (see STEAM.md: signing); otherwise and on
-      # Windows/Linux the builds stay unsigned
+      # Windows/Linux the builds stay unsigned. Only set variables reach electron-builder (an empty CSC_LINK breaks it).
+      - name: Code signing
+        shell: bash
+        env:
+          CERT: ${{ secrets.MAC_CERT_P12_BASE64 }}
+          CERT_PASSWORD: ${{ secrets.MAC_CERT_PASSWORD }}
+          APPLE_ID_VALUE: ${{ secrets.APPLE_ID }}
+          APPLE_PASSWORD_VALUE: ${{ secrets.APPLE_APP_SPECIFIC_PASSWORD }}
+          APPLE_TEAM_VALUE: ${{ secrets.APPLE_TEAM_ID }}
+        run: |
+          if [ "$RUNNER_OS" = "macOS" ] && [ -n "$CERT" ]; then
+            echo "CSC_LINK=$(printf '%s' "$CERT" | tr -d '\r\n ')" >> "$GITHUB_ENV"
+            if [ -n "$CERT_PASSWORD" ]; then echo "CSC_KEY_PASSWORD=$CERT_PASSWORD" >> "$GITHUB_ENV"; fi
+            if [ -n "$APPLE_ID_VALUE" ]; then
+              echo "APPLE_ID=$APPLE_ID_VALUE" >> "$GITHUB_ENV"
+              echo "APPLE_APP_SPECIFIC_PASSWORD=$APPLE_PASSWORD_VALUE" >> "$GITHUB_ENV"
+              echo "APPLE_TEAM_ID=$APPLE_TEAM_VALUE" >> "$GITHUB_ENV"
+              echo "signed and notarized build"
+            else
+              echo "signed build (no APPLE_ID: not notarized)"
+            fi
+          else
+            echo "CSC_IDENTITY_AUTO_DISCOVERY=false" >> "$GITHUB_ENV"
+            echo "unsigned build"
+          fi
       - run: npx electron-builder --publish never
         working-directory: desktop
-        env:
-          CSC_IDENTITY_AUTO_DISCOVERY: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_P12_BASE64 != '' && 'true' || 'false' }}
-          CSC_LINK: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_P12_BASE64 || '' }}
-          CSC_KEY_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.MAC_CERT_PASSWORD || '' }}
-          APPLE_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_ID || '' }}
-          APPLE_APP_SPECIFIC_PASSWORD: ${{ matrix.os == 'macos-latest' && secrets.APPLE_APP_SPECIFIC_PASSWORD || '' }}
-          APPLE_TEAM_ID: ${{ matrix.os == 'macos-latest' && secrets.APPLE_TEAM_ID || '' }}
       - uses: actions/upload-artifact@v4
         with:
           name: planet-escape-${{ env.PE_EDITION }}-${{ matrix.os }}
