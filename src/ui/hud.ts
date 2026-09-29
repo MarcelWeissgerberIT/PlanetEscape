@@ -3093,34 +3093,45 @@ export class Hud {
 
   showUpgrades() {
     const st = this.sim.state;
+    // upgrades: a level bar, the factor now and after the next step, cost and the buy button
     const row = (u: (typeof UPGRADES)[number]) => {
       const lvl = st.upgrades[u.id] ?? 0;
       const cost = this.sim.upgradeCost(u.id);
       const can = this.sim.canUpgrade(u.id);
       const open = this.sim.upgradeUnlocked(u.id);
-      const pips = Array.from({ length: u.maxLevel }, (_, i) => `<i class="${i < lvl ? 'on' : ''}"></i>`).join('');
-      return `<div class="upgrade ${open ? '' : 'locked'}">
-        <div class="uname"><b>${tUpgrade(u.id)}</b> <span class="pips">${pips}</span><small>${t(`upgrade_desc_${u.id}` as 'upgrade_desc_belt')} · ×${u.factor(lvl).toFixed(2)}${!open && u.requires ? `<br>🔒 ${t('requires', { u: tUpgrade(u.requires.id), n: u.requires.level })}` : ''}</small></div>
-        ${cost ? `<div class="ucost">${costHtml(cost, st.inventory)}</div><button class="btn small ${can ? 'primary' : ''}" data-up="${u.id}" ${can ? '' : 'disabled'}>${t('upgrade_buy')}</button>` : `<span class="umax">${t('upgrade_max')}</span>`}
+      const bar = Array.from({ length: u.maxLevel }, (_, k) => `<i class="${k < lvl ? 'on' : ''}"></i>`).join('');
+      return `<div class="rs-card ${open ? '' : 'locked'} ${cost ? '' : 'max'}">
+        <div class="rs-head"><b>${tUpgrade(u.id)}</b><span class="rs-lvl">${lvl}/${u.maxLevel}</span></div>
+        <div class="rs-bar">${bar}</div>
+        <p>${t(`upgrade_desc_${u.id}` as 'upgrade_desc_belt')}</p>
+        <div class="rs-factor"><b>×${u.factor(lvl).toFixed(2)}</b>${cost ? ` <span>→</span> <b class="next">×${u.factor(lvl + 1).toFixed(2)}</b>` : ''}</div>
+        ${!open && u.requires ? `<div class="rs-why">${icon('lock', 'sm')} ${t('requires', { u: tUpgrade(u.requires.id), n: u.requires.level })}</div>` : ''}
+        <div class="rs-foot">${cost ? `<div class="ucost">${costHtml(cost, st.inventory)}</div><button class="btn small ${can ? 'primary' : ''}" data-up="${u.id}" ${can ? '' : 'disabled'}>${t('upgrade_buy')}</button>` : `<span class="umax">${t('upgrade_max')}</span>`}</div>
       </div>`;
     };
     const base = UPGRADES.filter((u) => !u.requires).map(row).join('');
     const tier2 = UPGRADES.filter((u) => u.requires).map(row).join('');
+    // projects: the parts they unlock large, a status tag, cost and the start button
     const projects = PROJECTS.map((p) => {
       const state = this.sim.projectState(p.id);
       const can = this.sim.canResearch(p.id);
-      const parts = p.unlocks.map((u) => `<img class="icon xs" src="${buildingUrl(u)}" alt="" data-bp-building="${u}" title="${tBuilding(u)}"> ${tBuilding(u)}`).join(' · ');
-      const why = state === 'mission' ? `🔒 ${t('bp_unlock_after', { n: p.after })}` : state === 'requires' ? `🔒 ${t('proj_requires', { p: (p.requires ?? []).map((r) => t(`proj_${r}` as 'proj_p_sensor')).join(', ') })}` : '';
-      return `<div class="upgrade project ${state === 'open' ? '' : 'locked'} ${state === 'done' ? 'done' : ''}">
-        <div class="uname"><b>${t(`proj_${p.id}` as 'proj_p_sensor')}</b><small>${parts}${why ? `<br>${why}` : ''}</small></div>
-        ${state === 'done' ? `<span class="umax">✓ ${t('proj_done')}</span>` : `<div class="ucost">${costHtml(p.cost, st.inventory)}</div><button class="btn small ${can ? 'primary' : ''}" data-proj="${p.id}" ${can ? '' : 'disabled'}>${t('proj_start')}</button>`}
+      const icons = p.unlocks.map((u) => `<img src="${buildingUrl(u)}" alt="" data-bp-building="${u}" title="${tBuilding(u)}">`).join('');
+      const names = p.unlocks.map((u) => tBuilding(u)).join(' · ');
+      const why = state === 'mission' ? t('bp_unlock_after', { n: p.after }) : state === 'requires' ? t('proj_requires', { p: (p.requires ?? []).map((r) => t(`proj_${r}` as 'proj_p_sensor')).join(', ') }) : '';
+      const tag = state === 'done' ? `<span class="rs-tag done">✓ ${t('proj_done')}</span>` : state === 'open' ? `<span class="rs-tag open">${t('proj_open')}</span>` : `<span class="rs-tag">${icon('lock', 'sm')}</span>`;
+      return `<div class="rs-card project ${state === 'open' ? '' : 'locked'} ${state === 'done' ? 'done' : ''}">
+        <div class="rs-icons">${icons}${tag}</div>
+        <div class="rs-head"><b>${t(`proj_${p.id}` as 'proj_p_sensor')}</b></div>
+        <p>${names}</p>
+        ${why ? `<div class="rs-why">${icon('lock', 'sm')} ${why}</div>` : ''}
+        ${state === 'done' ? '' : `<div class="rs-foot"><div class="ucost">${costHtml(p.cost, st.inventory)}</div><button class="btn small ${can ? 'primary' : ''}" data-proj="${p.id}" ${can ? '' : 'disabled'}>${t('proj_start')}</button></div>`}
       </div>`;
     });
     // open projects first, then the waiting ones, finished ones last
     const order = { open: 0, requires: 1, mission: 2, done: 3 };
     const sorted = PROJECTS.map((p, i) => ({ html: projects[i], o: order[this.sim.projectState(p.id)] })).sort((a, b) => a.o - b.o).map((x) => x.html).join('');
     this.pageNext = true; // opens as a full page in the menu style
-    this.openModal(`<h2>${t('research')}</h2><h3>${t('proj_title')}</h3><p class="save-hint">${t('proj_intro')}</p><div class="upgrade-list">${sorted}</div><h3>${t('upgrades')}</h3><div class="upgrade-list">${base}</div><h3>${t('upgrades')} II</h3><div class="upgrade-list">${tier2}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
+    this.openModal(`<h2>${t('research')}</h2><p class="page-sub">${t('proj_intro')}</p><h3>${t('proj_title')}</h3><div class="rs-grid">${sorted}</div><h3>${t('upgrades')}</h3><div class="rs-grid">${base}</div><h3>${t('upgrades')} II</h3><div class="rs-grid">${tier2}</div><button class="btn primary" data-act="close">${t('close')}</button>`, (target) => {
       const pid = target.dataset.proj;
       if (pid && this.sim.research(pid)) {
         sfx.mission();
