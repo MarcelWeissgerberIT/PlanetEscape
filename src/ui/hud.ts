@@ -566,9 +566,17 @@ export class Hud {
   /** Achievements window (menu). */
   showAchievements() {
     const have = earned();
-    const rows = ACHIEVEMENTS.map((a) => `<div class="ach ${have[a.id] ? 'got' : ''}"><img class="ach-icon" src="${achievementUrl(a.id)}" alt=""><div><b>${t(`ach_${a.id}` as 'ach_FIRST_PLATE')}</b><small>${t(`ach_${a.id}_desc` as 'ach_FIRST_PLATE_desc')}</small></div></div>`).join('');
+    // medal cards, earned ones first, each with the day it was earned
+    const got = ACHIEVEMENTS.filter((a) => have[a.id]).length;
+    const date = (ms: number) => new Date(ms).toLocaleDateString(getLang() === 'de' ? 'de-DE' : 'en-GB', { day: '2-digit', month: '2-digit', year: 'numeric' });
+    const rows = [...ACHIEVEMENTS].sort((a, b) => Number(!!have[b.id]) - Number(!!have[a.id])).map((a, k) => `<div class="ach-card ${have[a.id] ? 'got' : ''}" style="--i:${k}">
+        <span class="ach-medal"><img src="${achievementUrl(a.id)}" alt="">${have[a.id] ? '' : `<span class="ach-lock">${icon('lock', 'sm')}</span>`}</span>
+        <span class="ach-body"><b>${t(`ach_${a.id}` as 'ach_FIRST_PLATE')}</b><small>${t(`ach_${a.id}_desc` as 'ach_FIRST_PLATE_desc')}</small>${have[a.id] ? `<em>${t('ach_earned_on', { d: date(have[a.id]) })}</em>` : ''}</span>
+      </div>`).join('');
     this.pageNext = true; // opens as a full page in the menu style
-    this.openModal(`<h2>🏆 ${t('achievements')} · ${Object.keys(have).length}/${ACHIEVEMENTS.length}</h2><div class="ach-list">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`);
+    this.openModal(`<h2>${t('achievements')}</h2>
+      <div class="ach-progress"><b>${got}<small>/${ACHIEVEMENTS.length}</small></b><span class="ach-pbar"><i style="width:${Math.round((got / ACHIEVEMENTS.length) * 100)}%"></i></span><small>${Math.round((got / ACHIEVEMENTS.length) * 100)} %</small></div>
+      <div class="ach-grid">${rows}</div><button class="btn primary" data-act="close">${t('close')}</button>`);
   }
 
   /** Demo: the end of what it contains, with the way to the full game. */
@@ -1550,23 +1558,31 @@ export class Hud {
   showBlueprints() {
     const list = this.savedBlueprints();
     const presets = this.presetBlueprints();
-    const presetRows = presets
-      .map((bp, i) => `<div class="prob"><span class="pname"><b>${bp.name}</b><br><small>${bp.items.length} · ${bp.w}×${bp.h} · ${costHtml(Sim.blueprintCost(bp), this.sim.state.inventory)}</small></span><button class="btn small primary" data-preset="${i}">${t('bp_use')}</button></div>`)
-      .join('');
-    const rows = list
-      .map(
-        (bp, i) => `<div class="prob"><span class="pname"><b>${bp.name}</b><br><small>${bp.items.length} · ${bp.w}×${bp.h} · ${costHtml(Sim.blueprintCost(bp), this.sim.state.inventory)}</small></span>
-        <button class="btn small primary" data-use="${i}">${t('bp_use')}</button><button class="btn small danger" data-del="${i}">${icon('close', 'sm')}</button></div>`,
-      )
-      .join('');
+    // a card per blueprint: a small plan of its layout (the parts' sprites on a grid), size, parts, cost
+    const plan = (bp: Blueprint) => {
+      const cell = Math.min(22, 106 / bp.w, 80 / bp.h); // the plan always fits its 106×80 box
+      const imgs = bp.items.map((it) => {
+        const sz = BUILDINGS[it.type]?.size ?? 1;
+        return `<img src="${buildingUrl(it.type)}" alt="" style="left:${it.dx * cell}px;top:${it.dy * cell}px;width:${sz * cell}px;height:${sz * cell}px;transform:rotate(${BUILDINGS[it.type]?.rotatable ? it.dir * 90 : 0}deg)">`;
+      }).join('');
+      return `<span class="bp-plan"><span style="width:${bp.w * cell}px;height:${bp.h * cell}px;background-size:${cell}px ${cell}px">${imgs}</span></span>`;
+    };
+    const card = (bp: Blueprint, use: string, extra = '') => `<div class="bp-card">
+        ${plan(bp)}
+        <span class="bp-body"><b>${bp.name}</b><small>${bp.w}×${bp.h} · ${bp.items.length} ${t('bp_parts')}</small><span class="ucost">${costHtml(Sim.blueprintCost(bp), this.sim.state.inventory)}</span></span>
+        <span class="bp-actions"><button class="btn small primary" ${use}>${t('bp_use')}</button>${extra}</span>
+      </div>`;
+    const presetRows = presets.map((bp, i) => card(bp, `data-preset="${i}"`)).join('');
+    const rows = list.map((bp, i) => card(bp, `data-use="${i}"`, `<button class="btn small danger" data-del="${i}">${t('delete')}</button>`)).join('');
     this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
       `<h2>${icon('blueprint', 'sm')} ${t('blueprints')}</h2>
-      ${this.clipboard ? `<div class="prob"><span class="pname"><b>${t('bp_clipboard')}</b><br><small>${this.clipboard.items.length} · ${this.clipboard.w}×${this.clipboard.h}</small></span><button class="btn small primary" data-act="useclip">${t('bp_use')}</button><button class="btn small" data-act="saveclip">${icon('save', 'sm')}</button></div>` : ''}
-      <div class="prob-list">${rows || `<p>${t('bp_none')}</p>`}</div>
+      ${this.clipboard ? `<h3>${t('bp_clipboard')}</h3><div class="bp-grid">${card({ ...this.clipboard, name: t('bp_clipboard') }, 'data-act="useclip"', `<button class="btn small" data-act="saveclip">${t('save_now')}</button>`)}</div>` : ''}
+      <h3>${t('blueprints')}</h3>
+      <div class="bp-grid">${rows || `<p>${t('bp_none')}</p>`}</div>
       <h3>${t('presets')}</h3>
       <p class="save-hint">${t('presets_hint')}</p>
-      <div class="prob-list">${presetRows}</div>
+      <div class="bp-grid">${presetRows}</div>
       <button class="btn" data-act="select">${icon('copy', 'sm')} ${t('copy')}</button>
       <button class="btn primary" data-act="close">${t('close')}</button>`,
       (target) => {

@@ -1845,3 +1845,45 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .rs-tag { margin-left: auto; font-family: var(--disp); font-size: 10.5px; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; padding: 2px 7px; color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.35); display: inline-flex; align-items: center; }
 .rs-tag.open { color: #03141a; background: var(--accent); border-color: var(--accent); box-shadow: 0 0 10px rgba(34, 211, 238, 0.5); }
 .rs-tag.done { color: #03141a; background: var(--ok); border-color: var(--ok); }
+
+/* achievements: a progress line, then medal cards */
+.ach-progress { display: flex; align-items: center; gap: 16px; margin: -4px 0 18px; max-width: 700px; }
+.ach-progress b { font-family: var(--disp); font-size: 40px; line-height: 1; color: #fbbf24; text-shadow: 0 0 16px rgba(251, 191, 36, 0.5); }
+.ach-progress b small { font-size: 20px; color: #94a3b8; text-shadow: none; }
+.ach-pbar { flex: 1; height: 8px; background: rgba(148, 163, 184, 0.18); -webkit-mask: repeating-linear-gradient(90deg, #000 0 14px, transparent 14px 16px); mask: repeating-linear-gradient(90deg, #000 0 14px, transparent 14px 16px); }
+.ach-pbar i { display: block; height: 100%; background: linear-gradient(90deg, #f59e0b, #fde68a); }
+.ach-progress > small { font-family: var(--disp); color: #cbd5e1; letter-spacing: 0.1em; }
+.ach-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.ach-card {
+  display: flex; align-items: center; gap: 14px; padding: 12px 14px; animation: rise 0.35s ease-out both; animation-delay: calc(var(--i) * 0.03s);
+  background: linear-gradient(160deg, rgba(40, 52, 70, 0.45), rgba(10, 14, 20, 0.72)); border: 1px solid rgba(148, 163, 184, 0.16);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%);
+}
+.ach-card.got { border-color: rgba(245, 158, 11, 0.5); background: linear-gradient(160deg, rgba(90, 64, 20, 0.35), rgba(12, 12, 16, 0.75)); }
+.ach-medal { position: relative; flex: none; width: 64px; height: 64px; }
+.ach-medal img { width: 64px; height: 64px; border-radius: 50%; filter: grayscale(1) brightness(0.45); }
+.ach-card.got .ach-medal img { filter: drop-shadow(0 0 12px rgba(251, 191, 36, 0.45)); }
+.ach-lock { position: absolute; inset: 0; display: grid; place-items: center; color: #cbd5e1; }
+.ach-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.ach-body b { font-family: var(--disp); font-size: 15px; letter-spacing: 0.08em; text-transform: uppercase; }
+.ach-card:not(.got) .ach-body b { color: #94a3b8; }
+.ach-body small { color: #aab6c6; font-size: 12.5px; line-height: 1.35; }
+.ach-body em { font-style: normal; font-family: var(--disp); font-size: 11px; letter-spacing: 0.12em; text-transform: uppercase; color: #fbbf24; }
+
+/* blueprints: cards with a little plan of the layout */
+.bp-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(300px, 1fr)); gap: 10px; margin-bottom: 18px; }
+.bp-card {
+  display: grid; grid-template-columns: auto 1fr; grid-template-rows: auto auto; gap: 10px 14px; padding: 12px 14px;
+  background: linear-gradient(160deg, rgba(40, 52, 70, 0.5), rgba(10, 14, 20, 0.75)); border: 1px solid rgba(148, 163, 184, 0.18);
+  clip-path: polygon(0 0, calc(100% - 12px) 0, 100% 12px, 100% 100%, 0 100%); animation: rise 0.35s ease-out both;
+}
+.bp-plan { grid-row: span 2; align-self: start; display: grid; place-items: center; width: 120px; height: 94px; padding: 6px; background: rgba(8, 26, 44, 0.7); border: 1px solid rgba(34, 211, 238, 0.25); overflow: hidden; }
+.bp-plan > span { position: relative; display: block; background-image: linear-gradient(rgba(34, 211, 238, 0.12) 1px, transparent 1px), linear-gradient(90deg, rgba(34, 211, 238, 0.12) 1px, transparent 1px); }
+.bp-plan img { position: absolute; image-rendering: auto; }
+.bp-body { display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.bp-body b { font-family: var(--disp); font-size: 15px; letter-spacing: 0.06em; text-transform: uppercase; }
+.bp-body small { color: #aab6c6; font-size: 12px; }
+.bp-body .ucost { display: flex; flex-wrap: wrap; gap: 4px; font-size: 12px; }
+.bp-body .ucost .cost { padding: 1px 5px; background: rgba(0, 0, 0, 0.35); }
+.bp-actions { display: flex; flex-wrap: wrap; align-items: center; }
+.bp-actions .btn:not(.mode) { margin: 0 8px 0 0 !important; }
