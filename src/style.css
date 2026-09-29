@@ -1605,30 +1605,30 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 }
 .page-card .bp-scroll, .page-card .bp-canvas { background-color: rgba(8, 26, 44, 0.55) !important; }
 /* buttons read like the main menu: lettering with a lit bar, a glass slab slides in on hover */
-.page-card .btn, .page-card .row2 .btn {
+.modal-card .btn, .modal-card .row2 .btn {
   --edge: transparent !important; --fill: transparent !important; --base: transparent !important;
   background: none !important; border: 0 !important; box-shadow: none !important; clip-path: none !important;
   position: relative; width: auto !important; min-width: 0 !important; margin: 4px 18px 4px 0 !important; padding: 10px 20px 10px 16px !important;
   font-family: var(--disp); font-size: 16px !important; font-weight: 700; letter-spacing: 0.14em; text-transform: uppercase; color: #e2e8f0 !important; text-shadow: 0 2px 8px rgba(0, 0, 0, 0.8) !important;
   transition: color 0.2s, transform 0.2s;
 }
-.page-card .btn::before { content: ''; position: absolute; left: 0; top: 50%; width: 3px; height: 55%; transform: translateY(-50%); background: rgba(148, 163, 184, 0.5); transition: height 0.2s, background 0.2s, box-shadow 0.2s; }
-.page-card .btn::after {
+.modal-card .btn::before { content: ''; position: absolute; left: 0; top: 50%; width: 3px; height: 55%; transform: translateY(-50%); background: rgba(148, 163, 184, 0.5); transition: height 0.2s, background 0.2s, box-shadow 0.2s; }
+.modal-card .btn::after {
   content: ''; position: absolute; inset: 0; z-index: -1; opacity: 0; transform: scaleX(0.9); transform-origin: left; transition: opacity 0.2s, transform 0.25s;
   background: linear-gradient(90deg, rgba(34, 211, 238, 0.22), rgba(34, 211, 238, 0)); border-top: 1px solid rgba(165, 243, 252, 0.3);
   clip-path: polygon(0 0, 100% 0, calc(100% - 14px) 100%, 0 100%);
 }
-.page-card .btn:hover, .page-card .btn:focus-visible { color: #fff !important; transform: translateX(4px); outline: none; }
-.page-card .btn:hover::after, .page-card .btn:focus-visible::after { opacity: 1; transform: none; }
-.page-card .btn:hover::before { height: 80%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
-.page-card .btn.primary { color: #ecfeff !important; text-shadow: 0 0 14px rgba(34, 211, 238, 0.7), 0 2px 8px rgba(0, 0, 0, 0.8) !important; }
-.page-card .btn.primary::before { height: 80%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
-.page-card .btn.primary::after { opacity: 0.6; transform: none; }
-.page-card .btn.primary::after { content: ''; }
-.page-card .btn.primary > *:last-child::after { content: none; }
-.page-card .btn.small { font-size: 13px !important; padding: 7px 16px 7px 14px !important; }
-.page-card .row2 { display: flex; flex-wrap: wrap; gap: 0; justify-content: flex-start; }
-.page-card .btn[disabled] { opacity: 0.4; }
+.modal-card .btn:hover, .modal-card .btn:focus-visible { color: #fff !important; transform: translateX(4px); outline: none; }
+.modal-card .btn:hover::after, .modal-card .btn:focus-visible::after { opacity: 1; transform: none; }
+.modal-card .btn:hover::before { height: 80%; background: var(--accent); box-shadow: 0 0 10px var(--accent); }
+.modal-card .btn.primary { color: #ecfeff !important; text-shadow: 0 0 14px rgba(34, 211, 238, 0.7), 0 2px 8px rgba(0, 0, 0, 0.8) !important; }
+.modal-card .btn.primary::before { height: 80%; background: var(--accent); box-shadow: 0 0 12px var(--accent); }
+.modal-card .btn.primary::after { opacity: 0.6; transform: none; }
+.modal-card .btn.primary::after { content: ''; }
+.modal-card .btn.primary > *:last-child::after { content: none; }
+.modal-card .btn.small { font-size: 13px !important; padding: 7px 16px 7px 14px !important; }
+.modal-card .row2 { display: flex; flex-wrap: wrap; gap: 0; justify-content: flex-start; }
+.modal-card .btn[disabled] { opacity: 0.4; }
 /* chips (rate selectors, toggles) stay chips */
 .page-card .chip { font-family: var(--disp); }
 /* story pages: the clip wide, KORA's head as a caption line */
@@ -1642,3 +1642,7 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .page-card .launch .ship { max-width: 360px; }
 .page-card .stars-line, .page-card p { text-align: left; }
 .page-card h2 + .stars-big { margin-top: -6px; }
+
+/* compact dialogs: the menu-style buttons sit in a row at the foot */
+.modal-card:not(.page-card) .btn { margin-top: 8px !important; }
+.modal-card .tile { --fill: linear-gradient(180deg, rgba(40, 52, 70, 0.55), rgba(10, 14, 20, 0.7)); }
