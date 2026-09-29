@@ -2,7 +2,7 @@
   "name": "planet-escape-desktop",
   "productName": "Planet Escape",
   "version": "0.1.0",
-  "description": "Planet Escape \u2013 a sci-fi factory-building game",
+  "description": "Planet Escape – a sci-fi factory-building game",
   "main": "main.cjs",
   "private": true,
   "author": "Planet Escape",
@@ -79,7 +79,8 @@
         }
       ],
       "category": "public.app-category.games",
-      "identity": null
+      "identity": null,
+      "x64ArchFiles": "Contents/Resources/app.asar.unpacked/node_modules/steamworks.js/dist/**"
     },
     "linux": {
       "target": [
