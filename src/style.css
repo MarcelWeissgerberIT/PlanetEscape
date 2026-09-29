@@ -681,6 +681,10 @@ input[type=color]#mxcolor { width: 36px; height: 28px; border: 1px solid var(--l
   background: linear-gradient(rgba(125, 211, 252, 0.07) 1px, transparent 1px) 0 0 / 18px 18px, linear-gradient(90deg, rgba(125, 211, 252, 0.07) 1px, transparent 1px) 0 0 / 18px 18px, #08213a;
   box-shadow: inset 0 0 0 1px rgba(125, 211, 252, 0.25), inset 0 0 40px rgba(0, 0, 0, 0.45);
   clip-path: polygon(10px 0, 100% 0, 100% calc(100% - 10px), calc(100% - 10px) 100%, 0 100%, 0 10px); }
+/* a tree wider than the window grows to its full width (centred flex content would hang out on the left, out of scroll reach) */
+.bp-scroll > .bp-tree { width: max-content; min-width: 100%; box-sizing: border-box; }
+.bp-scroll.pannable { cursor: grab; }
+.bp-scroll.panning { cursor: grabbing; user-select: none; }
 .bp-building { display: flex; gap: 12px; align-items: flex-start; margin: 4px 0 6px; }
 .bp-building img { width: 64px; height: 64px; }
 .bp-building small { display: block; color: var(--muted); font-size: 12px; margin-top: 2px; }

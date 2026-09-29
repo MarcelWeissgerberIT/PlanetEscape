@@ -2649,7 +2649,50 @@ export class Hud {
         e.stopPropagation();
       });
     });
-    this.modal.addEventListener('transitionend', () => undefined, { once: true });
+    const scroller = this.modal.querySelector('.bp-scroll') as HTMLElement | null;
+    if (scroller) {
+      // start with the root in view, then let a mouse drag pan the tree (touch scrolls natively)
+      scroller.scrollTop = 0;
+      scroller.scrollLeft = (scroller.scrollWidth - scroller.clientWidth) / 2;
+      this.panBlueprint(scroller);
+    }
+  }
+
+  /** Mouse drag pans a scrollable blueprint; a drag does not count as a click on a node. */
+  private panBlueprint(el: HTMLElement) {
+    const wide = () => el.scrollWidth > el.clientWidth + 2 || el.scrollHeight > el.clientHeight + 2;
+    el.classList.toggle('pannable', wide());
+    let start: { x: number; y: number; left: number; top: number } | null = null;
+    let moved = false;
+    el.addEventListener('pointerdown', (e) => {
+      if (e.pointerType !== 'mouse' || e.button !== 0 || !wide()) return;
+      start = { x: e.clientX, y: e.clientY, left: el.scrollLeft, top: el.scrollTop };
+      moved = false;
+    });
+    el.addEventListener('pointermove', (e) => {
+      if (!start) return;
+      const dx = e.clientX - start.x, dy = e.clientY - start.y;
+      if (!moved && Math.hypot(dx, dy) < 5) return;
+      if (!moved) {
+        moved = true;
+        el.classList.add('panning');
+        el.setPointerCapture(e.pointerId);
+      }
+      el.scrollLeft = start.left - dx;
+      el.scrollTop = start.top - dy;
+    });
+    const end = () => {
+      start = null;
+      el.classList.remove('panning');
+    };
+    el.addEventListener('pointerup', end);
+    el.addEventListener('pointercancel', end);
+    el.addEventListener('click', (e) => {
+      if (!moved) return;
+      moved = false;
+      e.stopPropagation();
+      e.preventDefault();
+    }, true);
   }
 
 
