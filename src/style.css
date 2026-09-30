@@ -2783,3 +2783,53 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .shelf { grid-template-columns: repeat(8, 1fr); }
 .slot.more { display: flex; flex-direction: column; justify-content: center; font-family: var(--disp); font-size: 12px; color: #cbd5e1; background: rgba(255, 255, 255, 0.04); border-style: dashed; line-height: 1.1; }
 .slot.more small { font-size: 8.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #64748b; }
+
+/* =====================================================================================
+   Machines and drills: a production line (inputs › machine › output) on the deck.
+   ===================================================================================== */
+.fab-flow { display: flex; align-items: center; justify-content: center; gap: 8px; padding: 12px 10px; margin: 4px 0 6px; border-radius: 14px; background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.fab-flow.empty { padding: 18px; color: #94a3b8; font-size: 12.5px; }
+.fab-ins { display: flex; flex-direction: column; gap: 4px; }
+.fab-chip { position: relative; display: flex; align-items: center; gap: 5px; padding: 4px 8px 6px 4px; border-radius: 10px; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(148, 163, 184, 0.16); overflow: hidden; }
+.fab-chip .icon { width: 26px; height: 26px; }
+.fab-chip b { font-family: var(--disp); font-size: 14px; color: #fff; font-variant-numeric: tabular-nums; }
+.fab-chip b small { font-size: 10.5px; color: #94a3b8; }
+.fab-chip i { position: absolute; left: 0; bottom: 0; height: 3px; background: #f59e0b; }
+.fab-chip.ok i { background: var(--ok); box-shadow: 0 0 6px var(--ok); }
+.fab-chip.out { border-color: rgba(34, 211, 238, 0.45); background: rgba(34, 211, 238, 0.08); padding-bottom: 4px; }
+.fab-chip.dep i { background: linear-gradient(90deg, #b45309, #fbbf24); }
+.fab-arrow { font-style: normal; font-family: var(--disp); font-size: 22px; color: #475569; }
+.fab-flow.on .fab-arrow { color: var(--accent); text-shadow: 0 0 8px rgba(34, 211, 238, 0.7); animation: fabpulse 1s ease-in-out infinite; }
+@keyframes fabpulse { 50% { opacity: 0.45; } }
+.fab-mach { display: flex; flex-direction: column; align-items: center; gap: 4px; padding: 6px; border-radius: 12px; background: linear-gradient(180deg, rgba(4, 7, 12, 0.85), rgba(12, 18, 27, 0.85)); border: 1px solid rgba(148, 163, 184, 0.25); }
+.fab-flow.on .fab-mach { border-color: rgba(34, 211, 238, 0.55); box-shadow: 0 0 14px rgba(34, 211, 238, 0.2); }
+.fab-mach img { width: 44px; height: 44px; }
+.fab-prog { display: block; width: 50px; height: 4px; border-radius: 2px; background: rgba(148, 163, 184, 0.2); overflow: hidden; }
+.fab-prog i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.fab-mach small { font-family: var(--disp); font-size: 9.5px; letter-spacing: 0.08em; color: #94a3b8; }
+.fab-rate { display: flex; gap: 8px; margin: 0 0 6px; }
+.fab-rate > span { flex: 1; display: flex; align-items: baseline; gap: 6px; padding: 6px 10px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(148, 163, 184, 0.12); font-size: 11px; color: #94a3b8; }
+.fab-rate small { font-family: var(--disp); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; margin-right: auto; }
+.fab-rate b { font-family: var(--disp); font-size: 17px; color: #fff; }
+/* wear of machines and drills as a compact plate */
+.wear-card { padding: 10px 12px; margin: 2px 0 8px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(148, 163, 184, 0.14); }
+.wear-card.warn { border-color: rgba(245, 158, 11, 0.4); }
+.wear-card.worn { border-color: rgba(248, 113, 113, 0.5); background: rgba(239, 68, 68, 0.07); }
+.wear-top { display: flex; align-items: center; gap: 10px; }
+.wear-top small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #94a3b8; }
+.wear-top b { font-family: var(--disp); font-size: 18px; color: #fff; }
+.wear-top b span { font-size: 11px; color: #94a3b8; }
+.wear-card.worn .wear-top b { color: #fca5a5; }
+.info-panel .wear-auto { width: auto; margin: 0 0 0 auto; padding: 4px 8px; gap: 8px; font-size: 11px; border-radius: 10px; }
+.wear-bar { display: block; height: 5px; margin: 8px 0; border-radius: 3px; background: rgba(148, 163, 184, 0.18); overflow: hidden; }
+.wear-bar i { display: block; height: 100%; background: linear-gradient(90deg, #34d399, #facc15 60%, #f87171); background-size: 300px 100%; }
+.wear-foot { display: flex; align-items: center; gap: 10px; }
+.wear-foot em { flex: 1; min-width: 0; font-style: normal; font-size: 11px; color: #94a3b8; line-height: 1.35; cursor: pointer; }
+.wear-fix { flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 6px 10px; cursor: pointer; border-radius: 10px; color: #e2e8f0; font: inherit; border: 1px solid rgba(148, 163, 184, 0.2); background: linear-gradient(180deg, rgba(255, 255, 255, 0.08), rgba(255, 255, 255, 0.02)); }
+.wear-fix b { font-family: var(--disp); font-size: 10.5px; letter-spacing: 0.1em; text-transform: uppercase; }
+.wear-fix span { display: flex; gap: 3px; font-size: 11px; }
+.wear-fix .cost { padding: 0 4px; border-radius: 4px; background: rgba(0, 0, 0, 0.35); }
+.wear-fix.hot { border-color: rgba(248, 113, 113, 0.6); background: linear-gradient(180deg, rgba(239, 68, 68, 0.25), rgba(239, 68, 68, 0.08)); }
+.wear-fix:hover:not([disabled]) { border-color: rgba(103, 232, 249, 0.5); }
+.wear-fix[disabled] { opacity: 0.4; cursor: default; }
+.wear-top b, .info-panel .wear-auto span:first-child { white-space: nowrap; }

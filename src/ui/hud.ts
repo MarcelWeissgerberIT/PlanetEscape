@@ -1928,12 +1928,6 @@ export class Hud {
     if (def.kind === 'machine') {
       const recipes = recipesFor(b.type as 'smelter').filter((r) => st.unlockedRecipes.includes(r.id));
       const r = b.recipe ? RECIPE_BY_ID[b.recipe] : null;
-      const inputs = r
-        ? Object.entries(r.inputs)
-            .map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${b.input?.[k as ItemId] ?? 0}<small>/${n}</small></span>`)
-            .join('')
-        : '';
-      const outputs = r ? `<span class="buf">${itemImg(r.output, 'icon sm')}${b.output?.[r.output] ?? 0}</span>` : '';
       const recipeCards = recipes
         .map(
           (rc) => `<button class="recipe ${b.recipe === rc.id ? 'active' : ''}" data-recipe="${rc.id}">
@@ -1944,14 +1938,39 @@ export class Hud {
           </button>`,
         )
         .join('');
-      body = `${statusLine(r ? ` · ${t('rate')} ${(b.rate ?? 0).toFixed(1)}/min` : '')}
-        <div class="bufs"><span class="lbl">${t('input')}</span>${inputs || '–'}<span class="lbl">${t('output')}</span>${outputs || '–'}</div>
+      const prog = Math.max(0, Math.min(1, b.progress ?? 0));
+      const flow = r
+        ? `<div class="fab-flow ${b.working ? 'on' : ''}">
+            <span class="fab-ins">${Object.entries(r.inputs).map(([k, n]) => {
+              const have = b.input?.[k as ItemId] ?? 0;
+              return `<span class="fab-chip ${have >= n! ? 'ok' : ''}">${itemImg(k as ItemId, 'icon')}<b>${have}<small>/${n}</small></b><i style="width:${Math.min(100, (have / n!) * 100)}%"></i></span>`;
+            }).join('')}</span>
+            <i class="fab-arrow">›</i>
+            <span class="fab-mach"><img src="${buildingUrl(b.type)}" alt=""><span class="fab-prog"><i style="width:${prog * 100}%"></i></span><small>${r.seconds} s</small></span>
+            <i class="fab-arrow">›</i>
+            <span class="fab-chip out">${itemImg(r.output, 'icon')}<b>${b.output?.[r.output] ?? 0}</b></span>
+          </div>
+          <div class="fab-rate"><span><small>${t('rate')}</small><b>${(b.rate ?? 0).toFixed(1)}</b>/min</span></div>`
+        : `<div class="fab-flow empty"><span class="dim">${t('fab_pick')}</span></div>`;
+      body = `${statusLine()}${flow}
         ${dirPicker}
         <div class="lbl">${t('recipe')}</div>
         <div class="recipes">${recipeCards}</div>`;
     } else if (def.kind === 'miner') {
-      body = `${statusLine(` · ${t('rate')} ${(b.rate ?? 0).toFixed(1)}/min · ${t('ore_left')} ${this.sim.oreLeft(b.x, b.y)}`)}
-        <div class="bufs"><span class="lbl">${t('output')}</span>${Object.entries(b.output ?? {}).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('') || '–'}</div>${dirPicker}`;
+      const idx = b.y * st.width + b.x;
+      const ore = TERRAIN_ITEM[st.terrain[idx]];
+      const left = this.sim.oreLeft(b.x, b.y);
+      const endless = st.options.infiniteOre;
+      const outs = Object.entries(b.output ?? {}) as [ItemId, number][];
+      body = `${statusLine()}<div class="fab-flow ${b.working ? 'on' : ''}">
+          <span class="fab-chip dep">${ore ? itemImg(ore, 'icon') : ''}<b>${endless ? '∞' : left}</b><i style="width:${endless ? 100 : Math.min(100, (left / ORE_PER_TILE[1]) * 100)}%"></i></span>
+          <i class="fab-arrow">›</i>
+          <span class="fab-mach"><img src="${buildingUrl(b.type)}" alt=""><span class="fab-prog"><i style="width:${Math.max(0, Math.min(1, b.progress ?? 0)) * 100}%"></i></span><small>${t('fab_drill')}</small></span>
+          <i class="fab-arrow">›</i>
+          <span class="fab-chip out">${outs.length ? itemImg(outs[0][0], 'icon') : ore ? itemImg(ore, 'icon') : ''}<b>${outs.reduce((a, [, n]) => a + n, 0)}</b></span>
+        </div>
+        <div class="fab-rate"><span><small>${t('rate')}</small><b>${(b.rate ?? 0).toFixed(1)}</b>/min</span><span><small>${t('ore_left')}</small><b>${endless ? '∞' : left}</b></span></div>
+        ${dirPicker}`;
     } else if (def.kind === 'storage') {
       const hall = isHall(b.type);
       const entries = Object.entries(b.store ?? {}).filter(([, n]) => (n ?? 0) > 0) as [ItemId, number][];

@@ -13,9 +13,15 @@ export function wearHtml(sim: Sim, b: Building): string {
   const w = b.wear ?? 0;
   const st = sim.state;
   const reach = sim.inReach(b.x, b.y, def.size);
-  return `<div class="wear"><span class="lbl">${t('wear')}</span><div class="pbar"><div class="pfill ${w >= 1 ? 'warn' : ''}" style="width:${Math.round(w * 100)}%"></div></div><small>${Math.round(w * 100)} %</small>
-    <button class="btn small ${w >= 1 ? 'primary' : ''}" data-act="repair" ${sim.canRepair(b) ? '' : 'disabled'}>${t('repair')} · ${costHtml(REPAIR_COST, st.inventory)}</button></div>
-    <p class="save-hint">${w >= 1 ? t('wear_worn') : ''} ${reach ? (st.autoRepair === false ? t('wear_auto_off') : t('wear_auto')) : t('wear_far')} <button class="chip" data-act="auto-repair">${st.autoRepair === false ? t('wear_auto_on_btn') : t('wear_auto_off_btn')}</button></p>`;
+  const auto = st.autoRepair !== false;
+  const pct = Math.round(w * 100);
+  return `<div class="wear-card ${w >= 1 ? 'worn' : w >= 0.7 ? 'warn' : ''}">
+    <div class="wear-top"><small>${t('wear')}</small><b>${pct}<span> %</span></b>
+      <button class="sw-row wear-auto" data-act="auto-repair"><span>${t('wear_drones')}</span><span class="sw-mini ${auto ? 'on' : ''}"><i></i></span></button></div>
+    <span class="wear-bar"><i style="width:${pct}%"></i></span>
+    <div class="wear-foot"><em class="clamp2" data-more>${w >= 1 ? t('wear_worn') + ' ' : ''}${reach ? (auto ? t('wear_auto') : t('wear_auto_off')) : t('wear_far')}</em>
+      <button class="wear-fix ${w >= 1 ? 'hot' : ''}" data-act="repair" ${sim.canRepair(b) ? '' : 'disabled'}><b>${t('repair')}</b><span>${costHtml(REPAIR_COST, st.inventory)}</span></button></div>
+  </div>`;
 }
 
 /** Where something gets unlocked: "from the start" or the mission that unlocks it. */
