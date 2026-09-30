@@ -2868,3 +2868,62 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .dk-mode small { font-family: var(--disp); font-size: 11px; color: #94a3b8; }
 .dk-bay { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px; border-radius: 10px; background: #05080d; box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.14); }
 .dk-bay .slot.mark { box-shadow: inset 0 -3px 0 var(--accent); }
+
+/* =====================================================================================
+   Road: the network with its docks, depots and robots. Grabber arm: takes › arm › drops,
+   the reach as the gap it bridges, the count.
+   ===================================================================================== */
+.rd-hero, .gp-hero { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px; background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.rd-strip { flex: none; width: 64px; height: 44px; border-radius: 8px; background: linear-gradient(180deg, #3b4350, #2a3039); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.5); display: grid; place-items: center; }
+.rd-strip i { width: 80%; height: 3px; background: repeating-linear-gradient(90deg, #facc15 0 8px, transparent 8px 14px); opacity: 0.8; }
+.rd-hero.on .rd-strip i { background-size: 14px 100%; animation: tnflow 0.9s linear infinite; }
+.rd-text { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.rd-text small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #94a3b8; }
+.rd-text b { font-family: var(--disp); font-size: 24px; line-height: 1; color: #fff; }
+.rd-text b span { font-size: 13px; color: #94a3b8; }
+.rd-text em { display: flex; align-items: center; gap: 6px; font-style: normal; font-size: 11.5px; color: #94a3b8; line-height: 1.3; }
+.rd-stats { grid-template-columns: repeat(4, 1fr); }
+.rd-stats .ts { padding: 6px 8px; }
+.rd-stats .ts small { font-size: 8.5px; letter-spacing: 0.06em; }
+.rd-stats .ts b { font-size: 18px; }
+/* grabber */
+.gp-hero { gap: 6px; }
+.gp-cell { flex: none; display: flex; align-items: center; gap: 3px; height: 44px; padding: 0 8px; border-radius: 8px; border: 1px dashed rgba(148, 163, 184, 0.35); background: rgba(0, 0, 0, 0.2); }
+.gp-cell small { font-family: var(--disp); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; }
+.gp-gap { width: 10px; height: 2px; background: rgba(148, 163, 184, 0.5); }
+.gp-arm { position: relative; flex: none; display: grid; place-items: center; width: 54px; height: 54px; border-radius: 12px; background: linear-gradient(180deg, rgba(4, 7, 12, 0.85), rgba(12, 18, 27, 0.85)); border: 1px solid rgba(148, 163, 184, 0.25); }
+.gp-hero.on .gp-arm { border-color: rgba(34, 211, 238, 0.55); box-shadow: 0 0 14px rgba(34, 211, 238, 0.2); }
+.gp-arm img { width: 40px; height: 40px; }
+.gp-hero.on .gp-arm img { animation: gpswing 1s ease-in-out infinite alternate; }
+@keyframes gpswing { from { transform: rotate(-12deg); } to { transform: rotate(12deg); } }
+.gp-arm em { position: absolute; right: -6px; top: -6px; padding: 1px; border-radius: 6px; background: #0b1018; border: 1px solid rgba(34, 211, 238, 0.5); }
+.gp-count { flex: 1; display: flex; flex-direction: column; align-items: flex-end; gap: 2px; min-width: 0; }
+.gp-count b { font-family: var(--disp); font-size: 24px; line-height: 1; color: #fff; }
+.gp-count small { font-family: var(--disp); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; text-align: right; }
+/* small phones: everything in the header a little tighter so every resource fits */
+@media (max-width: 480px) {
+  .hud-bar { gap: 3px; }
+  .hb-mission { gap: 4px; padding-right: 4px; }
+  .hb-mission .ico, .hb-mission svg { width: 14px; height: 14px; }
+  .hb-res { padding-left: 10px !important; padding-right: 10px !important; margin-left: 0 !important; margin-right: 0 !important; clip-path: polygon(0 0, 100% 0, calc(100% - 8px) 100%, 8px 100%) !important; }
+  .hb-res .inv-item { gap: 2px !important; padding: 0 4px !important; font-size: 12px !important; }
+  .hb-res .inv-item .icon, .hb-res .inv-item img { width: 18px !important; height: 18px !important; }
+  .hb-right { gap: 2px !important; }
+  .hb-right .power { padding: 3px 4px !important; }
+  .hb-right .power .plabel { font-size: 11px; }
+  .hb-right .pill { padding: 0 5px !important; }
+  .hb-right .hb-pod .iconbtn { width: 30px !important; }
+}
+/* phones: the resources get their own row under chapter chip and controls */
+@media (max-width: 560px) {
+  .hud-bar { grid-template-columns: auto minmax(0, 1fr) !important; grid-template-rows: auto auto; row-gap: 4px !important; }
+  .hb-mission { grid-column: 1; grid-row: 1; }
+  .hb-right { grid-column: 2; grid-row: 1; justify-self: end; }
+  .hb-res {
+    grid-column: 1 / -1 !important; grid-row: 2; justify-self: center !important; max-width: calc(100% - 8px) !important; margin: 0 !important;
+    padding: 5px 16px !important; clip-path: polygon(10px 0, calc(100% - 10px) 0, 100% 50%, calc(100% - 10px) 100%, 10px 100%, 0 50%) !important;
+    flex-wrap: wrap; justify-content: center; row-gap: 2px;
+  }
+  .hb-res .inv-item { font-size: 12.5px !important; }
+  .hb-res .inv-item .icon, .hb-res .inv-item img { width: 18px !important; height: 18px !important; }
+}

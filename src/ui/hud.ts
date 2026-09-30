@@ -2098,6 +2098,39 @@ export class Hud {
         </div>
         ${factor}
         <p class="save-hint clamp2" data-more>${t(`arith_${b.type}` as 'arith_register')}</p>${dirPicker}`;
+    } else if (b.type === 'road') {
+      // the road network this tile belongs to: connected road tiles and the docks and depots along it
+      const W = st.width;
+      const seen = new Set<number>([b.y * W + b.x]);
+      const queue = [b];
+      const along = new Set<Building>();
+      while (queue.length && seen.size < 5000) {
+        const r = queue.pop()!;
+        for (let d = 0; d < 4; d++) {
+          const n = this.sim.at(r.x + [1, 0, -1, 0][d], r.y + [0, 1, 0, -1][d]);
+          if (!n) continue;
+          if (n.type === 'road') {
+            const k = n.y * W + n.x;
+            if (!seen.has(k)) { seen.add(k); queue.push(n); }
+          } else if (n.type === 'dock' || n.type === 'depot') along.add(n);
+        }
+      }
+      const list = [...along];
+      const docks = list.filter((x) => x.type === 'dock');
+      const depots = list.filter((x) => x.type === 'depot');
+      const ids = new Set(depots.map((x) => x.id));
+      const bots = this.sim.robots().filter((r) => ids.has(r.depot));
+      const plate = (img: string, n: number, label: string, cls = '') => `<div class="ts ${cls}"><small>${img} ${label}</small><b>${n}</b></div>`;
+      body = `<div class="rd-hero ${depots.length && docks.length ? 'on' : ''}">
+          <span class="rd-strip"><i></i></span>
+          <span class="rd-text"><small>${t('rd_net')}</small><b>${seen.size}<span> ${t('rd_tiles')}</span></b><em><i class="term-led ${depots.length && docks.length ? 'run' : 'pause'}"></i>${depots.length && docks.length ? t('rd_ok') : !depots.length ? t('rd_no_depot') : t('rd_no_dock')}</em></span>
+        </div>
+        <div class="term-stats rd-stats">
+          ${plate(`<img class="icon xs" src="${buildingUrl('dock')}" alt="">`, docks.filter((x) => x.mode !== 'unload').length, t('dock_load'))}
+          ${plate(`<img class="icon xs" src="${buildingUrl('dock')}" alt="">`, docks.filter((x) => x.mode === 'unload').length, t('dock_unload'))}
+          ${plate(`<img class="icon xs" src="${buildingUrl('depot')}" alt="">`, depots.length, t('rd_depots'), depots.length ? '' : 'bad')}
+          ${plate(itemImg('robot', 'icon xs'), bots.length, t('depot_robots'))}
+        </div>`;
     } else if (b.type === 'tunnel') {
       const mate = b.pair != null ? st.buildings.find((x) => x.id === b.pair) : undefined;
       const dist = mate ? Math.abs(mate.x - b.x) + Math.abs(mate.y - b.y) - 1 : 0;
@@ -2189,9 +2222,16 @@ export class Hud {
           <p class="save-hint clamp2" data-more>${t('depot_hint')}</p>`;
       } else if (b.type === 'picker') {
         const reach = b.threshold === 2 ? 2 : 1;
-        body = `${statusLine(` · ${b.acc ?? 0} ${t('picker_moved')}`)}
-          <div class="dirs"><span class="lbl">${t('picker_reach')}</span><button class="chip ${reach === 1 ? 'active' : ''}" data-threshold="1">1</button><button class="chip ${reach === 2 ? 'active' : ''}" data-threshold="2">2</button></div>
-          <p class="save-hint">${t('picker_hint')}</p>${dirPicker}${picker(t('picker_filter'))}`;
+        const it = b.recipe as ItemId | undefined;
+        body = `${statusLine()}<div class="gp-hero ${b.working ? 'on' : ''}">
+            <span class="gp-cell from"><small>${t('gp_from')}</small>${reach === 2 ? '<i class="gp-gap"></i>' : ''}</span>
+            <span class="gp-arm"><img src="${buildingUrl('picker')}" alt="">${it ? `<em>${itemImg(it, 'icon xs')}</em>` : ''}</span>
+            <span class="gp-cell to"><small>${t('gp_to')}</small>${reach === 2 ? '<i class="gp-gap"></i>' : ''}</span>
+            <span class="gp-count"><b>${b.acc ?? 0}</b><small>${t('picker_moved')}</small></span>
+          </div>
+          <div class="lbl">${t('picker_reach')}</div>
+          <div class="seg"><button class="${reach === 1 ? 'on' : ''}" data-threshold="1">1 ${t('rd_tile')}</button><button class="${reach === 2 ? 'on' : ''}" data-threshold="2">2 ${t('rd_tiles')}</button></div>
+          <p class="save-hint clamp2" data-more>${t('picker_hint')}</p>${dirPicker}${picker(t('picker_filter'))}`;
       }
       else if (b.type === 'lamp') {
         const item = this.sim.lampItem(b);
