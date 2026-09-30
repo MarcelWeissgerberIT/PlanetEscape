@@ -2539,3 +2539,42 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .info-panel .rf-ch { grid-template-columns: repeat(8, 1fr); margin-bottom: 6px; }
 .info-panel .rf-ch .key { height: 34px; font-size: 14px; }
 .info-panel .rf-ch .key.on { background: linear-gradient(180deg, #22d3ee, #0e7490) !important; color: #03141a; box-shadow: 0 3px 0 #064e5f, 0 0 12px rgba(34, 211, 238, 0.45) !important; }
+
+/* =====================================================================================
+   Tooltips as rounded glass cards like the dock: the part on an inset plate, sections with
+   small caps labels, amounts as chips with room between icon and number, recipes as rows
+   (inputs › output, the time in a pill). Amounts elsewhere get a little more room too.
+   ===================================================================================== */
+.cost { gap: 3px !important; }
+.tip {
+  width: 300px; padding: 14px 16px 12px !important; clip-path: none !important; border-radius: 16px !important; border: 1px solid rgba(148, 163, 184, 0.2) !important;
+  background: radial-gradient(120% 90% at 0% 0%, rgba(34, 211, 238, 0.08), transparent 60%), linear-gradient(180deg, rgba(20, 28, 40, 0.94), rgba(8, 12, 18, 0.96)) !important;
+  box-shadow: 0 18px 44px rgba(0, 0, 0, 0.6), inset 0 1px 0 rgba(255, 255, 255, 0.08) !important;
+  backdrop-filter: blur(16px) saturate(1.2) !important; -webkit-backdrop-filter: blur(16px) saturate(1.2) !important;
+}
+.tip::before, .tip::after { display: none !important; }
+.tip .tip-head { gap: 12px; align-items: center; }
+.tip-plate { flex: none; display: grid; place-items: center; width: 50px; height: 50px; border-radius: 12px; background: linear-gradient(180deg, rgba(4, 7, 12, 0.8), rgba(12, 18, 27, 0.8)); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.5); }
+.tip .tip-plate img, .tip .tip-plate .icon { width: 40px !important; height: 40px !important; border-radius: 0; }
+.tip .tip-head b { font-size: 15px; }
+.tip-chips { gap: 5px; margin-top: 5px; }
+.tip-chips i { padding: 2px 7px; border-radius: 6px; background: rgba(255, 255, 255, 0.05); border-color: rgba(148, 163, 184, 0.22); }
+.tip p.tip-desc { margin: 10px 0 4px; color: #aab6c6; font-size: 12.5px; line-height: 1.45; }
+.tip-sec { padding-top: 8px; margin-top: 8px; border-top: 1px solid rgba(148, 163, 184, 0.12); }
+.tip-sec > small { display: block; margin-bottom: 6px; font-family: var(--disp); font-size: 10px; font-weight: 700; letter-spacing: 0.16em; text-transform: uppercase; color: var(--accent); }
+.tip-costs { display: flex; flex-wrap: wrap; gap: 5px; }
+.tip .cost, .tip .tq { display: inline-flex; align-items: center; gap: 5px !important; margin: 0; padding: 3px 8px 3px 4px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(148, 163, 184, 0.14); font-family: var(--disp); font-size: 12px; font-weight: 700; color: #e2e8f0; font-variant-numeric: tabular-nums; }
+.tip .tq:not(:has(b)) { padding-right: 4px; }
+.tip .cost.short { color: #fca5a5; border-color: rgba(248, 113, 113, 0.4); background: rgba(239, 68, 68, 0.1); }
+.tip .cost .icon, .tip .tq .icon { width: 18px; height: 18px; }
+.tip .tq b { font-weight: 700; }
+.tip .tip-recipe { display: flex; align-items: center; gap: 6px; padding: 3px 0; font-size: 12px; }
+.tr-in { display: inline-flex; align-items: center; gap: 4px; flex-wrap: wrap; }
+.tr-plus { font-style: normal; color: #64748b; font-size: 11px; }
+.tr-arrow { font-style: normal; font-family: var(--disp); font-size: 16px; line-height: 1; color: var(--accent); }
+.tip .tip-recipe em { margin-left: auto; font-style: normal; font-family: var(--disp); font-size: 10.5px; letter-spacing: 0.04em; color: #94a3b8; padding: 2px 7px; border-radius: 10px; background: rgba(0, 0, 0, 0.35); white-space: nowrap; }
+.tip-more { font-family: var(--disp); font-size: 11px; color: #94a3b8; padding-top: 2px; }
+.tip-icons { display: flex; flex-wrap: wrap; gap: 5px; }
+.tip-icons .icon { width: 26px; height: 26px; padding: 3px; border-radius: 8px; background: rgba(255, 255, 255, 0.06); border: 1px solid rgba(148, 163, 184, 0.14); }
+.tip-list { display: block; font-size: 12px; color: #cbd5e1; }
+.tip .tip-link { margin-top: 10px; }
