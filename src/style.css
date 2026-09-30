@@ -1237,7 +1237,7 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
   .hb-res .print-strip small, .hb-res .print-strip > span:not(.pbar) { display: none; }
   .hb-right { gap: 4px; }
   .hb-right .iconbtn { width: 34px; height: 34px; }
-  .hb-right .speed, .hb-right .hb-menu { display: none; }
+  .hb-right .speed { display: none; }
   .hb-right .power { min-width: 0; padding: 3px 6px; }
   .hb-right .pill { height: 34px; padding: 0 7px; }
   .hud-top > .kora-card { margin-left: 6px; max-width: calc(100vw - 152px); }
