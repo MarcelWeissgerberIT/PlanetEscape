@@ -59,6 +59,9 @@ export interface HudCallbacks {
 }
 
 
+/** seconds a tool hint stays before it fades out by itself */
+const CHIP_SECONDS = 15;
+
 export class Hud {
   root: HTMLElement;
   title: HTMLElement;
@@ -172,7 +175,7 @@ export class Hud {
       const b = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
       if (b?.dataset.act === 'rot') this.input.rotate();
       else if (b?.dataset.act === 'save') this.saveClipboard();
-      else this.input.setTool({ kind: 'none' });
+      else if (b?.dataset.act === 'end') this.input.setTool({ kind: 'none' });
     };
     this.renderTitle();
     this.renderBottom();
@@ -1676,26 +1679,39 @@ export class Hud {
     }, 900);
   }
 
+  /** hides the hint chip once its countdown ring has run down (the tool itself stays active) */
+  private chipTimer = 0;
+
   setTool(tool: Tool) {
     this.tool = tool;
     this.renderBottom();
-    if (tool.kind === 'build') {
-      this.toolChip.innerHTML = `<img src="${buildingUrl(tool.type)}" alt=""><span>${t('build')}: <b>${tBuilding(tool.type)}</b> · ${tool.type === 'conveyor' ? t('chip_belt') : t('chip_place')}</span><span class="x">${icon('close', 'sm')}</span>`;
-      this.toolChip.classList.remove('hidden');
-    } else if (tool.kind === 'delete') {
-      this.toolChip.innerHTML = `<span>${t('delete_mode')}</span><span class="x">${icon('close', 'sm')}</span>`;
-      this.toolChip.classList.remove('hidden');
-    } else if (tool.kind === 'select') {
-      this.toolChip.innerHTML = `<span>${icon('copy', 'sm')} ${t('select_hint')}</span><span class="x">${icon('close', 'sm')}</span>`;
-      this.toolChip.classList.remove('hidden');
-    } else if (tool.kind === 'paint') {
-      this.toolChip.innerHTML = `<span>✎ ${tool.terrain === 'core' ? t('ed_core_hint') : t('ed_paint_hint')}</span><span class="x">${icon('close', 'sm')}</span>`;
-      this.toolChip.classList.remove('hidden');
-    } else if (tool.kind === 'paste') {
+    clearTimeout(this.chipTimer);
+    // the close button: a clear X in a ring that runs down; at the end the hint fades out, the X ends the tool
+    const close = (countdown: boolean) => `<button class="x ${countdown ? 'counting' : ''}" data-act="end" title="${t('close')}" aria-label="${t('close')}">${countdown ? `<svg class="x-ring" viewBox="0 0 36 36" aria-hidden="true"><circle cx="18" cy="18" r="16" class="bg"/><circle cx="18" cy="18" r="16" class="run" style="animation-duration:${CHIP_SECONDS}s"/></svg>` : ''}${icon('close', 'sm')}</button>`;
+    let html = '';
+    let countdown = true;
+    if (tool.kind === 'build') html = `<img src="${buildingUrl(tool.type)}" alt=""><span>${t('build')}: <b>${tBuilding(tool.type)}</b> · ${tool.type === 'conveyor' ? t('chip_belt') : t('chip_place')}</span>`;
+    else if (tool.kind === 'delete') html = `<span>${t('delete_mode')}</span>`;
+    else if (tool.kind === 'select') html = `<span>${icon('copy', 'sm')} ${t('select_hint')}</span>`;
+    else if (tool.kind === 'paint') html = `<span>✎ ${tool.terrain === 'core' ? t('ed_core_hint') : t('ed_paint_hint')}</span>`;
+    else if (tool.kind === 'paste') {
+      // the blueprint chip carries its rotate / save buttons: it stays
       const cost = Sim.blueprintCost(tool.bp);
-      this.toolChip.innerHTML = `<span>${icon('blueprint', 'sm')} <b>${tool.bp.name || t('blueprint')}</b> · ${tool.bp.items.length} · ${costHtml(cost, this.sim.state.inventory)}</span><button class="mini" data-act="rot">${icon('rotate', 'sm')}</button><button class="mini" data-act="save">${icon('save', 'sm')}</button><span class="x">${icon('close', 'sm')}</span>`;
-      this.toolChip.classList.remove('hidden');
-    } else this.toolChip.classList.add('hidden');
+      html = `<span>${icon('blueprint', 'sm')} <b>${tool.bp.name || t('blueprint')}</b> · ${tool.bp.items.length} · ${costHtml(cost, this.sim.state.inventory)}</span><button class="mini" data-act="rot">${icon('rotate', 'sm')}</button><button class="mini" data-act="save">${icon('save', 'sm')}</button>`;
+      countdown = false;
+    }
+    if (!html) {
+      this.toolChip.classList.add('hidden');
+      return;
+    }
+    this.toolChip.innerHTML = html + close(countdown);
+    this.toolChip.classList.remove('hidden', 'fading');
+    if (countdown) {
+      this.chipTimer = window.setTimeout(() => {
+        this.toolChip.classList.add('fading');
+        this.chipTimer = window.setTimeout(() => this.toolChip.classList.add('hidden'), 400);
+      }, CHIP_SECONDS * 1000);
+    }
   }
 
   // ---------- Blueprints ----------
