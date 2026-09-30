@@ -172,6 +172,7 @@ export interface Building {
   // arithmetic modules / register
   value?: number; // register content, multiplier factor, divisor
   acc?: number; // running counter (items seen on the primary input)
+  route?: 0 | 1; // sorter: where the last item went (0 straight on, 1 sorted out to the left)
   debt?: number; // subtractor: right-hand items waiting to cancel left-hand ones
   // tunnel: id of the paired tunnel (entrance <-> exit); `exit` marks the exit end
   pair?: number | null;

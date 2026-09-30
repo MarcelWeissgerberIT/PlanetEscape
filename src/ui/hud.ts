@@ -2285,12 +2285,31 @@ export class Hud {
         </div>`;
       if (b.type === 'sorter') {
         const it = b.recipe as ItemId | undefined;
-        body = `${statusLine()}${route(
-          `<i>↑</i><span>${t('rt_rest')}</span>`,
-          it ? `<i>←</i>${itemImg(it, 'icon sm')}<span>${tItem(it)}</span>` : `<i>←</i><span class="dim">${t('rt_pick')}</span>`,
-          `<span class="dim">–</span>`,
-          it ? 'set' : '',
-        )}${dirPicker}${picker(t('sort_item'))}`;
+        const now = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+        const r = b.route;
+        // a railway switch in the part's own frame: in from below, straight on to the top, the branch bends left
+        body = `${statusLine()}<div class="sr-hero ${it ? 'set' : ''}">
+            <div class="sr-lane side ${r === 1 ? 'lit' : ''}">
+              <small><i>←</i> ${t('sr_out')}</small>
+              <span class="sr-item">${it ? itemImg(it, 'icon') : '<b class="sr-q">?</b>'}</span>
+              <b>${b.acc ?? 0}</b><em>${it ? tItem(it) : t('rt_pick')}</em>
+            </div>
+            <div class="sr-track">
+              <svg viewBox="0 0 100 120" aria-hidden="true">
+                ${Array.from({ length: 7 }, (_, k) => `<rect x="44" y="${6 + k * 16}" width="36" height="4" rx="1" class="tie"/>`).join('')}
+                <path d="M62 120 V0" class="rail main ${r === 0 ? 'lit' : ''}"/>
+                <path d="M62 78 C62 52 40 40 0 36" class="rail side ${r === 1 ? 'lit' : ''}"/>
+                <circle cx="62" cy="78" r="6" class="frog ${r === 1 ? 'side' : r === 0 ? 'main' : ''}"/>
+              </svg>
+              ${now ? `<span class="sr-now">${itemImg(now, 'icon sm')}</span>` : ''}
+              <span class="sr-in">↑ ${t('rt_in')}</span>
+            </div>
+            <div class="sr-lane main ${r === 0 ? 'lit' : ''}">
+              <small><i>↑</i> ${t('sr_on')}</small>
+              <span class="sr-item"><b class="sr-q">∗</b></span>
+              <b>${b.value ?? 0}</b><em>${t('rt_rest')}</em>
+            </div>
+          </div>${dirPicker}${picker(t('sort_item'))}`;
       } else if (b.type === 'overflow') {
         body = `${statusLine()}${route(
           `<b>1</b><span>${t('rt_first')}</span>`,

@@ -3764,10 +3764,14 @@ export class Sim {
       return;
     }
     if (b.type === 'sorter') {
-      const d = b.recipe && key === b.recipe ? left : b.dir;
-      if (this.pushDir(b, key, d)) {
+      const out = !!b.recipe && key === b.recipe;
+      if (this.pushDir(b, key, out ? left : b.dir)) {
         b.output = {};
         b.status = 'ok';
+        // counters for the panel: sorted out (left) and passed straight on, and which way the last one went
+        if (out) b.acc = (b.acc ?? 0) + 1;
+        else b.value = (b.value ?? 0) + 1;
+        b.route = out ? 1 : 0;
       } else b.status = 'blocked';
       return;
     }
