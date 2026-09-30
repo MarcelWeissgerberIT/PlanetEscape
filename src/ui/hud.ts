@@ -2159,23 +2159,34 @@ export class Hud {
           <p class="save-hint">${t('recycler_hint')}</p>${dirPicker}`;
       } else if (b.type === 'dock') {
         const unload = b.mode === 'unload', buf = b.bufL ?? [];
-        const counts: Partial<Record<string, number>> = {};
-        for (const it of buf) counts[it] = (counts[it] ?? 0) + 1;
-        body = `${statusLine(` · ${buf.length}/${DOCK_CAP}`)}
-          <div class="dirs"><span class="lbl">${t('dock_mode')}</span><button class="chip ${unload ? '' : 'active'}" data-mode="load">${t('dock_load')}</button><button class="chip ${unload ? 'active' : ''}" data-mode="unload">${t('dock_unload')}</button></div>
-          <div class="bufs"><span class="lbl">${t('dock_buffer')}</span>${Object.entries(counts).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('') || '–'}</div>
-          ${unload ? '' : `<div class="dirs"><span class="lbl">${t('dock_min')}</span>${[1, 2, 4, 6, 8].map((n) => `<button class="chip ${(b.threshold ?? 1) === n ? 'active' : ''}" data-dockmin="${n}">${n}</button>`).join('')}</div>`}
-          <p class="save-hint">${t(unload ? 'dock_hint_unload' : 'dock_hint_load')}${unload ? '' : ` ${t('dock_min_hint')}`}</p>${unload ? dirPicker : ''}${picker(t('dock_filter'))}`;
+        const minN = b.threshold ?? 1;
+        body = `${statusLine()}<div class="dk-hero ${unload ? 'unload' : 'load'}">
+            <span class="dk-mode"><img src="${buildingUrl('dock')}" alt=""><b>${unload ? t('dock_unload') : t('dock_load')}</b><small>${buf.length} / ${DOCK_CAP}</small></span>
+            <span class="dk-bay">${Array.from({ length: DOCK_CAP }, (_, i) => `<span class="slot ${buf[i] ? '' : 'empty'} ${!unload && i === minN - 1 ? 'mark' : ''}">${buf[i] ? itemImg(buf[i], 'icon sm') : ''}</span>`).join('')}</span>
+          </div>
+          <div class="lbl">${t('dock_mode')}</div>
+          <div class="seg"><button class="${unload ? '' : 'on'}" data-mode="load">↑ ${t('dock_load')}</button><button class="${unload ? 'on' : ''}" data-mode="unload">↓ ${t('dock_unload')}</button></div>
+          ${unload ? '' : `<div class="lbl">${t('dock_min')}</div><div class="seg">${[1, 2, 4, 6, 8].map((n) => `<button class="${minN === n ? 'on' : ''}" data-dockmin="${n}">${n}</button>`).join('')}</div>`}
+          <p class="save-hint clamp2" data-more>${t(unload ? 'dock_hint_unload' : 'dock_hint_load')}${unload ? '' : ` ${t('dock_min_hint')}`}</p>${unload ? dirPicker : ''}${picker(t('dock_filter'))}`;
       } else if (b.type === 'depot') {
         const mine = this.sim.robots().filter((r) => r.depot === b.id);
-        const want = b.threshold ?? 2, owned = this.sim.depotRobots(b), stock = st.inventory.robot ?? 0;
-        const ownedLine = this.sim.creative ? '' : `<div class="lbl">${t('depot_owned', { n: owned, max: DEPOT_ROBOTS_MAX })}</div>
-          ${owned < DEPOT_ROBOTS_MAX ? `<div class="term-btns"><button class="btn small ${stock ? 'primary' : ''}" data-act="depot-add" ${stock ? '' : 'disabled'}>${itemImg('robot', 'icon sm')} ${t('depot_add', { n: stock })}</button></div>` : ''}
-          ${owned ? '' : `<p class="save-hint">${t('depot_none')}</p>`}`;
-        body = `${statusLine(` · ${mine.length} ${t('depot_robots')}`)}${ownedLine}
-          <div class="dirs"><span class="lbl">${t('depot_fleet')}</span>${Array.from({ length: DEPOT_ROBOTS_MAX }, (_, i) => i + 1).map((n) => `<button class="chip ${want === n ? 'active' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>
-          <div class="bufs">${mine.map((r) => `<span class="buf">${r.items.length ? itemImg(r.items[0], 'icon sm') : '🤖'} ${t(`robot_${r.state}` as 'robot_idle')}${r.items.length ? ` ×${r.items.length}` : ''} · 🔋${Math.round((r.charge ?? 1) * 100)}%</span>`).join('') || '–'}</div>
-          <p class="save-hint">${t('depot_hint')}</p>`;
+        const want = b.threshold ?? 2, owned = this.sim.creative ? want : this.sim.depotRobots(b), stock = st.inventory.robot ?? 0;
+        const bays = Array.from({ length: DEPOT_ROBOTS_MAX }, (_, i) => {
+          const r = mine[i];
+          if (r) {
+            const ch = Math.round((r.charge ?? 1) * 100);
+            return `<span class="rb-bay on ${r.state}">${itemImg('robot', 'icon')}<b>${t(`robot_${r.state}` as 'robot_idle')}</b>${r.items.length ? `<em>${itemImg(r.items[0], 'icon xs')}×${r.items.length}</em>` : ''}<span class="rb-bat ${ch < 25 ? 'low' : ''}"><i style="width:${ch}%"></i></span></span>`;
+          }
+          return i < owned ? `<span class="rb-bay home">${itemImg('robot', 'icon')}<b>${t('rb_home')}</b></span>` : `<span class="rb-bay empty"><small>${t('rb_free')}</small></span>`;
+        }).join('');
+        body = `${statusLine()}<div class="rb-hero">
+            <div class="rb-head"><small>${t('depot_owned', { n: owned, max: DEPOT_ROBOTS_MAX })}</small>${!this.sim.creative && owned < DEPOT_ROBOTS_MAX ? `<button class="tc ${stock ? 'go' : ''}" data-act="depot-add" ${stock ? '' : 'disabled'}>${icon('plus')}<span>${t('rb_add', { n: stock })}</span></button>` : ''}</div>
+            <div class="rb-bays">${bays}</div>
+          </div>
+          ${owned || this.sim.creative ? '' : `<p class="save-hint clamp2" data-more>${t('depot_none')}</p>`}
+          <div class="lbl">${t('depot_fleet')}</div>
+          <div class="seg">${Array.from({ length: DEPOT_ROBOTS_MAX }, (_, i) => i + 1).map((n) => `<button class="${want === n ? 'on' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>
+          <p class="save-hint clamp2" data-more>${t('depot_hint')}</p>`;
       } else if (b.type === 'picker') {
         const reach = b.threshold === 2 ? 2 : 1;
         body = `${statusLine(` · ${b.acc ?? 0} ${t('picker_moved')}`)}

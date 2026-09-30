@@ -2835,3 +2835,36 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .wear-top b, .info-panel .wear-auto span:first-child { white-space: nowrap; }
 .fab-x { position: absolute; top: -1px; right: -1px; font-style: normal; font-family: var(--disp); font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 0 10px 0 8px; color: #03141a; background: var(--accent); box-shadow: 0 0 8px rgba(34, 211, 238, 0.5); }
 .fab-chip.out { padding-right: 18px; }
+
+/* =====================================================================================
+   Robot depot: bays with the robots (state, cargo, battery). Dock: its mode and the buffer
+   as eight slots (the collect mark on the slot robots wait for).
+   ===================================================================================== */
+.rb-hero, .dk-hero { padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px; background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.rb-head { display: flex; align-items: center; justify-content: space-between; gap: 10px; margin-bottom: 10px; }
+.rb-head small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; }
+.rb-head .tc { flex-direction: row; gap: 6px; padding: 5px 10px; }
+.rb-head .tc.go { color: #ecfeff; border-color: rgba(52, 211, 153, 0.55); background: linear-gradient(180deg, rgba(52, 211, 153, 0.25), rgba(52, 211, 153, 0.06)); }
+.rb-head .tc .ico { width: 16px; height: 16px; }
+.rb-head .tc[disabled] { opacity: 0.4; }
+.rb-bays { display: grid; grid-template-columns: repeat(4, 1fr); gap: 6px; }
+.rb-bay { position: relative; display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 8px 4px 8px; border-radius: 10px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(148, 163, 184, 0.16); min-height: 84px; }
+.rb-bay .icon { width: 34px; height: 34px; }
+.rb-bay b { font-family: var(--disp); font-size: 9.5px; letter-spacing: 0.08em; text-transform: uppercase; color: #cbd5e1; text-align: center; }
+.rb-bay em { display: inline-flex; align-items: center; gap: 2px; font-style: normal; font-size: 10px; color: #e2e8f0; }
+.rb-bay.on { border-color: rgba(34, 211, 238, 0.45); background: rgba(34, 211, 238, 0.07); }
+.rb-bay.charge { border-color: rgba(250, 204, 21, 0.45); background: rgba(250, 204, 21, 0.06); }
+.rb-bay.home .icon { opacity: 0.7; }
+.rb-bay.empty { justify-content: center; border-style: dashed; background: rgba(0, 0, 0, 0.2); }
+.rb-bay.empty small { font-size: 9.5px; color: #64748b; text-align: center; }
+.rb-bat { display: block; width: 80%; height: 4px; margin-top: auto; border-radius: 2px; background: rgba(148, 163, 184, 0.2); overflow: hidden; }
+.rb-bat i { display: block; height: 100%; background: #34d399; }
+.rb-bat.low i { background: #f87171; }
+.dk-hero { display: flex; align-items: center; gap: 12px; }
+.dk-mode { flex: none; display: flex; flex-direction: column; align-items: center; gap: 3px; width: 84px; }
+.dk-mode img { width: 44px; height: 44px; }
+.dk-mode b { font-family: var(--disp); font-size: 11px; letter-spacing: 0.1em; text-transform: uppercase; color: #67e8f9; }
+.dk-hero.unload .dk-mode b { color: #fbbf24; }
+.dk-mode small { font-family: var(--disp); font-size: 11px; color: #94a3b8; }
+.dk-bay { flex: 1; display: grid; grid-template-columns: repeat(4, 1fr); gap: 4px; padding: 6px; border-radius: 10px; background: #05080d; box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.14); }
+.dk-bay .slot.mark { box-shadow: inset 0 -3px 0 var(--accent); }
