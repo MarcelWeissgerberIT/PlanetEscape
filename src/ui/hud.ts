@@ -1954,16 +1954,37 @@ export class Hud {
         <div class="bufs"><span class="lbl">${t('output')}</span>${Object.entries(b.output ?? {}).map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`).join('') || '–'}</div>${dirPicker}`;
     } else if (def.kind === 'storage') {
       const hall = isHall(b.type);
-      const hallHead = hall
-        ? `<div class="lbl">${t('hall_slots', { used: this.sim.hallUsed(b), n: this.sim.hallSlots(b) })} · ${t('hall_items', { n: Object.values(b.store ?? {}).reduce((a, c) => a + (c ?? 0), 0), cap: this.sim.hallSlots(b) * HALL_SLOT_CAP })}</div>
-          <div class="dirs"><span class="lbl">${t('hall_mode')}</span><button class="chip ${b.mode !== 'pass' ? 'active' : ''}" data-mode="hold">${t('hall_hold')}</button><button class="chip ${b.mode === 'pass' ? 'active' : ''}" data-mode="pass">${t('hall_pass')}</button></div>
-          <p class="save-hint">${t('hall_hint')}</p>`
-        : '';
-      const items = Object.entries(b.store ?? {})
-        .map(([k, n]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${n}</span>`)
-        .join('');
+      const entries = Object.entries(b.store ?? {}).filter(([, n]) => (n ?? 0) > 0) as [ItemId, number][];
+      const total = entries.reduce((a, [, n]) => a + n, 0);
+      const cap = hall ? this.sim.hallSlots(b) * HALL_SLOT_CAP : this.sim.storageCap();
+      const frac = cap ? Math.min(1, total / cap) : 0;
+      const gauge = `<div class="sto-gauge ${frac >= 1 ? 'full' : ''}"><span class="sto-bar"><i style="width:${frac * 100}%"></i></span><span class="sto-nums"><b>${total}</b> / ${cap}</span></div>`;
+      let head: string;
+      if (hall) {
+        // the shelves: one per tile, 50 of one kind each, filled in the order the kinds are stored
+        const slots: { k: ItemId; n: number }[] = [];
+        for (const [k, n] of entries) for (let left = n; left > 0; left -= HALL_SLOT_CAP) slots.push({ k, n: Math.min(HALL_SLOT_CAP, left) });
+        const nSlots = this.sim.hallSlots(b);
+        // all filled shelves and a row of free ones at most; the rest is counted
+        const shown = Math.min(nSlots, Math.min(40, Math.ceil((slots.length + 1) / 8) * 8) - (nSlots > Math.max(8, Math.ceil((slots.length + 1) / 8) * 8) ? 1 : 0));
+        head = `<div class="sto-hero">
+            <div class="sto-head"><small>${t('hall_slots', { used: this.sim.hallUsed(b), n: nSlots })}</small>${gauge}</div>
+            <div class="shelf">${Array.from({ length: shown }, (_, i) => {
+              const sl = slots[i];
+              return sl ? `<span class="slot" title="${tItem(sl.k)} ${sl.n}/${HALL_SLOT_CAP}">${itemImg(sl.k, 'icon sm')}<i style="width:${(sl.n / HALL_SLOT_CAP) * 100}%"></i></span>` : `<span class="slot empty"></span>`;
+            }).join('')}${nSlots > shown ? `<span class="slot more">+${nSlots - shown}<small>${t('hall_free')}</small></span>` : ''}</div>
+          </div>
+          <div class="lbl">${t('hall_mode')}</div>
+          <div class="seg"><button class="${b.mode !== 'pass' ? 'on' : ''}" data-mode="hold">${t('hall_hold')}</button><button class="${b.mode === 'pass' ? 'on' : ''}" data-mode="pass">${t('hall_pass')}</button></div>
+          <p class="save-hint clamp2" data-more>${t('hall_hint')}</p>`;
+      } else {
+        head = `<div class="sto-hero">
+            <div class="sto-head"><small>${t('stored')}</small>${gauge}</div>
+            <div class="sto-items">${entries.map(([k, n]) => `<span class="sto-item" title="${tItem(k)}">${itemImg(k, 'icon')}<b>${n}</b></span>`).join('') || `<span class="dim">–</span>`}</div>
+          </div>`;
+      }
       const filterable = Array.from(new Set([...Object.keys(b.store ?? {}), ...(b.recipe ? [b.recipe] : [])])) as ItemId[];
-      body = `${hallHead}<div class="bufs"><span class="lbl">${t('stored')}</span>${items || '–'}</div>${dirPicker}
+      body = `${head}${dirPicker}
         <div class="lbl">${t('filter')}</div>
         <div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('no_filter')}</button>
         ${filterable.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
