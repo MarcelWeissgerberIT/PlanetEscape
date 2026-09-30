@@ -2031,16 +2031,24 @@ export class Hud {
       const fuel = PLANT_FUEL[b.type]!.item;
       body = `${statusLine()}<div class="bufs"><span class="lbl">${t('fuel_left')}</span><span class="buf">${itemImg(fuel, 'icon sm')}${b.input?.[fuel] ?? 0}</span> <span class="buf">${Math.ceil(b.fuelSeconds ?? 0)}s</span></div>${dirPicker}`;
     } else if (b.type === 'core') {
-      const parts = Object.entries(SHIP_PARTS)
-        .map(([k, n]) => {
-          const have = Math.min(n!, st.ship[k as ItemId] ?? 0);
-          return `<div class="mrow ${have >= n! ? 'done' : ''}" style="--p:${Math.round((have / n!) * 100)}%">${itemImg(k as ItemId, 'icon sm')}<span class="mname">${tItem(k as ItemId)}</span><span class="mcount">${have}/${n}</span></div>`;
-        })
-        .join('');
-      const p = Math.round(this.sim.shipProgress() * 100);
+      const entries = Object.entries(SHIP_PARTS) as [ItemId, number][];
+      const done = entries.filter(([k, n]) => (st.ship[k] ?? 0) >= n).length;
+      const parts = entries.map(([k, n]) => {
+        const have = Math.min(n, st.ship[k] ?? 0);
+        return `<div class="cr-part ${have >= n ? 'done' : ''}">${itemImg(k, 'icon')}<span class="cr-name">${tItem(k)}</span><b>${have}<small>/${n}</small></b><span class="cr-bar"><i style="width:${Math.round((have / n) * 100)}%"></i></span>${have >= n ? `<em>${icon('check')}</em>` : ''}</div>`;
+      }).join('');
+      const p = this.sim.shipProgress();
+      const R = 34, C = 2 * Math.PI * R;
+      const q = this.sim.printQueue();
+      const kits = Object.values(st.kits ?? {}).reduce((a, n) => a + (n ?? 0), 0);
       body = st.options.mode === 'playground'
         ? `<p class="save-hint">${t('core_playground')}</p>`
-        : `<div class="term-btns"><button class="btn small primary" data-act="printer">${icon('print', 'sm')} ${t('printer_title')}</button></div><div class="lbl">${t('ship_progress')} ${p}%</div><div class="pbar big"><div class="pfill" style="width:${p}%"></div></div><div class="mrows">${parts}</div>`;
+        : `<div class="cr-hero">
+            <span class="cr-ring"><svg viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${R}" class="tm-track"/><circle cx="40" cy="40" r="${R}" class="tm-arc" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - p)).toFixed(1)}"/></svg><b>${Math.round(p * 100)}<small>%</small></b></span>
+            <span class="cr-text"><small>${t('ship_progress')}</small><b>${done}<span> / ${entries.length}</span></b><em>${t('cr_parts_done')}</em></span>
+            <button class="tc cr-print" data-act="printer">${icon('print')}<span>${t('printer_title')}</span><small>${q.length ? t('cr_queue', { n: q.length }) : t('kits_total', { n: kits })}</small></button>
+          </div>
+          <div class="cr-parts">${parts}</div>`;
     } else if (b.type === 'terminal') {
       const cpu = this.sim.cpu(b);
       const errs = this.sim.cpuErrorsOf(b);
