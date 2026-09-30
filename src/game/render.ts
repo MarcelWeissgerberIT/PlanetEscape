@@ -1133,26 +1133,20 @@ export class Renderer {
     ctx.translate(cx, cy);
     ctx.rotate((b.dir * Math.PI) / 2);
     const curved = (input === 'left' || input === 'right') && ready(straight);
-    if (b.type === 'tunnel' && !b.exit) {
-      // entrance: belt comes in from behind and vanishes into the hatch
-      if (ready(tunnelImg)) {
-        ctx.drawImage(tunnelImg, -TILE / 2, -TILE / 2, TILE, TILE);
-        this.scrollStrip(straight, 0, TILE / 2, true);
-      } else this.fallbackBelt();
-      if (b.pair == null) this.dot(0, -TILE / 4, '#ef4444');
-    } else if (b.type === 'tunnel') {
-      // exit: belt continues forward, hatch at the back
+    if (b.type === 'tunnel') {
+      // the belt runs on with its rails and disappears into (or comes out of) the hatch: entrance hatch in front,
+      // exit hatch behind, so a tunnel reads as part of the belt line instead of a box of its own
       if (ready(straight)) {
         this.drawStraight(straight);
         this.scrollStrip(straight, -TILE / 2, TILE / 2, false);
-        if (ready(tunnelImg)) {
-          ctx.save();
-          ctx.rotate(Math.PI);
-          ctx.drawImage(tunnelImg, 0, 0, tunnelImg.naturalWidth, tunnelImg.naturalHeight / 2, -TILE / 2, -TILE / 2, TILE, TILE / 2);
-          ctx.restore();
-        }
       } else this.fallbackBelt();
-      if (b.pair == null) this.dot(0, TILE / 4, '#ef4444');
+      if (ready(tunnelImg)) {
+        ctx.save();
+        if (b.exit) ctx.rotate(Math.PI);
+        this.drawHatch(tunnelImg);
+        ctx.restore();
+      }
+      if (b.pair == null) this.dot(0, b.exit ? TILE / 4 : -TILE / 4, '#ef4444');
     } else if (curved) {
       // Mitred corner built from the straight texture: the incoming leg comes from the side,
       // the outgoing leg points up. Split along the 45° diagonal so rails meet cleanly.
@@ -1190,6 +1184,22 @@ export class Renderer {
     ctx.restore();
 
     if (this.overlay || b.status === 'jammed' || b.status === 'dead_end') this.drawBeltStatus(b);
+  }
+
+  /** The tunnel hatch (cut from the tunnel sprite) over the front half of the tile, a little wider than the belt rails. */
+  private drawHatch(img: HTMLImageElement) {
+    const { ctx } = this;
+    const k = img.naturalWidth / 256;
+    const sx = 64 * k, sy = 18 * k, sw = 128 * k, sh = 112 * k; // the hatch frame in the 256 px sprite
+    const w = TILE * 0.7, h = w * (sh / sw);
+    const y0 = -TILE / 2 - TILE * 0.02;
+    // the belt darkens as it runs into the opening
+    const g = ctx.createLinearGradient(0, y0 + h, 0, y0 + h - TILE * 0.2);
+    g.addColorStop(0, 'rgba(0,0,0,0)');
+    g.addColorStop(1, 'rgba(0,0,0,0.55)');
+    ctx.fillStyle = g;
+    ctx.fillRect(-w / 2, y0 + h - TILE * 0.2, w, TILE * 0.2);
+    ctx.drawImage(img, sx, sy, sw, sh, -w / 2, y0, w, h);
   }
 
   /** Draw the straight belt texture edge to edge, trimming the rail end caps so tiles join seamlessly. */
