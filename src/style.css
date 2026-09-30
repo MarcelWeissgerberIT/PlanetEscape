@@ -2697,3 +2697,36 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .bt-text b span { font-size: 15px; color: #94a3b8; }
 .bt-text em { font-style: normal; font-size: 11.5px; color: #94a3b8; line-height: 1.35; }
 .bt-hero.full .bt-text b { color: #a7f3d0; }
+
+/* =====================================================================================
+   Video receiver and speaker in the dock style.
+   ===================================================================================== */
+.vd-hero, .sp-hero { position: relative; display: flex; align-items: center; gap: 12px; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px; background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.vd-hero.live { border-color: rgba(52, 211, 153, 0.45); }
+.vd-text { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.vd-text b { font-family: var(--disp); font-size: 15px; letter-spacing: 0.1em; text-transform: uppercase; color: #cbd5e1; }
+.vd-hero.live .vd-text b { color: #a7f3d0; }
+.vd-text small { font-family: var(--disp); font-size: 11px; color: #94a3b8; letter-spacing: 0.06em; }
+.vd-src { grid-template-columns: repeat(4, 1fr); margin: 0 0 4px; }
+.vd-src .tc span { white-space: normal; line-height: 1.15; text-align: center; }
+.vid-stats { grid-template-columns: 1fr; }
+.vid-stats .ts b { font-size: 18px; }
+.vid-stats .ts b span { font-size: 12px; color: #94a3b8; }
+.kb-status.idle { background: rgba(255, 255, 255, 0.04); border-color: rgba(148, 163, 184, 0.2); }
+/* speaker */
+.sp-cone { position: relative; flex: none; width: 60px; height: 60px; border-radius: 50%; background: radial-gradient(circle, #0b1018 0 18%, #2a3546 19% 34%, #121821 35% 62%, #334155 63% 70%, #0b1018 71%); box-shadow: 0 0 0 2px rgba(148, 163, 184, 0.3), inset 0 2px 6px rgba(0, 0, 0, 0.6); }
+.sp-cone i { position: absolute; inset: 0; border-radius: 50%; border: 2px solid rgba(34, 211, 238, 0.7); opacity: 0; }
+.sp-hero.playing .sp-cone { animation: spthump 0.35s ease-in-out infinite alternate; }
+.sp-hero.playing .sp-cone i { animation: rfwave 1.6s ease-out infinite; }
+.sp-hero.playing .sp-cone i:nth-child(2) { animation-delay: 0.53s; }
+.sp-hero.playing .sp-cone i:nth-child(3) { animation-delay: 1.06s; }
+@keyframes spthump { to { transform: scale(1.04); } }
+.sp-text { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.sp-text small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #94a3b8; }
+.sp-text b { font-family: var(--disp); font-size: 26px; line-height: 1; color: #fff; }
+.sp-hero:not(.on) .sp-text b { color: #64748b; }
+.sp-text em { display: flex; align-items: center; gap: 6px; font-style: normal; font-size: 11.5px; color: #94a3b8; line-height: 1.3; }
+.sp-vu { flex: none; display: flex; align-items: flex-end; gap: 3px; height: 44px; }
+.sp-vu i { width: 5px; height: 4px; border-radius: 2px; background: rgba(148, 163, 184, 0.3); }
+.sp-hero.playing .sp-vu i { background: linear-gradient(0deg, #34d399, #facc15 70%, #f87171); animation: spvu 0.5s ease-in-out infinite alternate; animation-delay: calc(var(--i) * -0.13s); }
+@keyframes spvu { 0% { height: 6px; } 50% { height: 30px; } 100% { height: 16px; } }

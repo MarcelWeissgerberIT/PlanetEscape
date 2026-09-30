@@ -2157,32 +2157,40 @@ export class Hud {
         const live = this.cb.videoLive(b);
         const r = this.sim.screenRect(b);
         const k = Math.max(1, Math.min(4, b.value ?? 1));
-        body = `<div class="lbl">${live ? `<span class="okline">● ${t('vid_live')} · ${t(`vid_${live}` as 'vid_screen')}</span>` : `<span class="dim">○ ${t('vid_idle')}</span>`}</div>
-          <div class="term-btns">
-            <button class="btn small ${live === 'screen' ? 'primary' : ''}" data-act="vid-screen">${t('vid_screen')}</button>
-            <button class="btn small ${live === 'camera' ? 'primary' : ''}" data-act="vid-camera">${t('vid_camera')}</button>
-            <button class="btn small ${live === 'file' ? 'primary' : ''}" data-act="vid-file">${t('vid_file')}</button>
-            ${live ? `<button class="btn small" data-act="vid-stop">■ ${t('vid_stop')}</button>` : ''}
+        const st2 = this.sim.screenStats(b);
+        const kk = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + ' M' : n >= 1000 ? (n / 1000).toFixed(0) + ' k' : String(Math.round(n)));
+        const okCap = st2.capPx >= st2.needPx, okMem = st2.rows >= st2.h, okBud = st2.budget > 0;
+        const miss = this.sim.screenMissing(b);
+        const spk = this.sim.speakersOf(b).length;
+        const sound = live ? (this.cb.videoHasAudio(b) ? (spk ? t('vid_sound_on', { n: spk }) : t('vid_sound_nospeaker')) : t('vid_sound_none')) : t('vid_sound_idle', { n: spk });
+        const src = (act: string, ic: Parameters<typeof icon>[0], label: string, on: boolean) => `<button class="tc ${on ? 'on' : ''}" data-act="${act}">${icon(ic)}<span>${label}</span></button>`;
+        body = `<div class="vd-hero ${live ? 'live' : ''}">
+            <i class="term-led ${live ? 'run' : 'pause'}"></i>
+            <span class="vd-text"><b>${live ? `${t('vid_live')} · ${t(`vid_${live}` as 'vid_screen')}` : t('vid_idle')}</b><small>${r.w}×${r.h} px</small></span>
+          </div>
+          <div class="term-ctl vd-src">
+            ${src('vid-screen', 'fullscreen', t('vid_screen'), live === 'screen')}
+            ${src('vid-camera', 'scan', t('vid_camera'), live === 'camera')}
+            ${src('vid-file', 'upload', t('vid_file'), live === 'file')}
+            ${live ? src('vid-stop', 'close', t('vid_stop'), false) : ''}
             <input id="vidfile" class="file-hidden" type="file" accept="video/*">
           </div>
-          <div class="dirs"><span class="lbl">${t('vid_size')}</span>${[1, 2, 3, 4].map((n) => `<button class="chip ${k === n ? 'active' : ''}" data-value="${n}">${8 * n}×${4 * n}</button>`).join('')}<small class="dim"> · ${r.w}×${r.h} px</small></div>
-          <div class="dirs"><span class="lbl">${t('vid_crop')}</span>${VIDEO_CROPS.map((c, i) => `<button class="chip ${(b.ratio ?? 0) === i ? 'active' : ''}" data-crop="${i}">${c === 1 ? t('vid_fit') : c + '×'}</button>`).join('')}</div>
-          <div class="dirs wrap"><span class="lbl">${t('vid_density')}</span>${MATRIX_SIZES.map((n) => `<button class="chip ${r.w / (SCREEN_REGION.w * k) === n ? 'active' : ''}" data-mxall="${n}">${n}×${n}</button>`).join('')}</div>
-          ${(() => {
-            const s = this.sim.screenStats(b);
-            const k = (n: number) => (n >= 1e6 ? (n / 1e6).toFixed(1) + ' M' : n >= 1000 ? (n / 1000).toFixed(0) + ' k' : String(Math.round(n)));
-            const okCap = s.capPx >= s.needPx, okMem = s.rows >= s.h, okBud = s.budget > 0;
-            return `<div class="term-parts">
-              <div class="tp"><span>${itemImg((b.recipe as ItemId | null) ?? 'copper_wire', 'icon xs')} ${t('vid_phosphor')}</span><b class="${okBud ? '' : 'bad'}">${(s.budget / 1e6).toFixed(1)} / ${s.budgetMax / 1e6} M px</b><small>${t('vid_phosphor_hint')}</small></div>
-              <div class="tp"><span>${t('vid_lanes')}</span><b class="${okCap ? '' : 'bad'}">${s.lanes} × ${s.hz >= 1000 ? (s.hz / 1000).toFixed(1) + ' kHz' : s.hz + ' Hz'} = ${k(s.capPx)} px/s</b><small>${t('vid_lanes_hint', { need: k(s.needPx) })}</small></div>
-              <div class="tp"><span>${t('vid_memory')}</span><b class="${okMem ? '' : 'bad'}">${s.cells} × 4096 px = ${s.rows}/${s.h} ${t('vid_rows')}</b><small>${t('vid_memory_hint')}</small></div>
-            </div>`;
-          })()}
-          ${(() => { const m = this.sim.screenMissing(b); return m.cells + m.lanes + m.oscillators ? `<div class="term-btns"><button class="btn small primary" data-act="vid-wire">${icon('plus', 'sm')} ${t('vid_wire', { c: m.cells, l: m.lanes, o: m.oscillators })}</button></div>` : ''; })()}
-          <div class="dirs wrap"><span class="lbl">${t('vid_sample')}</span>${(['scan', 'avg', 'centre', 'off'] as const).map((m) => `<button class="chip ${(b.mode ?? 'scan') === m ? 'active' : ''}" data-smode="${m}">${t(`vid_sample_${m}` as 'vid_sample_scan')}</button>`).join('')}</div>
-          <p class="save-hint">${t('vid_sample_hint')}</p>
-          <div class="lbl">${(() => { const n = this.sim.speakersOf(b).length; return live ? (this.cb.videoHasAudio(b) ? (n ? `🔊 ${t('vid_sound_on', { n })}` : `🔇 ${t('vid_sound_nospeaker')}`) : `🔇 ${t('vid_sound_none')}`) : `🔈 ${t('vid_sound_idle', { n })}`; })()}</div>
-          <p class="save-hint">${t('vid_hint')}</p>`;
+          <div class="lbl">${t('vid_size')}</div>
+          <div class="seg">${[1, 2, 3, 4].map((n) => `<button class="${k === n ? 'on' : ''}" data-value="${n}">${8 * n}×${4 * n}</button>`).join('')}</div>
+          <div class="lbl">${t('vid_crop')}</div>
+          <div class="seg">${VIDEO_CROPS.map((c, i) => `<button class="${(b.ratio ?? 0) === i ? 'on' : ''}" data-crop="${i}">${c === 1 ? t('vid_fit') : c + '×'}</button>`).join('')}</div>
+          <div class="lbl">${t('vid_density')}</div>
+          <div class="seg">${MATRIX_SIZES.map((n) => `<button class="${r.w / (SCREEN_REGION.w * k) === n ? 'on' : ''}" data-mxall="${n}">${n}²</button>`).join('')}</div>
+          <div class="term-stats vid-stats">
+            <div class="ts ${okBud ? '' : 'bad'}"><small>${itemImg((b.recipe as ItemId | null) ?? 'copper_wire', 'icon xs')} ${t('vid_phosphor')}</small><b>${(st2.budget / 1e6).toFixed(1)}<span> / ${st2.budgetMax / 1e6} M px</span></b><em class="clamp2" data-more>${t('vid_phosphor_hint')}</em></div>
+            <div class="ts ${okCap ? '' : 'bad'}"><small>${t('vid_lanes')}</small><b>${st2.lanes} × ${st2.hz >= 1000 ? (st2.hz / 1000).toFixed(1) + ' kHz' : st2.hz + ' Hz'}<span> = ${kk(st2.capPx)} px/s</span></b><em class="clamp2" data-more>${t('vid_lanes_hint', { need: kk(st2.needPx) })}</em></div>
+            <div class="ts ${okMem ? '' : 'bad'}"><small>${t('vid_memory')}</small><b>${st2.rows}<span> / ${st2.h} ${t('vid_rows')}</span></b><em class="clamp2" data-more>${st2.cells} × 4096 px · ${t('vid_memory_hint')}</em></div>
+          </div>
+          ${miss.cells + miss.lanes + miss.oscillators ? `<div class="term-btns"><button class="btn small primary" data-act="vid-wire">${icon('plus', 'sm')} ${t('vid_wire', { c: miss.cells, l: miss.lanes, o: miss.oscillators })}</button></div>` : ''}
+          <div class="lbl">${t('vid_sample')}</div>
+          <div class="seg">${(['scan', 'avg', 'centre', 'off'] as const).map((m) => `<button class="${(b.mode ?? 'scan') === m ? 'on' : ''}" data-smode="${m}">${t(`vid_sample_${m}` as 'vid_sample_scan')}</button>`).join('')}</div>
+          <div class="kb-status ${live && this.cb.videoHasAudio(b) && spk ? 'on' : live ? 'off' : 'on idle'}"><i class="term-led ${live && this.cb.videoHasAudio(b) && spk ? 'run' : 'pause'}"></i><span>${sound}</span></div>
+          <p class="save-hint clamp2" data-more>${t('vid_hint')}</p>`;
       } else if (b.type === 'timer') {
         const period = b.threshold ?? 3;
         const open = b.open !== false;
@@ -2232,9 +2240,14 @@ export class Hud {
       } else if (b.type === 'speaker') {
         const rx = this.sim.linkedReceiver(b);
         const vol = b.value ?? 7;
-        body = `<div class="lbl">${rx ? `<span class="okline">● ${t('spk_linked')}</span>` : `<span class="bad">○ ${t('spk_unlinked')}</span>`}</div>
-          <div class="dirs wrap"><span class="lbl">${t('spk_volume')}</span>${[0, 2, 4, 6, 8, 10].map((v) => `<button class="chip ${vol === v ? 'active' : ''}" data-value="${v}">${v === 0 ? t('off') : v * 10 + '%'}</button>`).join('')}</div>
-          <p class="save-hint">${t('spk_hint')}</p>`;
+        const playing = !!rx && !!this.cb.videoLive(rx) && vol > 0;
+        body = `<div class="sp-hero ${rx ? 'on' : ''} ${playing ? 'playing' : ''}">
+            <span class="sp-cone"><i></i><i></i><i></i></span>
+            <span class="sp-text"><small>${t('spk_volume')}</small><b>${vol === 0 ? t('off') : vol * 10 + '%'}</b><em><i class="term-led ${rx ? 'run' : 'err'}"></i>${rx ? t('spk_linked') : t('spk_unlinked')}</em></span>
+            <span class="sp-vu">${Array.from({ length: 8 }, (_, i) => `<i style="--i:${i}"></i>`).join('')}</span>
+          </div>
+          <div class="seg">${[0, 2, 4, 6, 8, 10].map((v) => `<button class="${vol === v ? 'on' : ''}" data-value="${v}">${v === 0 ? t('off') : v * 10 + '%'}</button>`).join('')}</div>
+          <p class="save-hint clamp2" data-more>${t('spk_hint')}</p>`;
       } else if (b.type === 'matrix') {
         const s = matrixSize(b);
         const px = b.px ?? [];
