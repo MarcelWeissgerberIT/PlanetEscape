@@ -35,7 +35,7 @@ import { challengeRules, medalSummary } from './challenges';
 import { wearHtml, cpuStateHtml } from './panels';
 import { blueprintContent } from './blueprint';
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from '../game/chip8';
-import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize, FORK_CAP, FORK_RANGE } from '../game/data';
+import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize, FORK_CAP, FORK_RANGE, REGISTER_MAX } from '../game/data';
 import { VIDEO_CROPS } from '../game/video';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
@@ -2270,18 +2270,39 @@ export class Hud {
           </div>
         </div>
         <p class="save-hint">${t('term_keys_hint')}${switches.length ? ` · ${t('term_switches', { n: switches.length })}` : ''} ${t('term_display_hint')}</p>`;
-    } else if (b.type === 'register' || b.type === 'adder' || b.type === 'subtractor' || b.type === 'multiplier' || b.type === 'divider') {
+    } else if (b.type === 'register') {
+      // a memory chip: the value large (decimal and hex), as eight bit LEDs, and how full the cell is
+      const val = b.value ?? 0;
+      const it = b.recipe as ItemId | undefined;
+      const cellOf = st.buildings.map((tb) => (tb.type === 'terminal' ? { tb, i: this.sim.board(tb).cells.indexOf(b) } : null)).find((c) => c && c.i >= 0);
+      const bits = Array.from({ length: 8 }, (_, i) => (val >> (7 - i)) & 1);
+      body = `<div class="rg-hero ${val ? 'on' : ''}">
+          <div class="rg-chip">
+            <span class="rg-pins">${'<i></i>'.repeat(6)}</span>
+            <div class="rg-lcd"><small>${t('ar_value')}</small><b>${val}</b><em>0x${val.toString(16).toUpperCase().padStart(2, '0')}</em></div>
+            <span class="rg-pins">${'<i></i>'.repeat(6)}</span>
+          </div>
+          <div class="rg-bits">${bits.map((v, i) => `<span class="${v ? 'on' : ''}"><i></i><small>${7 - i}</small></span>`).join('')}</div>
+          <span class="rg-fill"><i style="width:${((val / REGISTER_MAX) * 100).toFixed(1)}%"></i></span>
+          <div class="rg-row">
+            <span class="rg-held">${it ? itemImg(it, 'icon sm') : '<b class="sr-q">?</b>'}<span><small>${t('rg_holds')}</small><b>${it ? tItem(it) : '–'}</b></span></span>
+            <span class="rg-stat"><b>${b.acc ?? 0}</b><small>${t('rg_released')}</small></span>
+            ${b.bufL?.length ? `<span class="rg-stat"><b>${b.bufL.length}</b><small>${t('rg_out')}</small></span>` : ''}
+          </div>
+          <div class="rg-io"><span><i>↑</i>${t('rg_store')}</span><span><i>↔</i>${t('rg_release')}</span>${cellOf ? `<span class="ram"><i>▦</i>${t('ram_cell', { a: '0x' + (0x200 + cellOf.i).toString(16).toUpperCase() })}</span>` : ''}<button class="rg-clear" data-act="arith-clear" ${val ? '' : 'disabled'}>${icon('close', 'sm')}${t('lamp_clear')}</button></div>
+        </div>
+        <p class="save-hint clamp2" data-more>${t('arith_register')}</p>${dirPicker}`;
+    } else if (b.type === 'adder' || b.type === 'subtractor' || b.type === 'multiplier' || b.type === 'divider') {
       const val = b.value ?? 0;
       const held = b.recipe ? itemImg(b.recipe as ItemId, 'icon xs') : '';
-      const cellOf = b.type === 'register' ? st.buildings.map((tb) => (tb.type === 'terminal' ? { tb, i: this.sim.board(tb).cells.indexOf(b) } : null)).find((c) => c && c.i >= 0) : null;
-      const op = { register: 'M', adder: '+', subtractor: '−', multiplier: '×', divider: '÷' }[b.type as 'adder'];
-      const shown = b.type === 'register' ? val : b.type === 'subtractor' ? b.debt ?? 0 : b.type === 'adder' ? b.acc ?? 0 : val;
-      const label = b.type === 'register' ? t('ar_value') : b.type === 'subtractor' ? t('arith_pending') : b.type === 'adder' ? t('arith_total') : t('arith_factor');
+      const op = { adder: '+', subtractor: '−', multiplier: '×', divider: '÷' }[b.type as 'adder'];
+      const shown = b.type === 'subtractor' ? b.debt ?? 0 : b.type === 'adder' ? b.acc ?? 0 : val;
+      const label = b.type === 'subtractor' ? t('arith_pending') : b.type === 'adder' ? t('arith_total') : t('arith_factor');
       const factor = b.type === 'multiplier' || b.type === 'divider' ? `<div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<button class="key ${val === k ? 'on' : ''}" data-value="${k}">${k}</button>`).join('')}</div>` : '';
       body = `<div class="ar-hero">
           <span class="ar-op">${op}</span>
           <span class="ar-lcd"><small>${label}</small><b>${shown}</b>
-            <span class="ar-tags">${held ? `<i>${held}</i>` : ''}${cellOf ? `<i>${t('ram_cell', { a: '0x' + (0x200 + cellOf.i).toString(16).toUpperCase() })}</i>` : ''}${b.bufL?.length ? `<i>${t('arith_queue', { n: b.bufL.length })}</i>` : ''}</span></span>
+            <span class="ar-tags">${held ? `<i>${held}</i>` : ''}${b.bufL?.length ? `<i>${t('arith_queue', { n: b.bufL.length })}</i>` : ''}</span></span>
           <button class="tc" data-act="arith-clear">${icon('close')}<span>${t('lamp_clear')}</span></button>
         </div>
         ${factor}
@@ -2577,10 +2598,33 @@ export class Hud {
           <p class="save-hint clamp2" data-more>${t('timer_hint')}</p>${dirPicker}`;
       } else if (b.type === 'sensor') {
         const hit = (b.timer ?? 0) > 0;
-        body = `<div class="ls-hero ${hit ? 'hit' : ''}">
-            <span class="ls-beam"><i class="ls-post"></i><i class="ls-ray"></i><i class="ls-post"></i></span>
-            <span class="ls-count"><b>${b.acc ?? 0}</b><small>${t('sensor_count')}</small></span>
-            <i class="term-led ${hit ? 'run' : 'pause'}"></i>
+        const last = b.mineItem as ItemId | undefined;
+        // what each side does with a pulse
+        const side = (d: Dir) => {
+          const n = this.sim.at(b.x + DX[d], b.y + DY[d]);
+          const eff = !n ? '' : n.type === 'switch' ? (n.mode === 'pulse' ? t('ls_hold') : t('ls_flip')) : n.type === 'register' ? t('ls_release') : n.type === 'timer' ? t('ls_restart') : '';
+          return `<div class="ls2-side ${n ? (eff ? 'on' : 'deaf') : 'none'}">
+            ${n ? `<img src="${buildingUrl(n.type)}" alt="">` : '<span class="fk-dot"></span>'}
+            <b>${n ? tBuilding(n.type) : t('jn_none')}</b>
+            <small>${n ? eff || t('ls_deaf') : '–'}</small>
+          </div>`;
+        };
+        const L = ((b.dir + 3) & 3) as Dir, R = ((b.dir + 1) & 3) as Dir;
+        body = `<div class="ls2 ${hit ? 'hit' : ''}">
+            ${side(L)}
+            <div class="ls2-gate">
+              <span class="ls2-belt"></span>
+              <span class="ls2-post l"></span><span class="ls2-post r"></span>
+              <span class="ls2-beam"></span>
+              <span class="ls2-pulse l">‹</span><span class="ls2-pulse r">›</span>
+              ${last ? `<span class="ls2-item">${itemImg(last, 'icon sm')}</span>` : ''}
+            </div>
+            ${side(R)}
+          </div>
+          <div class="term-stats fk-stats ls2-stats">
+            <div class="ts"><small>${t('sensor_count')}</small><b>${b.acc ?? 0}</b></div>
+            <div class="ts"><small>${t('ls_last')}</small><b>${last ? itemImg(last, 'icon xs') : '–'}</b></div>
+            <div class="ts"><small>${t('ls_state')}</small><b><i class="term-led ${hit ? 'run' : 'pause'}"></i>${hit ? t('ls_hit') : t('ls_free')}</b></div>
           </div>
           <p class="save-hint clamp2" data-more>${t('sensor_hint')}</p>${dirPicker}`;
       } else if (b.type === 'radio') {

@@ -2450,6 +2450,7 @@ export class Sim {
       b.output = {};
       b.timer = 0.25;
       b.acc = (b.acc ?? 0) + 1;
+      b.mineItem = key; // the last item through (panel)
       for (const side of [((b.dir + 1) & 3) as Dir, ((b.dir + 3) & 3) as Dir]) {
         const t = this.at(b.x + DX[side], b.y + DY[side]);
         if (t) this.signal(t, side);
