@@ -32,7 +32,7 @@ import { challengeRules, medalSummary } from './challenges';
 import { wearHtml, cpuStateHtml } from './panels';
 import { blueprintContent } from './blueprint';
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from '../game/chip8';
-import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize } from '../game/data';
+import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize, FORK_CAP, FORK_RANGE } from '../game/data';
 import { VIDEO_CROPS } from '../game/video';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
@@ -2282,6 +2282,25 @@ export class Hud {
           <div class="lbl">${t('depot_fleet')}</div>
           <div class="seg">${Array.from({ length: DEPOT_ROBOTS_MAX }, (_, i) => i + 1).map((n) => `<button class="${want === n ? 'on' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>
           <p class="save-hint clamp2" data-more>${t('depot_hint')}</p>`;
+      } else if (b.type === 'forklift') {
+        const f = this.sim.forklifts().find((k) => k.station === b.id);
+        const stt = f?.state ?? 'idle';
+        const src = f?.src != null ? st.buildings.find((x) => x.id === f.src) : undefined;
+        const dst = f?.dst != null ? st.buildings.find((x) => x.id === f.dst) : undefined;
+        const end = (x: Building | undefined) => x ? `<img class="icon sm" src="${buildingUrl(x.type)}" alt="" title="${tBuilding(x.type)}">` : '<span class="fk-dot"></span>';
+        const load = f?.item ? `${itemImg(f.item, 'icon sm')}<em>×${f.count || f.want}</em>` : `<span class="dim">${t('fk_empty')}</span>`;
+        const lift = Math.round(Math.max(0, Math.min(1, f?.lift ?? 0)) * 100);
+        body = `${statusLine()}<div class="fk-hero ${stt}">
+            <span class="fk-bot"><img src="${buildingUrl('forklift_bot' as BuildingId)}" alt=""><i class="fk-mast"><b style="height:${lift}%"></b></i></span>
+            <span class="fk-info"><small>${t('fk_route')}</small><b><i class="term-led ${stt === 'idle' ? 'pause' : 'run'}"></i>${t(`fk_state_${stt}` as 'fk_state_idle')}</b>
+              <span class="fk-route">${end(src)}<i>›</i><span class="fk-load">${load}</span><i>›</i>${end(dst)}</span></span>
+          </div>
+          <div class="term-stats fk-stats">
+            <div class="ts"><small>${t('fk_moved')}</small><b>${b.acc ?? 0}</b></div>
+            <div class="ts"><small>${t('fk_load')}</small><b>${f?.count ?? 0}<span>/${FORK_CAP}</span></b></div>
+            <div class="ts"><small>${t('fk_area')}</small><b>${FORK_RANGE}<span> ${t('rd_tiles')}</span></b></div>
+          </div>
+          <p class="save-hint clamp2" data-more>${t('fk_hint')}</p>${picker(t('fk_filter'))}`;
       } else if (b.type === 'picker') {
         const reach = b.threshold === 2 ? 2 : 1;
         const it = b.recipe as ItemId | undefined;

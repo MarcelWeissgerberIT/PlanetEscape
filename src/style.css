@@ -3057,3 +3057,25 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
   .set-ch { grid-template-columns: 32px minmax(0, 1fr) auto; column-gap: 10px; padding: 9px 10px; }
   .set-ico { width: 32px; height: 32px; font-size: 15px; }
 }
+
+/* forklift station */
+.fk-hero { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px; background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.fk-bot { position: relative; flex: none; width: 68px; height: 68px; border-radius: 12px; display: grid; place-items: center;
+  background: repeating-linear-gradient(135deg, rgba(245, 158, 11, 0.14) 0 6px, transparent 6px 12px), linear-gradient(180deg, rgba(4, 7, 12, 0.85), rgba(12, 18, 27, 0.85)); border: 1px solid rgba(245, 158, 11, 0.35); }
+.fk-bot img { width: 54px; height: 54px; }
+.fk-hero.go .fk-bot img { animation: fkdrive 0.5s ease-in-out infinite alternate; }
+@keyframes fkdrive { from { transform: translateY(1px); } to { transform: translateY(-2px); } }
+.fk-mast { position: absolute; right: 5px; top: 8px; bottom: 8px; width: 5px; border-radius: 3px; background: rgba(0, 0, 0, 0.55); display: flex; align-items: flex-end; overflow: hidden; }
+.fk-mast b { width: 100%; background: linear-gradient(0deg, #f59e0b, #fde68a); border-radius: 3px; transition: height 0.25s; min-height: 2px; }
+.fk-info { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.fk-info > small { font-family: var(--disp); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; }
+.fk-info > b { display: flex; align-items: center; gap: 7px; font-family: var(--disp); font-size: 14px; letter-spacing: 0.06em; }
+.fk-route { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; }
+.fk-route > i { font-style: normal; color: #f59e0b; font-weight: 700; }
+.fk-route .icon { background: rgba(0, 0, 0, 0.3); border-radius: 6px; padding: 2px; }
+.fk-dot { width: 22px; height: 22px; border-radius: 6px; border: 1px dashed rgba(148, 163, 184, 0.4); }
+.fk-load { display: inline-flex; align-items: center; gap: 3px; padding: 2px 8px 2px 3px; border-radius: 999px; background: rgba(245, 158, 11, 0.12); border: 1px solid rgba(245, 158, 11, 0.35); }
+.fk-load em { font-style: normal; font-family: var(--disp); font-size: 12px; color: #fde68a; }
+.fk-load .dim { padding-left: 5px; font-size: 11px; }
+.fk-stats { grid-template-columns: repeat(3, 1fr); }
+.fk-stats .ts b span { font-size: 0.6em; color: #94a3b8; }

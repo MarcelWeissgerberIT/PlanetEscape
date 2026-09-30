@@ -195,4 +195,39 @@ function world() {
   // the new components are recipes of the assembler
   for (const r of ['motor', 'cell', 'robot']) if (!st.unlockedRecipes.includes(r)) throw new Error(`recipe ${r} not unlocked in an all-unlocked game`);
 }
+// forklift: no road; feeds a smelter from a hall, brings the plates to a hall, opens crates in an unstacker, stays in its area
+{
+  const w = world();
+  for (let x = 30; x < 36; x++) w.place('solar', x, 40);
+  const ore = w.place('hall4', 4, 4, 0);
+  ore.store = { iron_ore: 30, 'crate:iron_plate': 2 } as Building['store'];
+  const smelter = w.place('smelter', 11, 5, 0);
+  const plates = w.place('hall4', 14, 4, 0);
+  const station = w.place('forklift', 9, 10);
+  const un = w.place('stacker', 11, 13, 1);
+  un.mode = 'unpack';
+  w.place('storage', 12, 13, 1);
+  // a smelter outside the area gets nothing
+  const far = w.place('smelter', 30, 30, 0);
+  w.place('conveyor', 10, 8, 1); // it drives over belts
+  w.tick(1);
+  const f = w.sim.forklifts().find((k) => k.station === station.id);
+  if (!f) throw new Error('forklift station did not get its forklift');
+  let maxLoad = 0;
+  for (let i = 0; i < 90 * 30; i++) {
+    w.sim.tick(1 / 30);
+    maxLoad = Math.max(maxLoad, f.count);
+  }
+  const made = w.count(plates);
+  console.log('forklift: moved', station.acc, 'max load', maxLoad, 'ore left', ore.store!.iron_ore ?? 0, 'plates in hall', made, 'crates opened', un.acc, 'far smelter', far.input);
+  if ((ore.store!.iron_ore ?? 0) >= 30) throw new Error('forklift did not feed the smelter');
+  if (made < 4) throw new Error('forklift did not bring the plates to a hall');
+  if ((un.acc ?? 0) < 1) throw new Error('forklift did not bring a crate to the unstacker');
+  if (maxLoad > 8 || maxLoad < 2) throw new Error(`forklift load ${maxLoad} out of range`);
+  if (Object.values(far.input ?? {}).some((n) => n)) throw new Error('forklift worked outside its area');
+  if (Math.abs(f.x - 9) > 7 || Math.abs(f.y - 10) > 7) throw new Error('forklift left its area');
+  w.sim.remove(station);
+  if (w.sim.forklifts().length) throw new Error('forklift not removed with its station');
+  void smelter;
+}
 console.log('logistics check ok');

@@ -80,6 +80,8 @@ export const BUILDINGS: Record<BuildingId, BuildingDef> = {
   service: { id: 'service', kind: 'logic', size: 2, cost: { iron_plate: 12, machine_part: 4, copper_wire: 6 }, power: 2, rotatable: false },
   recycler: { id: 'recycler', kind: 'logic', size: 1, cost: { iron_plate: 10, steel_frame: 2, machine_part: 2 }, power: 3, rotatable: true },
   depot: { id: 'depot', kind: 'logic', size: 2, cost: { iron_plate: 10, steel_frame: 2, circuit: 2 }, power: 4, rotatable: false },
+  // forklift station: its forklift robot needs no road; it carries items and crates between halls, machines, docks and stackers nearby
+  forklift: { id: 'forklift', kind: 'logic', size: 2, cost: { iron_plate: 10, motor: 3, circuit: 2 }, power: 2, rotatable: false },
   // a stacker packs eight equal items into one crate (an item of its own on the belt); in unpack mode it opens crates again
   stacker: { id: 'stacker', kind: 'logic', size: 1, cost: { iron_plate: 6, motor: 2 }, power: 2, rotatable: true },
   // warehouses: big depots that take any item from every side and show their shelves; output only when switched on
@@ -170,6 +172,7 @@ export const BUILD_ORDER: BuildingId[] = [
   'kitport',
   'mast',
   'depot',
+  'forklift',
   'stacker',
   'lamp',
   'matrix',
@@ -447,6 +450,7 @@ export const PROJECTS: ProjectDef[] = [
   { id: 'p_wind', after: 3, unlocks: ['wind'], cost: { steel_frame: 6, copper_wire: 10 } },
   { id: 'p_picker', after: 3, unlocks: ['picker'], cost: { steel_frame: 4, copper_wire: 8 } },
   { id: 'p_robots', after: 4, unlocks: ['road', 'dock', 'depot'], cost: { circuit: 10, glass: 6 } },
+  { id: 'p_forklift', after: 4, unlocks: ['forklift'], cost: { motor: 6, circuit: 6 } },
   { id: 'p_power', after: 4, unlocks: ['battery', 'hall8'], cost: { circuit: 4, glass: 10 } },
   { id: 'p_display', after: 4, unlocks: ['matrix', 'screen', 'keyboard'], cost: { circuit: 8, glass: 6 } },
   { id: 'p_math', after: 5, unlocks: ['adder', 'subtractor', 'bus'], cost: { precision_part: 4, fuel: 6 } },
@@ -485,7 +489,7 @@ export const SCREEN_TINT = 0.35; // how much the delivered item's colour tints t
 export const SCREEN_SAMPLE_RATE = 4;
 /** Build menu tabs. */
 export const BUILD_GROUPS: { id: 'logistics' | 'storage' | 'production' | 'energy' | 'circuit' | 'computer'; items: BuildingId[] }[] = [
-  { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'merger', 'sorter', 'overflow', 'mixer', 'valve', 'picker', 'kitport', 'road', 'dock', 'depot', 'radio', 'mast'] },
+  { id: 'logistics', items: ['conveyor', 'tunnel', 'splitter', 'merger', 'sorter', 'overflow', 'mixer', 'valve', 'picker', 'kitport', 'road', 'dock', 'depot', 'forklift', 'radio', 'mast'] },
   { id: 'storage', items: ['storage', 'hall4', 'hall8', 'hall12', 'hall16', 'stacker'] },
   { id: 'production', items: ['miner', 'smelter', 'assembler', 'printer', 'refinery', 'fabricator', 'service', 'recycler'] },
   { id: 'energy', items: ['solar', 'wind', 'battery', 'generator', 'reactor'] },
@@ -539,6 +543,11 @@ export const ROBOT_CAP = 8; // items one robot carries
 export const ROBOT_RATE = 4; // items per second loaded / unloaded at a dock
 export const DOCK_CAP = 8; // items a dock buffers
 export const DEPOT_ROBOTS_MAX = 4;
+export const FORK_RANGE = 5; // tiles around its station a forklift works in
+export const FORK_CAP = 8; // units on the forks (items or whole crates)
+export const FORK_SPEED = 1.7; // tiles per second, off-road (slower than a road robot)
+export const FORK_RATE = 3; // units per second lifted on or off
+export const FORK_PARK = 4; // seconds without work before it drives home
 export const ROBOT_DRAIN = 0.004; // battery used per tile driven (about 250 tiles on a full charge)
 export const ROBOT_DRAIN_WORK = 0.003; // battery used per item loaded or unloaded
 export const ROBOT_LOW = 0.3; // below this a robot without cargo drives home to charge

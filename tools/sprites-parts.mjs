@@ -355,6 +355,53 @@ S.robot = `<g filter="url(#shadow)">
   <line x1="170" y1="212" x2="182" y2="190" stroke="#94a3b8" stroke-width="2.4" stroke-linecap="round"/><circle cx="182" cy="190" r="3" fill="${RED}" filter="url(#glow)"/>
   </g>`;
 
+// forklift station: roof with beacon and type plate, a pallet rack with crates on the left, the marked parking bay with
+// its charging plug on the right, and the area symbol on a small screen
+S.forklift = `${housing(10, 10, 236, 236, 30)}
+  <rect x="24" y="24" width="208" height="56" rx="6" fill="url(#roof)" stroke="#12161b" stroke-width="3"/>
+  ${seam(24, 52, 232, 52)}
+  ${fan(48, 52, 18)}
+  <rect x="76" y="30" width="46" height="42" rx="4" fill="#07090c" stroke="#374151" stroke-width="2"/>
+  <rect x="84" y="38" width="30" height="26" fill="none" stroke="${CYAN}" stroke-width="2" stroke-dasharray="4 3" filter="url(#glow)"/>
+  <rect x="94" y="46" width="10" height="10" fill="${AMBER}"/>
+  ${plate(130, 34, 64, 16, 'FORK-02', '#fde68a')}
+  ${ledRow(136, 64, [GREEN, AMBER, CYAN], 11, 2.6)}
+  <circle cx="212" cy="46" r="14" fill="#0b0e12"/><circle cx="212" cy="46" r="11" fill="url(#chrome)" stroke="#0b0e12" stroke-width="1.5"/><circle cx="212" cy="46" r="7" fill="#b45309" stroke="#0b0e12" stroke-width="1.5"/><circle cx="210" cy="44" r="2.2" fill="#fde68a" opacity="0.9"/>
+  <rect x="24" y="88" width="84" height="138" rx="5" fill="#0a0d11" stroke="#12161b" stroke-width="3"/>
+  <rect x="28" y="92" width="6" height="130" fill="url(#chromeV)"/><rect x="98" y="92" width="6" height="130" fill="url(#chromeV)"/>
+  ${[0, 1, 2].map((k) => `<rect x="30" y="${130 + k * 44}" width="72" height="5" fill="#b45309"/><rect x="30" y="${135 + k * 44}" width="72" height="2" fill="#78350f"/>`).join('')}
+  ${[[38, 100, 56], [40, 146, 26], [70, 146, 26], [38, 190, 56]].map(([x, y, w]) => `<g filter="url(#shadow)"><rect x="${x}" y="${y}" width="${w}" height="28" rx="3" fill="url(#crate)" stroke="#5a2a0a" stroke-width="2.5"/><path d="M${x} ${y + 14}h${w}M${x + w / 2} ${y}v28" stroke="#5a2a0a" stroke-width="2.5"/><rect x="${x + 3}" y="${y + 3}" width="${w - 6}" height="4" rx="2" fill="#fdba74" opacity="0.5"/></g>`).join('')}
+  <rect x="116" y="88" width="116" height="138" rx="5" fill="#161b22" stroke="#12161b" stroke-width="3"/>
+  <rect x="116" y="88" width="116" height="138" rx="5" fill="#000" filter="url(#grain)" opacity="0.6"/>
+  ${hazard(120, 92, 108, 9)}
+  <path d="M134 112v96M214 112v96" stroke="${AMBER}" stroke-width="4" stroke-dasharray="10 7"/>
+  <path d="M152 124v48M196 124v48" stroke="#e2e8f0" stroke-opacity="0.35" stroke-width="10" stroke-linecap="round"/>
+  ${chevron(174, 196, 12, AMBER)}
+  <rect x="160" y="210" width="28" height="12" rx="3" fill="url(#chromeV)" stroke="#0b0e12" stroke-width="1.5"/><rect x="166" y="213" width="4" height="6" fill="${GREEN}" filter="url(#glow)"/><rect x="178" y="213" width="4" height="6" fill="${GREEN}" filter="url(#glow)"/>
+  ${hose('M226 96 C 238 130, 236 180, 190 218', 5, '#1f2937', [[234, 150]])}
+  ${warn(40, 234, 12)}${barcode(60, 229, 40, 10)}`;
+
+// the forklift robot seen from above, front (fork mast) to the north; the forks themselves are drawn in the game so they can lift
+S.forklift_bot = `<g filter="url(#shadow)">
+  ${[[70, 104], [186, 104], [70, 204], [186, 204]].map(([x, y]) => `<rect x="${x - 14}" y="${y - 22}" width="28" height="44" rx="9" fill="#0b0e12" stroke="#374151" stroke-width="2"/>${Array.from({ length: 4 }, (_, k) => `<rect x="${x - 12}" y="${y - 18 + k * 10}" width="24" height="4" fill="#1f2937"/>`).join('')}<circle cx="${x}" cy="${y}" r="5" fill="url(#chrome)" stroke="#0b0e12" stroke-width="1.5"/>`).join('')}
+  <path d="${oct(78, 84, 100, 150, 18)}" fill="url(#steel)" stroke="#12161b" stroke-width="4"/>
+  <path d="${oct(78, 84, 100, 150, 18)}" fill="#000" filter="url(#grain)"/>
+  <rect x="84" y="196" width="88" height="34" rx="6" fill="#1b2027" stroke="#12161b" stroke-width="3"/>
+  ${hazard(88, 200, 80, 10)}
+  <rect x="92" y="214" width="72" height="12" rx="3" fill="url(#chromeV)" opacity="0.7"/>
+  <rect x="64" y="66" width="128" height="18" rx="5" fill="url(#chrome)" stroke="#0b0e12" stroke-width="3"/>
+  <rect x="80" y="58" width="12" height="32" rx="3" fill="url(#chromeV)" stroke="#0b0e12" stroke-width="2"/><rect x="164" y="58" width="12" height="32" rx="3" fill="url(#chromeV)" stroke="#0b0e12" stroke-width="2"/>
+  <rect x="100" y="70" width="56" height="8" rx="3" fill="#0b0e12"/><rect x="104" y="72" width="48" height="4" rx="2" fill="${AMBER}" filter="url(#glow)"/>
+  <rect x="92" y="96" width="72" height="92" rx="12" fill="url(#dark)" stroke="#12161b" stroke-width="3"/>
+  <circle cx="128" cy="130" r="22" fill="#0b0e12" stroke="#475569" stroke-width="2"/>
+  <circle cx="128" cy="130" r="16" fill="#0e3a47" stroke="${CYAN}" stroke-width="3" filter="url(#glow)"/>
+  <circle cx="122" cy="124" r="5" fill="#a5f3fc"/>
+  ${rivets(100, 162, 156, 162, 5, 2.2)}
+  ${txt(128, 184, 'F-02', 10, '#fde68a')}
+  <rect x="96" y="90" width="16" height="8" rx="3" fill="#fef9c3" filter="url(#glow)"/><rect x="144" y="90" width="16" height="8" rx="3" fill="#fef9c3" filter="url(#glow)"/>
+  <circle cx="170" cy="190" r="5" fill="${AMBER}" filter="url(#glow)"/>
+  </g>`;
+
 // ---------- logic and computer parts (were flat icons) ----------
 
 /** Side ports (inputs) on the west, east and south edges, output chevron north. */

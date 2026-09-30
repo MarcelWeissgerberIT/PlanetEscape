@@ -411,6 +411,7 @@ export class Renderer {
     this.flushArrows();
     for (const b of visible) if (b.site) this.drawSite(b);
     this.drawRobots(x0, y0, x1, y1);
+    this.drawForklifts(x0, y0, x1, y1);
     this.critters.sync(this.sim);
     if (!this.paused) this.critters.update(dt, this.sim);
     if (!this.lowDetail) {
@@ -640,6 +641,7 @@ export class Renderer {
       else if (b.type !== 'conveyor' && b.type !== 'road' && b.type !== 'tunnel' && b.type !== 'bus') add(cx, cy, 0.7, '148,163,184', 0.45);
     }
     for (const r of this.sim.robots()) add(r.x, r.y, 1.1, '254,249,195', 0.8);
+    for (const f of this.sim.forklifts()) add(f.x, f.y, 1.1, '254,249,195', 0.7);
     const [x0, y0] = this.cam.screenToTile(0, 0), [x1, y1] = this.cam.screenToTile(this.cam.width, this.cam.height);
     for (const l of sc.liquids) {
       if (l.kind === 'water' || l.x1 < x0 - 2 || l.x0 > x1 + 2 || l.y1 < y0 - 2 || l.y0 > y1 + 2) continue;
@@ -1044,6 +1046,67 @@ export class Renderer {
       if (r.items.length && !this.lowDetail) {
         this.drawItem(r.items[0], px, py + 2, TILE * 0.3);
         if (r.items.length > 1) this.drawBadge(px + TILE * 0.22, py - TILE * 0.22, String(r.items.length), '#f59e0b');
+      }
+    }
+  }
+
+  /** Forklift robots: the body from its sprite, forks drawn here so they can rise, the load riding on them. */
+  private drawForklifts(x0: number, y0: number, x1: number, y1: number) {
+    const { ctx } = this;
+    const spr = buildingSprite('forklift_bot' as BuildingId);
+    const S = TILE * 0.92;
+    const u = (v: number) => (v / 256 - 0.5) * S; // sprite units -> local pixels
+    for (const f of this.sim.forklifts()) {
+      if (f.x < x0 - 1 || f.x > x1 + 1 || f.y < y0 - 1 || f.y > y1 + 1) continue;
+      const px = f.x * TILE, py = f.y * TILE;
+      const lift = Math.max(0, Math.min(1, f.lift ?? 0));
+      const up = lift * TILE * 0.16; // how far the forks and the load rise on screen
+      ctx.save();
+      ctx.translate(px, py);
+      ctx.rotate((f.dir * Math.PI) / 2);
+      // fork shadows stay on the ground
+      if (!this.lowDetail) {
+        ctx.fillStyle = `rgba(0,0,0,${0.3 - lift * 0.12})`;
+        for (const fx of [100, 156]) ctx.fillRect(u(fx - 7), u(6), u(14) - u(0), u(66) - u(6));
+      }
+      if (ready(spr)) ctx.drawImage(spr, -S / 2, -S / 2, S, S);
+      else {
+        ctx.fillStyle = '#4b5563';
+        ctx.fillRect(u(78), u(84), u(178) - u(78), u(234) - u(84));
+      }
+      ctx.restore();
+      // forks (and what is on them) lifted towards the viewer: shifted up on screen, not rotated with the height
+      ctx.save();
+      ctx.translate(px, py - up);
+      ctx.rotate((f.dir * Math.PI) / 2);
+      for (const fx of [100, 156]) {
+        const g = ctx.createLinearGradient(u(fx - 6), 0, u(fx + 6), 0);
+        g.addColorStop(0, '#5b6470');
+        g.addColorStop(0.5, '#d4dbe3');
+        g.addColorStop(1, '#4b535e');
+        ctx.fillStyle = g;
+        ctx.fillRect(u(fx - 6), u(8), u(12) - u(0), u(70) - u(8));
+        ctx.fillStyle = '#12161b';
+        ctx.fillRect(u(fx - 6), u(8), u(12) - u(0), u(4) - u(0));
+      }
+      // the carriage plate that slides up the mast
+      ctx.fillStyle = '#2d333c';
+      ctx.fillRect(u(88), u(60), u(80) - u(0), u(12) - u(0));
+      ctx.restore();
+      if (f.item && f.count && !this.lowDetail) {
+        // load centre in front of the body, turned with the forklift
+        const a = (f.dir * Math.PI) / 2, ly = u(38);
+        const lx2 = px - Math.sin(a) * ly, ly2 = py + Math.cos(a) * ly;
+        this.drawItem(f.item, lx2, ly2 - up, TILE * 0.42);
+        if (f.count > 1) this.drawBadge(lx2 + TILE * 0.2, ly2 - up - TILE * 0.2, String(f.count), '#f59e0b');
+      }
+      // a warning light blinks while it drives
+      if (f.state === 'go' && !this.lowDetail && Math.sin(this.time * 9) > 0) {
+        const a = (f.dir * Math.PI) / 2, bx = u(170), by = u(190);
+        ctx.fillStyle = 'rgba(251,191,36,0.95)';
+        ctx.beginPath();
+        ctx.arc(px + bx * Math.cos(a) - by * Math.sin(a), py + bx * Math.sin(a) + by * Math.cos(a), TILE * 0.035, 0, Math.PI * 2);
+        ctx.fill();
       }
     }
   }
@@ -1502,6 +1565,45 @@ export class Renderer {
         if (b.recipe) this.drawItem(b.recipe as ItemId, b.x * TILE + 11, b.y * TILE + 11, 14);
         if (b.status === 'dead_end') this.drawBadge(cx, b.y * TILE + sz - 12, '⊘', '#ef4444');
       }
+      return;
+    }
+    if (b.type === 'forklift') {
+      if (!this.lowDetail && (this.overlay || this.selected === b)) {
+        // the working area: a dashed amber frame, lightly filled
+        const a = this.sim.forkArea(b);
+        const ax = a.x0 * TILE, ay = a.y0 * TILE, aw = (a.x1 - a.x0 + 1) * TILE, ah = (a.y1 - a.y0 + 1) * TILE;
+        ctx.fillStyle = 'rgba(245,158,11,0.06)';
+        ctx.fillRect(ax, ay, aw, ah);
+        ctx.strokeStyle = 'rgba(245,158,11,0.6)';
+        ctx.lineWidth = 2 / Math.max(0.5, this.cam.zoom);
+        ctx.setLineDash([10, 8]);
+        ctx.strokeRect(ax, ay, aw, ah);
+        ctx.setLineDash([]);
+      }
+      if (!this.lowDetail) {
+        // roof beacon turns while the forklift works
+        const k = sz / 256, lx = b.x * TILE + 212 * k, ly = b.y * TILE + 46 * k;
+        if (b.working) {
+          const a = this.time * 5;
+          const g = ctx.createRadialGradient(lx, ly, 0, lx, ly, 26 * k);
+          g.addColorStop(0, 'rgba(251,191,36,0.9)');
+          g.addColorStop(1, 'rgba(251,191,36,0)');
+          ctx.fillStyle = g;
+          for (const off of [0, Math.PI]) {
+            ctx.beginPath();
+            ctx.moveTo(lx, ly);
+            ctx.arc(lx, ly, 28 * k, a + off, a + off + 0.9);
+            ctx.closePath();
+            ctx.fill();
+          }
+        }
+        ctx.fillStyle = b.working ? '#fbbf24' : '#78350f';
+        ctx.beginPath();
+        ctx.arc(lx, ly, 6 * k, 0, Math.PI * 2);
+        ctx.fill();
+        if (b.recipe) this.drawItem(b.recipe as ItemId, b.x * TILE + 13, b.y * TILE + 13, 16);
+      }
+      if (b.status === 'dead_end') this.drawBadge(cx, cy, '⊘', '#ef4444');
       return;
     }
     if (b.type === 'depot') {

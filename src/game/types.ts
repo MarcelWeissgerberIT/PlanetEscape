@@ -65,6 +65,7 @@ export type BuildingId =
   | 'kitport'
   | 'mast'
   | 'depot'
+  | 'forklift'
   | 'stacker'
   | 'hall4'
   | 'hall8'
@@ -301,6 +302,7 @@ export interface GameState {
   focus?: { x: number; y: number; zoom: number }; // camera position to show when the save is loaded
   showCore?: boolean; // playground map whose chains end in the core (the megafactory examples)
   robots?: Robot[]; // transport robots (depots)
+  forklifts?: Forklift[]; // forklift robots (one per forklift station)
   kits?: Partial<Record<BuildingId, number>>; // printed building kits in stock
   printQueue?: PrintJob[]; // the core's print jobs, first one is printing
   autoPrint?: boolean; // placing without a kit queues one (default on)
@@ -339,6 +341,28 @@ export interface Robot {
   target: number | null; // dock building id
   wait: number; // seconds before the next planning attempt
   t: number; // transfer accumulator
+}
+
+/** A forklift robot: belongs to a forklift station, drives off-road within FORK_RANGE of it and carries up to FORK_CAP units of
+ *  one kind (items or whole crates) from where they are made or stored to where they are needed. Tile coordinates like robots. */
+export interface Forklift {
+  id: number;
+  station: number; // forklift station building id
+  x: number;
+  y: number;
+  dir: Dir;
+  item: ItemId | null; // what is on the forks
+  count: number;
+  want: number; // how many to lift at the source
+  path: { x: number; y: number }[];
+  state: 'idle' | 'go' | 'load' | 'unload';
+  src: number | null; // building to take from
+  dst: number | null; // building to deliver to
+  home?: boolean; // driving back to park
+  idle: number; // seconds without work (goes home to park)
+  wait: number; // seconds before the next planning attempt
+  t: number; // transfer accumulator
+  lift: number; // fork height 0..1 (drawing)
 }
 
 export interface BlueprintItem {

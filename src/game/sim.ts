@@ -45,9 +45,9 @@ import {
   BUILD_ORDER,
   printSeconds,
 } from './data';
-import type { MissionDef, Drone, PrintJob, Robot, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
+import type { MissionDef, Drone, PrintJob, Robot, Forklift, Blueprint, BlueprintItem, Building, BuildingId, Contract, Dir, EventKind, GameEvent, GameState, ItemId, RecipeDef, Status, TerrainId, UpgradeId } from './types';
 import { DX, DY } from './types';
-import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, itemSpacing, RADIO_RANGE, CORE_REACH, CORE_DRONES, DRONE_SPEED, DRONE_DELAY, KITPORT_RATE, KIT_TRANSIT_TIMEOUT, isKit, kitOf, kitId, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, STORM_ROBOT_FACTOR, WEAR_SECONDS, WORN_SPEED, WEAR_MIN_MISSION, REPAIR_COST, QUAKE_WEAR, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
+import { BOARD_PARTS, CHIP8_PALETTE, CHIP_ROM_BYTES, CRYSTAL_HZ, BATTERY_CAP, BATTERY_RATE, PICKER_RATE, itemSpacing, RADIO_RANGE, CORE_REACH, CORE_DRONES, DRONE_SPEED, DRONE_DELAY, KITPORT_RATE, KIT_TRANSIT_TIMEOUT, isKit, kitOf, kitId, HALL_SLOT_CAP, HALL_SIZE, isHall, PLANT_FUEL, WIND_STORM_FACTOR, ITEM_ORDER, CRATE_SIZE, isCrate, crateOf, crateId, ROBOT_SPEED, STORM_ROBOT_FACTOR, WEAR_SECONDS, WORN_SPEED, WEAR_MIN_MISSION, REPAIR_COST, QUAKE_WEAR, ROBOT_DRAIN, ROBOT_DRAIN_WORK, ROBOT_LOW, ROBOT_CHARGE_RATE, ROBOT_LIMP, ROBOT_CAP, ROBOT_RATE, DOCK_CAP, DEPOT_ROBOTS_MAX, FORK_RANGE, FORK_CAP, FORK_SPEED, FORK_RATE, FORK_PARK, EXEC_PROGRAMS, ITEMS, MATRIX_SIZE, RADIO_QUEUE, RADIO_RATE, SCREEN_BASE_HZ, TIMER_OPEN, TIMER_PERIODS, SCREEN_BUDGET_MAX, SCREEN_MAX_PX, SCREEN_PX_PER_CELL, SCREEN_PX_PER_ITEM, SCREEN_PX_PER_LANE_TICK, SCREEN_REGION, SCREEN_SAMPLE_RATE, SCREEN_SCAN_STEP, SCREEN_TINT, itemRgb, matrixSize, ORE_PER_TILE, OSCILLATOR_CRYSTALS, TERMINAL_HZ_MAX, REGISTER_MAX, SWITCH_PULSE_SECONDS, TERMINAL_BANK_BYTES, TERMINAL_CRYSTALS, TERMINAL_DISPLAY, TERMINAL_RAM_BANKS, TERMINAL_TRACE, TERMINAL_TRACE_HZ } from './data';
 import { Chip8, assemble, CHIP8_W, CHIP8_H, HIRES_H, HIRES_W } from './chip8';
 import { CHIP8_PROGRAMS } from './chip8programs';
 
@@ -520,6 +520,10 @@ export class Sim {
         if (b.ram) this.addInv('circuit', b.ram);
         if (b.clock) this.addInv('glass', b.clock);
       }
+    }
+    if (b.type === 'forklift' && this.state.forklifts) {
+      for (const f of this.state.forklifts) if (f.station === b.id && f.item && f.count && !this.creative) this.addInv(f.item, f.count);
+      this.state.forklifts = this.state.forklifts.filter((f) => f.station !== b.id);
     }
     if (b.type === 'depot' && this.state.robots) {
       for (const r of this.state.robots) if (r.depot === b.id) for (const it of r.items) this.addInv(it, 1);
@@ -1021,6 +1025,9 @@ export class Sim {
         case 'depot':
           this.tickDepot(b);
           break;
+        case 'forklift':
+          this.tickForkStation(b);
+          break;
         case 'service':
           this.tickService(b, dt, ratio);
           break;
@@ -1092,6 +1099,7 @@ export class Sim {
   private tickWorld(_dt: number) {
     const st = this.state;
     this.tickRobots(_dt);
+    this.tickForklifts(_dt);
     // dust storms (only once solar power matters)
     if (st.storm > 0) {
       st.storm -= _dt;
@@ -1914,6 +1922,359 @@ export class Sim {
     }
     b.working = mine.some((r) => r.state !== 'idle');
     b.status = want ? 'ok' : 'starved';
+  }
+
+  // ---------- Forklift: a robot without a road, working in a small area around its station ----------
+
+  forklifts(): Forklift[] {
+    return (this.state.forklifts ??= []);
+  }
+
+  /** Where a forklift may drive: open ground, roads and over belts, never through rock or buildings. */
+  private forkPass(x: number, y: number): boolean {
+    if (x < 0 || y < 0 || x >= this.state.width || y >= this.state.height) return false;
+    if (this.terrain(x, y) === 'rock') return false;
+    const b = this.at(x, y);
+    return !b || ((b.type === 'road' || b.type === 'conveyor') && !b.site);
+  }
+
+  /** The working area of a station: FORK_RANGE tiles around its footprint. */
+  forkArea(st: Building): { x0: number; y0: number; x1: number; y1: number } {
+    const s = BUILDINGS[st.type].size;
+    return { x0: st.x - FORK_RANGE, y0: st.y - FORK_RANGE, x1: st.x + s - 1 + FORK_RANGE, y1: st.y + s - 1 + FORK_RANGE };
+  }
+
+  private inArea(a: { x0: number; y0: number; x1: number; y1: number }, b: Building): boolean {
+    const s = BUILDINGS[b.type].size;
+    return b.x <= a.x1 && b.x + s - 1 >= a.x0 && b.y <= a.y1 && b.y + s - 1 >= a.y0;
+  }
+
+  /** Breadth-first search over drivable tiles inside the area, from the forklift's tile. */
+  private forkSearch(f: Forklift, a: { x0: number; y0: number; x1: number; y1: number }) {
+    const w = this.state.width, key = (x: number, y: number) => y * w + x;
+    const dist = new Map<number, number>(), parent = new Map<number, number>();
+    const q = [key(Math.floor(f.x), Math.floor(f.y))];
+    dist.set(q[0], 0);
+    for (let i = 0; i < q.length; i++) {
+      const k = q[i], x = k % w, y = Math.floor(k / w), d = dist.get(k)!;
+      for (let dir = 0; dir < 4; dir++) {
+        const nx = x + DX[dir], ny = y + DY[dir], nk = key(nx, ny);
+        if (dist.has(nk) || nx < a.x0 - 1 || nx > a.x1 + 1 || ny < a.y0 - 1 || ny > a.y1 + 1 || !this.forkPass(nx, ny)) continue;
+        dist.set(nk, d + 1);
+        parent.set(nk, k);
+        q.push(nk);
+      }
+    }
+    return { dist, parent };
+  }
+
+  /** The nearest reachable tile beside a building's footprint (null: the forklift cannot get there). */
+  private forkSpot(b: Building, search: { dist: Map<number, number> }): { x: number; y: number; d: number } | null {
+    const s = BUILDINGS[b.type].size, w = this.state.width;
+    let best: { x: number; y: number; d: number } | null = null;
+    for (let i = 0; i < s; i++) {
+      for (const [x, y] of [[b.x + i, b.y - 1], [b.x + i, b.y + s], [b.x - 1, b.y + i], [b.x + s, b.y + i]]) {
+        const d = search.dist.get(y * w + x);
+        if (d !== undefined && (!best || d < best.d)) best = { x, y, d };
+      }
+    }
+    return best;
+  }
+
+  /** What a forklift may take from a building: finished goods of machines and miners, a hall's stock, a pick-up dock. */
+  private forkOffer(b: Building): Partial<Record<ItemId, number>> | null {
+    if (b.site) return null;
+    const kind = BUILDINGS[b.type].kind;
+    if (kind === 'machine' || kind === 'miner') return b.output ?? null;
+    if (kind === 'storage') return b.store ?? null;
+    if (b.type === 'dock' && b.mode !== 'unload') {
+      const out: Partial<Record<ItemId, number>> = {};
+      for (const it of b.bufL ?? []) out[it] = (out[it] ?? 0) + 1;
+      return out;
+    }
+    return null;
+  }
+
+  /** How many units of `item` a building would take from a forklift right now. */
+  forkRoom(b: Building, item: ItemId): number {
+    if (b.site) return 0;
+    const def = BUILDINGS[b.type];
+    const crate = isCrate(item);
+    if (def.kind === 'machine') {
+      if (crate) return 0;
+      const r = b.recipe ? RECIPE_BY_ID[b.recipe] : recipesFor(b.type as RecipeDef['machine']).find((rc) => rc.auto && rc.inputs[item] && this.state.unlockedRecipes.includes(rc.id));
+      if (!r?.inputs[item]) return 0;
+      return Math.max(BUFFER_CAP, r.inputs[item]! * 2) - (b.input?.[item] ?? 0);
+    }
+    if (def.kind === 'power') {
+      const fuel = PLANT_FUEL[b.type];
+      return fuel && fuel.item === item && !crate ? BUFFER_CAP - (b.input?.[item] ?? 0) : 0;
+    }
+    if (def.kind === 'storage') {
+      const store = b.store ?? {};
+      if (isHall(b.type)) {
+        const n = store[item] ?? 0;
+        return (this.hallSlots(b) - this.hallUsed(b)) * HALL_SLOT_CAP + (n ? Math.ceil(n / HALL_SLOT_CAP) * HALL_SLOT_CAP - n : 0);
+      }
+      return this.storageCap() - Object.values(store).reduce((a, c) => a + (c ?? 0), 0);
+    }
+    if (b.type === 'dock' && b.mode === 'unload') return b.recipe && b.recipe !== item ? 0 : DOCK_CAP - (b.bufL?.length ?? 0);
+    if (b.type === 'stacker') {
+      const buf = b.bufL ?? [];
+      if (b.mode === 'unpack') return crate && !buf.length ? 1 : 0;
+      return !crate && (!buf.length || buf[0] === item) ? CRATE_SIZE - buf.length : 0;
+    }
+    return 0;
+  }
+
+  /** Lift one unit off a building. */
+  private forkTake(b: Building, item: ItemId): boolean {
+    if (b.type === 'dock') {
+      const i = b.bufL?.indexOf(item) ?? -1;
+      if (i < 0) return false;
+      b.bufL!.splice(i, 1);
+      return true;
+    }
+    return this.takeFrom(b, item) === item;
+  }
+
+  /** Set one unit down into a building (from whichever side it takes it). */
+  private forkPut(b: Building, item: ItemId): boolean {
+    if (this.forkRoom(b, item) <= 0) return false;
+    if (b.type === 'dock') {
+      b.bufL!.push(item);
+      return true;
+    }
+    if (b.type === 'stacker') return this.accept(b, item, b.dir);
+    for (let d = 0; d < 4; d++) if (this.accept(b, item, d as Dir)) return true;
+    return false;
+  }
+
+  /** Find the next job: the best pair of source and target in reach (or just a target for what is on the forks). */
+  private planFork(f: Forklift, st: Building): boolean {
+    const area = this.forkArea(st);
+    const search = this.forkSearch(f, area);
+    const filter = (st.recipe as ItemId | null) ?? null;
+    const near = this.state.buildings.filter((b) => b !== st && !b.site && this.inArea(area, b));
+    const spots = new Map<Building, { x: number; y: number; d: number } | null>();
+    const spot = (b: Building) => {
+      if (!spots.has(b)) spots.set(b, this.forkSpot(b, search));
+      return spots.get(b)!;
+    };
+    const others = this.forklifts().filter((o) => o !== f);
+    const go = (b: Building) => {
+      const sp = spot(b)!;
+      f.path = this.pathTo(search, Math.floor(f.x), Math.floor(f.y), sp.x, sp.y);
+      f.state = 'go';
+      f.home = false;
+      f.idle = 0;
+    };
+    // cargo on board: the best place for it (a hall only when nothing needs it)
+    if (f.item && f.count) {
+      let best: { b: Building; score: number } | null = null;
+      for (const t of near) {
+        if (t.id === f.src || this.forkRoom(t, f.item) <= 0) continue;
+        const sp = spot(t);
+        if (!sp) continue;
+        const score = (BUILDINGS[t.type].kind === 'storage' ? 0 : 100) - sp.d;
+        if (!best || score > best.score) best = { b: t, score };
+      }
+      if (!best) return false;
+      f.dst = best.b.id;
+      go(best.b);
+      return true;
+    }
+    let best: { s: Building; t: Building; item: ItemId; n: number; score: number } | null = null;
+    for (const s of near) {
+      const offer = this.forkOffer(s);
+      if (!offer) continue;
+      const sp = spot(s);
+      if (!sp) continue;
+      const fromStore = BUILDINGS[s.type].kind === 'storage';
+      for (const [k, have] of Object.entries(offer) as [ItemId, number][]) {
+        if (!have || (filter && k !== filter)) continue;
+        for (const t of near) {
+          if (t === s) continue;
+          const toStore = BUILDINGS[t.type].kind === 'storage';
+          if (fromStore && toStore) continue; // no shuffling between halls
+          const room = this.forkRoom(t, k);
+          if (room <= 0) continue;
+          const tp = spot(t);
+          if (!tp) continue;
+          const n = Math.min(have, room, FORK_CAP);
+          // machines that need it first, then docks and stackers, a hall last; full loads and short trips win
+          let score = (toStore ? 0 : t.type === 'dock' || t.type === 'stacker' ? 60 : 120) + n * 4 - sp.d - Math.abs(tp.x - sp.x) - Math.abs(tp.y - sp.y);
+          if (others.some((o) => o.src === s.id && o.item === k) || others.some((o) => o.dst === t.id && o.item === k)) score -= 80;
+          if (!best || score > best.score) best = { s, t, item: k, n, score };
+        }
+      }
+    }
+    if (!best) return false;
+    f.src = best.s.id;
+    f.dst = best.t.id;
+    f.item = best.item;
+    f.count = 0;
+    f.want = best.n;
+    go(best.s);
+    return true;
+  }
+
+  /** Drive back to a tile beside the station and park there. */
+  private forkHome(f: Forklift, st: Building) {
+    const search = this.forkSearch(f, this.forkArea(st));
+    const sp = this.forkSpot(st, search);
+    f.home = true;
+    f.src = f.dst = null;
+    if (!sp || sp.d === 0) {
+      f.state = 'idle';
+      return;
+    }
+    f.path = this.pathTo(search, Math.floor(f.x), Math.floor(f.y), sp.x, sp.y);
+    f.state = f.path.length ? 'go' : 'idle';
+  }
+
+  private tickForklifts(dt: number) {
+    const list = this.forklifts();
+    for (let i = list.length - 1; i >= 0; i--) {
+      const f = list[i];
+      const st = this.byId(f.station);
+      if (!st || st.type !== 'forklift') {
+        list.splice(i, 1);
+        continue;
+      }
+      // fork height: low while driving empty, carried a little higher, bobbing once per unit while loading
+      const liftTo = f.state === 'load' || f.state === 'unload' ? 0.25 + 0.75 * Math.sin(Math.PI * Math.min(1, f.t)) : f.count ? 0.4 : 0;
+      f.lift += (liftTo - f.lift) * Math.min(1, dt * 8);
+      if (f.state === 'idle') {
+        f.wait -= dt;
+        f.idle += dt;
+        if (f.wait > 0) continue;
+        f.wait = 1;
+        if (this.planFork(f, st)) continue;
+        if (!f.count) f.item = null;
+        if (f.idle > FORK_PARK && !f.home) this.forkHome(f, st);
+        continue;
+      }
+      if (f.state === 'go') {
+        let budget = FORK_SPEED * dt * (this.state.storm > 0 ? STORM_ROBOT_FACTOR : 1);
+        while (budget > 0 && f.path.length) {
+          const wp = f.path[0], tx = wp.x + 0.5, ty = wp.y + 0.5;
+          const dx = tx - f.x, dy = ty - f.y, d = Math.hypot(dx, dy);
+          if (Math.abs(dx) > Math.abs(dy)) f.dir = dx > 0 ? 1 : 3;
+          else if (d > 0.001) f.dir = dy > 0 ? 2 : 0;
+          if (!this.forkPass(wp.x, wp.y)) {
+            // something was built in the way: plan again
+            f.path = [];
+            f.state = 'idle';
+            f.wait = 0.3;
+            break;
+          }
+          if (d <= budget) {
+            f.x = tx;
+            f.y = ty;
+            budget -= d;
+            f.path.shift();
+          } else {
+            f.x += (dx / d) * budget;
+            f.y += (dy / d) * budget;
+            budget = 0;
+          }
+        }
+        if (f.path.length || f.state !== 'go') continue;
+        if (f.home) {
+          f.state = 'idle';
+          f.dir = 0;
+          continue;
+        }
+        const target = this.byId(f.count ? f.dst : f.src);
+        if (!target) {
+          f.state = 'idle';
+          f.wait = 0;
+          continue;
+        }
+        f.state = f.count ? 'unload' : 'load';
+        f.t = 0;
+        // face the building
+        const s = BUILDINGS[target.type].size, cx = target.x + s / 2, cy = target.y + s / 2;
+        const dx = cx - f.x, dy = cy - f.y;
+        f.dir = (Math.abs(dx) > Math.abs(dy) ? (dx > 0 ? 1 : 3) : dy > 0 ? 2 : 0) as Dir;
+        continue;
+      }
+      if (f.state === 'load') {
+        const src = this.byId(f.src);
+        f.t += dt * FORK_RATE;
+        while (src && f.item && f.t >= 1 && f.count < f.want) {
+          f.t -= 1;
+          if (!this.forkTake(src, f.item)) {
+            f.want = f.count;
+            break;
+          }
+          f.count++;
+        }
+        if (!src || f.count >= f.want) {
+          if (f.t < 1 && src && f.count) continue; // let the forks come up
+          f.state = 'idle';
+          f.wait = 0;
+          if (f.count) {
+            // on to the target that was planned (or the best one now)
+            const dst = this.byId(f.dst);
+            const search = this.forkSearch(f, this.forkArea(st));
+            const sp = dst && this.forkRoom(dst, f.item!) > 0 ? this.forkSpot(dst, search) : null;
+            if (sp) {
+              f.path = this.pathTo(search, Math.floor(f.x), Math.floor(f.y), sp.x, sp.y);
+              f.state = 'go';
+            }
+          } else f.item = null;
+        }
+        continue;
+      }
+      // unload
+      const dst = this.byId(f.dst);
+      f.t += dt * FORK_RATE;
+      while (dst && f.item && f.t >= 1 && f.count > 0) {
+        f.t -= 1;
+        if (!this.forkPut(dst, f.item)) break;
+        f.count--;
+        st.acc = (st.acc ?? 0) + 1; // units moved
+      }
+      if (!dst || f.count === 0 || f.t >= 1) {
+        if (f.count === 0) {
+          f.item = null;
+          f.src = f.dst = null;
+        } else if (f.t < 1 && dst) continue;
+        f.state = 'idle';
+        f.wait = 0;
+        f.idle = 0;
+      }
+    }
+  }
+
+  /** A station keeps one forklift; it appears on a free tile beside the station. */
+  private tickForkStation(b: Building) {
+    const list = this.forklifts();
+    const mine = list.find((f) => f.station === b.id);
+    if (!mine) {
+      const s = BUILDINGS[b.type].size;
+      let sp: { x: number; y: number } | null = null;
+      for (let i = 0; i < s && !sp; i++) {
+        for (const [x, y] of [[b.x + i, b.y + s], [b.x + s, b.y + i], [b.x + i, b.y - 1], [b.x - 1, b.y + i]]) {
+          if (this.forkPass(x, y)) {
+            sp = { x, y };
+            break;
+          }
+        }
+      }
+      if (!sp) {
+        b.status = 'dead_end';
+        b.working = false;
+        return;
+      }
+      list.push({ id: this.state.nextId++, station: b.id, x: sp.x + 0.5, y: sp.y + 0.5, dir: 0, item: null, count: 0, want: 0, path: [], state: 'idle', src: null, dst: null, idle: 0, wait: 0.5, t: 0, lift: 0 });
+      b.status = 'idle';
+      return;
+    }
+    b.working = mine.state !== 'idle';
+    b.status = b.working ? 'ok' : 'idle';
   }
 
   /** Pack: eight equal items become one crate. Unpack: a crate becomes eight items again. */

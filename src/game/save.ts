@@ -45,6 +45,7 @@ export function migrate(parsed: unknown): GameState | null {
     const st = parsed as GameState;
     if (!st || !Array.isArray(st.buildings) || !Array.isArray(st.terrain)) return null;
     st.robots ??= [];
+    st.forklifts ??= [];
     if (st.version === 1) {
       st.ship = {};
       st.version = 2;
