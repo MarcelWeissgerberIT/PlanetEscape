@@ -3005,3 +3005,11 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .pw-hero.storm .sl-panel { filter: brightness(0.55) sepia(0.6); }
 .pw-hero.storm .sl-panel i { display: none; }
 .sl-panel svg { position: absolute; inset: 0; margin: auto; width: 26px; height: 26px; color: #fbbf24; }
+/* recycler: queue and output as slots around the machine */
+.rc-flow { gap: 6px; }
+.rc-bay { display: flex; flex-direction: column; align-items: center; gap: 4px; }
+.rc-bay small { font-family: var(--disp); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #94a3b8; }
+.rc-slots { display: grid; gap: 3px; padding: 4px; border-radius: 8px; background: #05080d; box-shadow: inset 0 0 0 1px rgba(148, 163, 184, 0.14); }
+.rc-slots.q { grid-template-columns: repeat(2, 26px); }
+.rc-slots.o { grid-template-columns: repeat(4, 26px); }
+.rc-slots .slot .icon { width: 80%; height: 80%; }

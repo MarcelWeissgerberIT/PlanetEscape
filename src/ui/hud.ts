@@ -4,7 +4,7 @@ import { fullscreenAvailable, toggleFullscreen } from './fullscreen';
 import { MenuVideo } from './menuVideo';
 import { storyVideoHtml, wireStoryVideos } from './storyVideo';
 import { EXAMPLES } from '../game/examples';
-import { STORM_SOLAR_FACTOR, BATTERY_RATE, TUNNEL_RANGE, RADIO_QUEUE, RADIO_RANGE, SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { RECYCLER_QUEUE, STORM_SOLAR_FACTOR, BATTERY_RATE, TUNNEL_RANGE, RADIO_QUEUE, RADIO_RANGE, SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -2222,10 +2222,16 @@ export class Hud {
           <p class="save-hint">${t('service_hint')}</p>`;
       } else if (b.type === 'recycler') {
         const q = b.bufR ?? [], out = b.bufL ?? [];
-        body = `${statusLine()}
-          <div class="bufs"><span class="lbl">${t('recycler_in')}</span>${q.map((k) => itemImg(k, 'icon sm')).join('') || '–'}<span class="lbl">${t('recycler_out')}</span>${out.slice(0, 8).map((k) => itemImg(k, 'icon sm')).join('') || '–'}</div>
-          <div class="lbl">${t('recycler_done', { n: b.acc ?? 0 })}</div>
-          <p class="save-hint">${t('recycler_hint')}</p>${dirPicker}`;
+        const slots = (list: ItemId[], n: number) => Array.from({ length: n }, (_, i) => `<span class="slot ${list[i] ? '' : 'empty'}">${list[i] ? itemImg(list[i], 'icon sm') : ''}</span>`).join('');
+        body = `${statusLine()}<div class="fab-flow rc-flow ${b.working ? 'on' : ''}">
+            <span class="rc-bay"><small>${t('recycler_in')}</small><span class="rc-slots q">${slots(q, RECYCLER_QUEUE)}</span></span>
+            <i class="fab-arrow">›</i>
+            <span class="fab-mach"><img src="${buildingUrl('recycler')}" alt=""><span class="fab-prog"><i style="width:${Math.max(0, Math.min(1, b.progress ?? 0)) * 100}%"></i></span></span>
+            <i class="fab-arrow">›</i>
+            <span class="rc-bay"><small>${t('recycler_out')}</small><span class="rc-slots o">${slots(out, 8)}</span></span>
+          </div>
+          <div class="fab-rate"><span><small>${t('rc_count')}</small><b>${b.acc ?? 0}</b></span></div>
+          <p class="save-hint clamp2" data-more>${t('recycler_hint')}</p>${dirPicker}`;
       } else if (b.type === 'dock') {
         const unload = b.mode === 'unload', buf = b.bufL ?? [];
         const minN = b.threshold ?? 1;
