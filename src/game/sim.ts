@@ -831,6 +831,7 @@ export class Sim {
           if (q.length >= RADIO_QUEUE) return false;
           q.push({ item, tx: b.id });
           b.acc = (b.acc ?? 0) + 1;
+          b.mineItem = item; // the last item sent (panel)
           b.working = true;
           b.timer = 0.3;
           return true;
@@ -2475,6 +2476,7 @@ export class Sim {
     b.status = k >= 0 ? 'ok' : q.length ? 'waiting' : 'idle';
     b.working = (b.timer ?? 0) > 0;
     if (k >= 0 && b.rateT >= 1 && this.pushDir(b, q[k].item, b.dir)) {
+      b.mineItem = q[k].item; // the last item received (panel)
       q.splice(k, 1);
       b.rateT -= 1;
       b.timer = 0.3;
@@ -2641,6 +2643,7 @@ export class Sim {
           if (out.length + k > 64) return false;
           for (let i = 0; i < k; i++) out.push(item);
           b.acc = (b.acc ?? 0) + 1;
+          b.mineItem = item; // the last item in (panel)
           return true;
         }
         b.value = Math.min(9, (b.value ?? 0) + 1); // side items raise the factor (wraps at 9 -> 1)
@@ -2663,8 +2666,10 @@ export class Sim {
     const out = b.bufL!;
     b.status = 'ok';
     if (!out.length) return;
-    if (this.pushDir(b, out[0], b.dir)) out.shift();
-    else b.status = 'blocked';
+    if (this.pushDir(b, out[0], b.dir)) {
+      out.shift();
+      (b.lanes ??= [0, 0])[1]++; // items sent on (panel)
+    } else b.status = 'blocked';
   }
 
   /** Value a register shows on lamps in front of it: up to 8 lamps in a row = bits (MSB nearest). */

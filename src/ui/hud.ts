@@ -2292,13 +2292,28 @@ export class Hud {
           <div class="rg-io"><span><i>↑</i>${t('rg_store')}</span><span><i>↔</i>${t('rg_release')}</span>${cellOf ? `<span class="ram"><i>▦</i>${t('ram_cell', { a: '0x' + (0x200 + cellOf.i).toString(16).toUpperCase() })}</span>` : ''}<button class="rg-clear" data-act="arith-clear" ${val ? '' : 'disabled'}>${icon('close', 'sm')}${t('lamp_clear')}</button></div>
         </div>
         <p class="save-hint clamp2" data-more>${t('arith_register')}</p>${dirPicker}`;
-    } else if (b.type === 'adder' || b.type === 'subtractor' || b.type === 'multiplier' || b.type === 'divider') {
+    } else if (b.type === 'multiplier') {
+      // one in, k out: the item that came in, a big factor dial, the copies leaving
+      const k = Math.max(1, b.value ?? 1);
+      const last = b.mineItem as ItemId | undefined;
+      const q = b.bufL?.length ?? 0;
+      const sent = b.lanes?.[1] ?? 0;
+      const copies = Math.min(k, 9);
+      body = `${statusLine()}<div class="mu-hero ${q ? 'on' : ''}">
+          <div class="mu-io in"><small>${t('mu_in')}</small><span class="mu-slot">${last ? itemImg(last, 'icon') : '<b class="sr-q">?</b>'}</span><b>${b.acc ?? 0}</b></div>
+          <div class="mu-dial"><span class="mu-x">×</span><b>${k}</b><span class="mu-ticks">${Array.from({ length: 9 }, (_, i) => `<i class="${i < k ? 'on' : ''}" style="--a:${i * 40}deg"></i>`).join('')}</span></div>
+          <div class="mu-io out"><small>${t('mu_out')}</small><span class="mu-stack">${Array.from({ length: copies }, (_, i) => `<span style="--i:${i}">${last ? itemImg(last, 'icon xs') : '<i></i>'}</span>`).join('')}</span><b>${sent}</b></div>
+        </div>
+        <div class="mu-queue"><small>${t('mu_queue')}</small><span class="rf-bar"><i style="width:${Math.min(100, (q / 64) * 100).toFixed(0)}%"></i></span><b>${q}<span>/64</span></b></div>
+        <div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button class="key ${k === n ? 'on' : ''}" data-value="${n}">${n}</button>`).join('')}</div>
+        <p class="save-hint clamp2" data-more>${t('mu_hint')}</p>${dirPicker}`;
+    } else if (b.type === 'adder' || b.type === 'subtractor' || b.type === 'divider') {
       const val = b.value ?? 0;
       const held = b.recipe ? itemImg(b.recipe as ItemId, 'icon xs') : '';
-      const op = { adder: '+', subtractor: '−', multiplier: '×', divider: '÷' }[b.type as 'adder'];
+      const op = { adder: '+', subtractor: '−', divider: '÷' }[b.type as 'adder'];
       const shown = b.type === 'subtractor' ? b.debt ?? 0 : b.type === 'adder' ? b.acc ?? 0 : val;
       const label = b.type === 'subtractor' ? t('arith_pending') : b.type === 'adder' ? t('arith_total') : t('arith_factor');
-      const factor = b.type === 'multiplier' || b.type === 'divider' ? `<div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<button class="key ${val === k ? 'on' : ''}" data-value="${k}">${k}</button>`).join('')}</div>` : '';
+      const factor = b.type === 'divider' ? `<div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<button class="key ${val === k ? 'on' : ''}" data-value="${k}">${k}</button>`).join('')}</div>` : '';
       body = `<div class="ar-hero">
           <span class="ar-op">${op}</span>
           <span class="ar-lcd"><small>${label}</small><b>${shown}</b>
@@ -2683,11 +2698,30 @@ export class Hud {
         const ch = b.threshold ?? 1, rx = b.mode === 'rx';
         const inFlight = this.sim.radioQueue(ch).length;
         const net = this.sim.radioNet();
-        const peers = this.sim.state.buildings.filter((x) => x.type === 'radio' && x !== b && !x.site && (x.threshold ?? 1) === ch && x.mode !== b.mode && net.get(x.id) === net.get(b.id)).length;
-        body = `<div class="rf-hero ${peers ? 'on' : ''} ${rx ? 'rx' : 'tx'}">
-            <span class="rf-waves"><i></i><i></i><i></i><img src="${buildingUrl('radio')}" alt=""></span>
-            <span class="rf-text"><small>${rx ? t('radio_rx') : t('radio_tx')} · ${t('radio_channel')} ${ch}</small><b>${peers}</b><em>${t(rx ? 'radio_hears' : 'radio_reaches', { n: peers })}</em></span>
-            <span class="rf-stat"><small>${t('rf_air')}</small><b>${inFlight}<span>/${RADIO_QUEUE}</span></b><span class="rf-bar"><i style="width:${Math.round((inFlight / RADIO_QUEUE) * 100)}%"></i></span></span>
+        const mine = net.get(b.id);
+        const peers = st.buildings.filter((x) => x.type === 'radio' && x !== b && !x.site && (x.threshold ?? 1) === ch && x.mode !== b.mode && net.get(x.id) === mine);
+        const masts = st.buildings.filter((x) => x.type === 'mast' && !x.site && net.get(x.id) === mine).length;
+        const others = st.buildings.filter((x) => x.type === 'radio' && x !== b && !x.site && net.get(x.id) === mine && (x.threshold ?? 1) !== ch).length;
+        const last = b.mineItem as ItemId | undefined;
+        const live = (b.timer ?? 0) > 0;
+        body = `${statusLine()}<div class="rf2 ${rx ? 'rx' : 'tx'} ${peers.length ? 'on' : ''} ${live ? 'live' : ''}">
+            <div class="rf2-ant"><span class="rf-waves"><i></i><i></i><i></i><img src="${buildingUrl('radio')}" alt=""></span><b>${rx ? t('radio_rx') : t('radio_tx')}</b></div>
+            <div class="rf2-ch">
+              <small>${t('radio_channel')}</small>
+              <b>CH ${ch}</b>
+              <span class="rf2-leds">${Array.from({ length: RADIO_CHANNELS }, (_, i) => `<i class="${i + 1 === ch ? 'on' : ''}"></i>`).join('')}</span>
+            </div>
+            <div class="rf2-stat"><small>${rx ? t('rf_received') : t('rf_sent')}</small><b>${b.acc ?? 0}</b><span class="rf2-last">${last ? itemImg(last, 'icon xs') : ''}</span></div>
+          </div>
+          <div class="rf2-net">
+            <div class="rf2-peers"><small>${t(rx ? 'radio_hears' : 'radio_reaches', { n: peers.length })}</small>
+              <span>${peers.length ? peers.slice(0, 6).map((x) => `<span class="rf2-peer"><img src="${buildingUrl('radio')}" alt=""><em>${Math.round(Math.hypot(x.x - b.x, x.y - b.y))}</em></span>`).join('') + (peers.length > 6 ? `<b>+${peers.length - 6}</b>` : '') : `<em class="dim">${t(rx ? 'rf_no_tx' : 'rf_no_rx')}</em>`}</span>
+            </div>
+            <div class="term-stats fk-stats">
+              <div class="ts"><small>${t('rf_air')}</small><b>${inFlight}<span>/${RADIO_QUEUE}</span></b></div>
+              <div class="ts"><small>${t('rf_masts')}</small><b>${masts}</b></div>
+              <div class="ts"><small>${t('rf_other_ch')}</small><b>${others}</b></div>
+            </div>
           </div>
           <div class="lbl">${t('radio_mode')}</div>
           <div class="seg"><button class="${rx ? '' : 'on'}" data-mode="tx">${t('radio_tx')}</button><button class="${rx ? 'on' : ''}" data-mode="rx">${t('radio_rx')}</button></div>
