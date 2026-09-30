@@ -2124,3 +2124,37 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .pr-card .iconbtn, .pr-q .iconbtn, .pr-now .iconbtn { width: 26px !important; height: 26px !important; min-width: 0 !important; padding: 0 !important; display: inline-grid; place-items: center; }
 .pr-now .iconbtn { width: 30px !important; height: 30px !important; }
 .pr-card .iconbtn svg, .pr-q .iconbtn svg, .pr-now .iconbtn svg { width: 14px; height: 14px; }
+
+/* =====================================================================================
+   Build bar layout: the parts sit centred on the deck and shrink a little to fit on desktop;
+   where they still do not fit, the bar scrolls (wheel, swipe or the arrows at its ends).
+   No scroll snapping: it used to park the first part under the slanted left edge.
+   ===================================================================================== */
+.bar-wrap { position: relative; flex: 1; min-width: 0; display: flex; }
+.build-bar { position: relative; min-width: 0; scroll-snap-type: none; }
+.build-bar > .build-btn { scroll-snap-align: none; }
+.build-bar > .build-btn:first-child { margin-left: auto; }
+.build-bar > .build-btn:last-child { margin-right: auto; }
+@media (min-width: 900px) {
+  .hud-bottom { width: min(1380px, calc(100% - 24px)); }
+  .build-bar .build-btn { flex: 0 1 86px; min-width: 72px; width: auto; }
+}
+.bar-nav {
+  position: absolute; top: 3px; bottom: 0; z-index: 2; width: 46px; display: grid; place-items: center; padding: 0; margin: 0; border: 0; cursor: pointer;
+  color: #a5f3fc; opacity: 0; pointer-events: none; transition: opacity 0.2s, color 0.2s;
+}
+.bar-nav svg { width: 24px; height: 24px; filter: drop-shadow(0 0 6px rgba(34, 211, 238, 0.8)); transition: transform 0.2s; }
+.bar-nav.l { left: 22px; background: linear-gradient(90deg, rgba(7, 11, 16, 0.98) 35%, rgba(7, 11, 16, 0)); }
+.bar-nav.l svg { transform: rotate(90deg); }
+.bar-nav.r { right: 4px; background: linear-gradient(270deg, rgba(7, 11, 16, 0.98) 35%, rgba(7, 11, 16, 0)); }
+.bar-nav.r svg { transform: rotate(-90deg); }
+.bar-nav.l:hover svg { transform: rotate(90deg) scale(1.2); }
+.bar-nav.r:hover svg { transform: rotate(-90deg) scale(1.2); }
+.bar-nav:hover { color: #fff; }
+.bar-wrap.more-l .bar-nav.l, .bar-wrap.more-r .bar-nav.r { opacity: 1; pointer-events: auto; }
+@media (max-width: 899px) {
+  .bar-nav { width: 34px; }
+  .bar-nav.l { left: 16px; }
+  .bar-nav.r { right: 0; }
+  .bar-nav svg { width: 20px; height: 20px; }
+}

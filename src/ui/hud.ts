@@ -1342,6 +1342,42 @@ export class Hud {
 
   // ---------- Bottom HUD ----------
 
+  /** scroll position of the build bar per tab: a new tab starts at its first part, a known one where it was left */
+  private barScroll = new Map<string, number>();
+  private barResize?: ResizeObserver;
+
+  /** After a rebuild: restore the tab's scroll, keep the picked part in view, show arrows where parts are hidden. */
+  private wireBuildBar(key: string) {
+    const bar = this.bottom.querySelector<HTMLElement>('.build-bar');
+    const wrap = bar?.parentElement;
+    if (!bar || !wrap) return;
+    const edges = () => {
+      const max = bar.scrollWidth - bar.clientWidth;
+      wrap.classList.toggle('more-l', bar.scrollLeft > 4);
+      wrap.classList.toggle('more-r', bar.scrollLeft < max - 4);
+    };
+    bar.scrollLeft = this.barScroll.get(key) ?? 0;
+    const pick = bar.querySelector<HTMLElement>('.build-btn.active, .build-btn.hint');
+    if (pick) {
+      const l = pick.offsetLeft; // the bar is the offset parent (position: relative)
+      if (l < bar.scrollLeft || l + pick.offsetWidth > bar.scrollLeft + bar.clientWidth) bar.scrollLeft = l - (bar.clientWidth - pick.offsetWidth) / 2;
+    }
+    edges();
+    bar.addEventListener('scroll', () => {
+      this.barScroll.set(key, bar.scrollLeft);
+      edges();
+    }, { passive: true });
+    // a mouse wheel scrolls the bar sideways
+    bar.addEventListener('wheel', (e) => {
+      if (Math.abs(e.deltaY) <= Math.abs(e.deltaX) || bar.scrollWidth <= bar.clientWidth) return;
+      bar.scrollLeft += e.deltaY;
+      e.preventDefault();
+    }, { passive: false });
+    this.barResize?.disconnect();
+    this.barResize = new ResizeObserver(edges);
+    this.barResize.observe(bar);
+  }
+
   private renderBottom() {
     const st = this.sim.state;
     const inv = st.inventory;
@@ -1387,7 +1423,8 @@ export class Hud {
       ${editorBar}
       ${this.editor && this.editorTab === 'terrain' ? '' : tabsHtml}
       <div class="build-row">
-        <div class="build-bar">${this.editor && this.editorTab === 'terrain' ? paletteHtml : buildHtml}</div>
+        <div class="bar-wrap"><div class="build-bar">${this.editor && this.editorTab === 'terrain' ? paletteHtml : buildHtml}</div>
+          <button class="bar-nav l" data-act="bar-l" aria-label="‹" tabindex="-1">${icon('chevron')}</button><button class="bar-nav r" data-act="bar-r" aria-label="›" tabindex="-1">${icon('chevron')}</button></div>
         <div class="tool-col">
           <button class="iconbtn big" data-act="rotate" title="${t('rotate')} (R)">${icon('rotate')}<kbd>R</kbd></button>
           <button class="iconbtn big ${delActive ? 'danger-active' : ''}" data-act="delete" title="${t('delete')} (X)">${icon('close')}<kbd>X</kbd></button>
@@ -1397,10 +1434,8 @@ export class Hud {
       </div>`;
     if (bottomHtml === this.lastBottomHtml) return;
     this.lastBottomHtml = bottomHtml;
-    const scroll = this.bottom.querySelector('.build-bar')?.scrollLeft ?? 0;
     this.bottom.innerHTML = bottomHtml;
-    const bar = this.bottom.querySelector('.build-bar');
-    if (bar) bar.scrollLeft = scroll;
+    this.wireBuildBar(this.editor && this.editorTab === 'terrain' ? 'terrain' : this.buildTab);
     this.bottom.onclick = (e) => {
       const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
       if (!target) return;
@@ -1432,6 +1467,11 @@ export class Hud {
       }
       if (target.dataset.act === 'printer') {
         this.openPrinter();
+        return;
+      }
+      if (target.dataset.act === 'bar-l' || target.dataset.act === 'bar-r') {
+        const bar = this.bottom.querySelector<HTMLElement>('.build-bar');
+        bar?.scrollBy({ left: (target.dataset.act === 'bar-l' ? -1 : 1) * bar.clientWidth * 0.75, behavior: 'smooth' });
         return;
       }
       if (target.dataset.btab) {
