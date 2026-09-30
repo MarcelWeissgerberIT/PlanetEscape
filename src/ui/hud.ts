@@ -2160,12 +2160,50 @@ export class Hud {
         <div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('no_filter')}</button>
         ${filterable.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
     } else if (b.type === 'mast') {
+      // a radar of its network: the range around the mast, every radio and mast of the network, the links between them
       const net = this.sim.radioNet();
-      const n = this.sim.state.buildings.filter((x) => (x.type === 'radio' || x.type === 'mast') && x !== b && net.get(x.id) === net.get(b.id)).length;
-      body = `<div class="rf-hero ${n ? 'on' : ''}">
-          <span class="rf-waves"><i></i><i></i><i></i><img src="${buildingUrl('mast')}" alt=""></span>
-          <span class="rf-text"><small>${t('rf_network')}</small><b>${n}</b><em>${t('mast_links', { n })}</em></span>
-          <span class="rf-stat"><small>${t('rf_range')}</small><b>${RADIO_RANGE}</b><em>${t('rf_tiles')}</em></span>
+      const mine = net.get(b.id);
+      const nodes = st.buildings.filter((x) => (x.type === 'radio' || x.type === 'mast') && !x.site && net.get(x.id) === mine);
+      const links = this.sim.radioLinks().filter(([a, c]) => net.get(a.id) === mine && net.get(c.id) === mine);
+      const span = Math.max(RADIO_RANGE, ...nodes.map((x) => Math.max(Math.abs(x.x - b.x), Math.abs(x.y - b.y)))) * 1.1;
+      const P = (x: Building) => ({ x: 50 + ((x.x - b.x) / span) * 46, y: 50 + ((x.y - b.y) / span) * 46 });
+      const tx = nodes.filter((x) => x.type === 'radio' && x.mode !== 'rx');
+      const rx = nodes.filter((x) => x.type === 'radio' && x.mode === 'rx');
+      const masts = nodes.filter((x) => x.type === 'mast');
+      const chans = new Map<number, { tx: number; rx: number }>();
+      for (const r of [...tx, ...rx]) {
+        const c = r.threshold ?? 1, e = chans.get(c) ?? { tx: 0, rx: 0 };
+        if (r.mode === 'rx') e.rx++;
+        else e.tx++;
+        chans.set(c, e);
+      }
+      const air = [...chans.keys()].reduce((a, c) => a + this.sim.radioQueue(c).length, 0);
+      const rr = (RADIO_RANGE / span) * 46;
+      body = `<div class="ms2 ${nodes.length > 1 ? 'on' : ''}">
+          <div class="ms2-radar">
+            <svg viewBox="0 0 100 100" aria-hidden="true">
+              <circle cx="50" cy="50" r="48" class="bg"/>
+              <circle cx="50" cy="50" r="${rr.toFixed(1)}" class="range"/>
+              <circle cx="50" cy="50" r="${(rr / 2).toFixed(1)}" class="grid"/>
+              <path d="M50 2V98M2 50H98" class="grid"/>
+              ${links.map(([a, c]) => { const p1 = P(a), p2 = P(c); return `<line x1="${p1.x.toFixed(1)}" y1="${p1.y.toFixed(1)}" x2="${p2.x.toFixed(1)}" y2="${p2.y.toFixed(1)}" class="link"/>`; }).join('')}
+              ${nodes.map((x) => { const q = P(x); return x === b ? '' : `<circle cx="${q.x.toFixed(1)}" cy="${q.y.toFixed(1)}" r="${x.type === 'mast' ? 3 : 2.6}" class="node ${x.type === 'mast' ? 'mast' : x.mode === 'rx' ? 'rx' : 'tx'}"/>`; }).join('')}
+              <circle cx="50" cy="50" r="4" class="node self"/>
+            </svg>
+            <span class="ms2-sweep"></span>
+          </div>
+          <div class="ms2-info">
+            <small>${t('rf_network')}</small>
+            <b>${nodes.length - 1}<span> ${t('ms_nodes')}</span></b>
+            <span class="ms2-legend"><span class="tx"><i></i>${tx.length} ${t('ms_tx')}</span><span class="rx"><i></i>${rx.length} ${t('ms_rx')}</span><span class="mast"><i></i>${masts.length - 1} ${t('ms_masts')}</span></span>
+            <span class="ms2-range"><small>${t('rf_range')}</small> <b>${RADIO_RANGE}</b> ${t('rf_tiles')}</span>
+          </div>
+        </div>
+        ${chans.size ? `<div class="ms2-chans">${[...chans.entries()].sort((a, c) => a[0] - c[0]).map(([c, e]) => `<span class="${e.tx && e.rx ? 'ok' : 'half'}"><b>CH ${c}</b><small>${e.tx}↑ ${e.rx}↓</small></span>`).join('')}</div>` : ''}
+        <div class="term-stats fk-stats">
+          <div class="ts"><small>${t('rf_air')}</small><b>${air}</b></div>
+          <div class="ts"><small>${t('ms_links')}</small><b>${links.length}</b></div>
+          <div class="ts"><small>${t('ms_channels')}</small><b>${chans.size}</b></div>
         </div>
         <p class="save-hint clamp2" data-more>${t('mast_hint')}</p>`;
     } else if (b.type === 'battery') {
@@ -2307,20 +2345,32 @@ export class Hud {
         <div class="mu-queue"><small>${t('mu_queue')}</small><span class="rf-bar"><i style="width:${Math.min(100, (q / 64) * 100).toFixed(0)}%"></i></span><b>${q}<span>/64</span></b></div>
         <div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button class="key ${k === n ? 'on' : ''}" data-value="${n}">${n}</button>`).join('')}</div>
         <p class="save-hint clamp2" data-more>${t('mu_hint')}</p>${dirPicker}`;
-    } else if (b.type === 'adder' || b.type === 'subtractor' || b.type === 'divider') {
+    } else if (b.type === 'divider') {
+      // k in, one out: a stack of k, a ÷ dial, the one that leaves, and how far the remainder is to the next one
+      const k = Math.max(1, b.value ?? 1);
+      const last = b.mineItem as ItemId | undefined;
+      const rest = (b.acc ?? 0) % k;
+      const sent = b.lanes?.[1] ?? 0;
+      body = `${statusLine()}<div class="mu-hero dv">
+          <div class="mu-io in"><small>${t('mu_in')}</small><span class="mu-stack">${Array.from({ length: Math.min(k, 9) }, (_, i) => `<span style="--i:${i}">${last ? itemImg(last, 'icon xs') : '<i></i>'}</span>`).join('')}</span><b>${b.acc ?? 0}</b></div>
+          <div class="mu-dial"><span class="mu-x">÷</span><b>${k}</b><span class="mu-ticks">${Array.from({ length: 9 }, (_, i) => `<i class="${i < k ? 'on' : ''}" style="--a:${i * 40}deg"></i>`).join('')}</span></div>
+          <div class="mu-io out"><small>${t('mu_out')}</small><span class="mu-slot">${last ? itemImg(last, 'icon') : '<b class="sr-q">?</b>'}</span><b>${sent}</b></div>
+        </div>
+        <div class="dv-rest"><small>${t('dv_next')}</small><span class="dv-segs">${Array.from({ length: k }, (_, i) => `<i class="${i < rest ? 'on' : ''}"></i>`).join('')}</span><b>${rest}<span>/${k}</span></b></div>
+        <div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button class="key ${k === n ? 'on' : ''}" data-value="${n}">${n}</button>`).join('')}</div>
+        <p class="save-hint clamp2" data-more>${t('dv_hint')}</p>${dirPicker}`;
+    } else if (b.type === 'adder' || b.type === 'subtractor') {
       const val = b.value ?? 0;
       const held = b.recipe ? itemImg(b.recipe as ItemId, 'icon xs') : '';
-      const op = { adder: '+', subtractor: '−', divider: '÷' }[b.type as 'adder'];
+      const op = { adder: '+', subtractor: '−' }[b.type as 'adder'];
       const shown = b.type === 'subtractor' ? b.debt ?? 0 : b.type === 'adder' ? b.acc ?? 0 : val;
       const label = b.type === 'subtractor' ? t('arith_pending') : b.type === 'adder' ? t('arith_total') : t('arith_factor');
-      const factor = b.type === 'divider' ? `<div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<button class="key ${val === k ? 'on' : ''}" data-value="${k}">${k}</button>`).join('')}</div>` : '';
       body = `<div class="ar-hero">
           <span class="ar-op">${op}</span>
           <span class="ar-lcd"><small>${label}</small><b>${shown}</b>
             <span class="ar-tags">${held ? `<i>${held}</i>` : ''}${b.bufL?.length ? `<i>${t('arith_queue', { n: b.bufL.length })}</i>` : ''}</span></span>
           <button class="tc" data-act="arith-clear">${icon('close')}<span>${t('lamp_clear')}</span></button>
         </div>
-        ${factor}
         <p class="save-hint clamp2" data-more>${t(`arith_${b.type}` as 'arith_register')}</p>${dirPicker}`;
     } else if (b.type === 'road') {
       // the road network this tile belongs to: connected road tiles and the docks and depots along it

@@ -2653,6 +2653,7 @@ export class Sim {
         if (fromBack) {
           const k = Math.max(1, b.value ?? 1);
           b.acc = (b.acc ?? 0) + 1;
+          b.mineItem = item; // the last item in (panel)
           if (b.acc % k === 0) out.push(item); // one out per k in; remainder stays inside
           return true;
         }
