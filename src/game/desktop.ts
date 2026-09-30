@@ -27,7 +27,7 @@ export const BUILD_DEMO = typeof __EDITION__ !== 'undefined' && __EDITION__ === 
 export const CAN_UNLOCK = BUILD_DEMO && !IS_DESKTOP;
 /** 'full' or 'demo' for this session: the demo build, unless a valid code was entered on this device. */
 export const EDITION: 'full' | 'demo' = BUILD_DEMO && !(CAN_UNLOCK && unlockedHere()) ? 'demo' : 'full';
-export const DEMO_CHAPTERS = 3; // story chapters in the demo
+export const DEMO_CHAPTERS = 5; // story chapters in the demo
 export const DEMO_CHALLENGES = ['c_drills', 'c_belts'];
 
 /** Where the full game can be bought (shown at the end of the demo); set PE_STORE_URL at build time. */

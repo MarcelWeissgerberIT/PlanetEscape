@@ -11,7 +11,7 @@ demselben Code. Dieses Dokument listet, was im Repository schon vorbereitet ist 
 | Web-Build für die App | `npm run desktop:web` | Vite mit `--mode desktop` → `desktop/app/` (ohne Service Worker, ohne KI-Links) |
 | Steam-Anbindung | `desktop/main.cjs` | `steamworks.js` (optional): Achievements und Overlay, sobald eine App ID gesetzt ist; ohne Steam läuft die App normal |
 | Achievements | `src/game/achievements.ts` | 17 Stück, im Spiel sichtbar (Menü → Erfolge), in der App an Steam gemeldet |
-| Demo-Edition | `PE_EDITION=demo` | Kapitel 1–3 und 2 Herausforderungen, danach Hinweis mit Link zur Shop-Seite (`PE_STORE_URL`) |
+| Demo-Edition | `PE_EDITION=demo` | Kapitel 1–5 und 2 Herausforderungen, danach Hinweis mit Link zur Shop-Seite (`PE_STORE_URL`) |
 | Builds für Windows, macOS, Linux | `.github/workflows/desktop.yml` | Actions → „Desktop builds“ → Run workflow (Edition + App ID) oder ein Tag `v*` |
 | Upload zu Steam | `desktop/steam/` | `app_build.vdf.template` + `upload.sh` (steamcmd) |
 | Shop-Grafiken (Entwürfe) | `steam-assets/` | alle Kapselgrößen, erzeugt mit `node tools/steam-art.mjs` |
@@ -139,7 +139,7 @@ Controller-Steuerung und eine Bildschirmtastatur-Anbindung; ein Steam-Input-Layo
 
 ## Entscheidungen
 
-- **Web-Version = Demo**: https://planet-escape.dev/ wird mit `PE_EDITION=demo` gebaut (Kapitel 1–3, zwei
+- **Web-Version = Demo**: https://planet-escape.dev/ wird mit `PE_EDITION=demo` gebaut (Kapitel 1–5, zwei
   Challenges, kein Freispiel). Am Ende der Demo kann man den Fortschritt als Code oder Datei mitnehmen; die Vollversion
   bietet auf dem Startbildschirm „Demo-Fortschritt übernehmen“ (Sterne, Bestzeiten, Erfolge werden zusammengeführt).
   Sobald die Shop-Seite steht: GitHub → Settings → Secrets and variables → Actions → **Variables** →
