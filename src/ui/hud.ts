@@ -2208,10 +2208,16 @@ export class Hud {
         body = `${statusLine(` · ${b.acc ?? 0} ${t('kitport_sent')}`)}<p class="save-hint">${t('kitport_hint')}</p>${dirPicker}
           <div class="lbl">${t('kitport_only')}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-kitfilter="">${t('any_item')}</button>${[...new Set([...(b.recipe ? [b.recipe as BuildingId] : []), ...types])].map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-kitfilter="${k}"><img class="icon" src="${buildingUrl(k)}" alt=""><div class="r-name">${tBuilding(k)}</div></button>`).join('')}</div>`;
       } else if (b.type === 'stacker') {
-        const unpack = b.mode === 'unpack', n = b.bufL?.length ?? 0;
-        body = `${statusLine(` · ${n}/${CRATE_SIZE}${b.bufL?.length ? ` ${itemImg(b.bufL[0], 'icon sm')}` : ''} · ${b.acc ?? 0} ${t('stacker_crates')}`)}
-          <div class="dirs"><span class="lbl">${t('stacker_mode')}</span><button class="chip ${unpack ? '' : 'active'}" data-mode="pack">${t('stacker_pack')}</button><button class="chip ${unpack ? 'active' : ''}" data-mode="unpack">${t('stacker_unpack')}</button></div>
-          <p class="save-hint">${t(unpack ? 'stacker_hint_unpack' : 'stacker_hint_pack')}</p>${dirPicker}`;
+        const unpack = b.mode === 'unpack', buf = b.bufL ?? [];
+        const crate = `<span class="sk-crate ${buf.length >= CRATE_SIZE ? 'full' : ''}">${Array.from({ length: CRATE_SIZE }, (_, i) => `<span class="slot ${buf[i] ? '' : 'empty'}">${buf[i] ? itemImg(buf[i], 'icon sm') : ''}</span>`).join('')}</span>`;
+        const box = `<span class="sk-box">${icon('box')}</span>`;
+        body = `${statusLine()}<div class="fab-flow sk-flow ${b.working ? 'on' : ''}">
+            ${unpack ? `${box}<i class="fab-arrow">›</i>${crate}` : `${crate}<i class="fab-arrow">›</i>${box}`}
+            <span class="gp-count"><b>${b.acc ?? 0}</b><small>${t('stacker_crates')}</small></span>
+          </div>
+          <div class="lbl">${t('stacker_mode')}</div>
+          <div class="seg"><button class="${unpack ? '' : 'on'}" data-mode="pack">${t('stacker_pack')}</button><button class="${unpack ? 'on' : ''}" data-mode="unpack">${t('stacker_unpack')}</button></div>
+          <p class="save-hint clamp2" data-more>${t(unpack ? 'stacker_hint_unpack' : 'stacker_hint_pack')}</p>${dirPicker}`;
       } else if (b.type === 'service') {
         const store = b.store ?? {};
         const area = this.sim.serviceArea(b);
