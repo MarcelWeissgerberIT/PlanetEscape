@@ -211,8 +211,11 @@ export class Renderer {
     const fi = sc?.featureAt.get(i);
     if (fi !== undefined) {
       const kind = this.sim.state.features![fi].kind;
-      cc.fillStyle = kind === 'volcano' ? '#2c2427' : LIQUID_FLAT[kind];
-      cc.fillRect(x * P, y * P, P, P);
+      // liquids are drawn live over plain ground (their rounded shores would show a square underneath)
+      if (kind === 'volcano') {
+        cc.fillStyle = '#2c2427';
+        cc.fillRect(x * P, y * P, P, P);
+      }
     } else if (t !== 'ground') {
       const img = terrainSprite(t);
       if (t === 'rock') {
@@ -2299,7 +2302,7 @@ export class Renderer {
       }
       for (let k = 0; k < 30; k++) blob(rnd() * 256, rnd() * 256, 3 + rnd() * 6, 'rgba(255,255,255,0.8)');
     } else {
-      const base = biome === 'ice' ? '#5aa6c6' : biome === 'moss' ? '#146b5b' : '#1d5872';
+      const base = biome === 'ice' ? '#2f7a9c' : biome === 'moss' ? '#0f5a4d' : '#174c66';
       g.fillStyle = base;
       g.fillRect(0, 0, 256, 256);
       for (let k = 0; k < 50; k++) blob(rnd() * 256, rnd() * 256, 14 + rnd() * 30, biome === 'moss' ? 'rgba(45,212,191,0.22)' : 'rgba(125,211,252,0.22)');
@@ -2326,12 +2329,18 @@ export class Renderer {
     for (const l of sc.liquids) {
       if (l.x1 < x0 - 1 || l.x0 > x1 + 1 || l.y1 < y0 - 1 || l.y0 > y1 + 1) continue;
       ctx.lineJoin = 'round';
+      // the bank: a soft dark rim of wet ground around the shore
       ctx.strokeStyle = LIQUID_BANK[l.kind];
-      ctx.lineWidth = TILE * 0.26;
+      ctx.globalAlpha = 0.35;
+      ctx.lineWidth = TILE * 0.34;
       ctx.stroke(l.path);
+      ctx.globalAlpha = 0.7;
+      ctx.lineWidth = TILE * 0.16;
+      ctx.stroke(l.path);
+      ctx.globalAlpha = 1;
       if (this.lowDetail) {
         ctx.fillStyle = LIQUID_FLAT[l.kind];
-        ctx.fill(l.path);
+        ctx.fill(l.path, 'evenodd');
         continue;
       }
       const pat = this.liquidPattern(l.kind, sc.biome.id);
@@ -2344,15 +2353,36 @@ export class Renderer {
         ctx.shadowColor = 'rgba(255,110,30,0.85)';
         ctx.shadowBlur = 16;
       }
-      ctx.fill(l.path);
+      ctx.fill(l.path, 'evenodd');
       ctx.shadowBlur = 0;
       // shimmer: the same texture drifting across, added on top
       pat.setTransform(new DOMMatrix([scale * 1.3, 0, 0, scale * 1.3, -l.flow[1] * t * 0.7 + 40, l.flow[0] * t * 0.7 + 17]));
-      ctx.globalAlpha = l.kind === 'water' ? 0.25 : 0.3;
+      ctx.globalAlpha = l.kind === 'water' ? 0.22 : 0.3;
       ctx.globalCompositeOperation = l.kind === 'water' ? 'screen' : 'lighter';
-      ctx.fill(l.path);
+      ctx.fill(l.path, 'evenodd');
       ctx.globalAlpha = 1;
       ctx.globalCompositeOperation = 'source-over';
+      if (l.kind === 'water') {
+        // depth: light shallows along the shore fading into the deep, and a line of foam that breathes
+        ctx.save();
+        ctx.clip(l.path, 'evenodd');
+        ctx.strokeStyle = 'rgba(160,230,255,1)';
+        for (const [wd, a] of [[1.2, 0.045], [0.7, 0.06], [0.35, 0.08]] as const) {
+          ctx.globalAlpha = a;
+          ctx.lineWidth = TILE * wd;
+          ctx.stroke(l.path);
+        }
+        const breathe = 0.5 + 0.5 * Math.sin(this.time * 1.3 + l.feature);
+        ctx.globalAlpha = 0.2 + 0.15 * breathe;
+        ctx.strokeStyle = '#e0f7ff';
+        ctx.lineWidth = TILE * (0.07 + 0.03 * breathe);
+        ctx.setLineDash([TILE * 0.9, TILE * 0.18, TILE * 0.35, TILE * 0.3, TILE * 1.4, TILE * 0.22]);
+        ctx.lineDashOffset = -this.time * TILE * 0.15;
+        ctx.stroke(l.path);
+        ctx.setLineDash([]);
+        ctx.globalAlpha = 1;
+        ctx.restore();
+      }
     }
   }
 

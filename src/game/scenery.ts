@@ -195,24 +195,105 @@ export function buildScenery(s: GameState): Scenery {
   return { biome, decos, shade, liquids, hidden, featureAt, decoAt };
 }
 
-/** Outline of a river or lake: a round blob per tile, bridged to its neighbours (so the water is one smooth body). */
+/**
+ * Outline of a river or lake as smooth shore lines: a field sampled every half tile (1 at a water tile's centre,
+ * the mean of the touching tiles on its edges and corners) is traced at a threshold (marching squares), and the
+ * loops are rounded off (Chaikin). Islands come out as holes (fill with even-odd).
+ */
 function liquidShape(f: Feature, fi: number, w: number, x0: number, y0: number, x1: number, y1: number): Liquid {
   const set = new Set(f.tiles);
   const path = new Path2D();
-  const r = (f.lake ? 0.7 : 0.5) * TILE;
-  const hw = (f.lake ? 0.62 : 0.47) * TILE;
-  for (const i of f.tiles) {
-    const x = i % w, y = Math.floor(i / w);
-    const px = (x + 0.5) * TILE, py = (y + 0.5) * TILE;
-    const inner = set.has(i - 1) && set.has(i + 1) && set.has(i - w) && set.has(i + w);
-    if (inner) {
-      path.rect(x * TILE - 1, y * TILE - 1, TILE + 2, TILE + 2); // inside: plain, only the shore is rounded
-      continue;
+  const has = (x: number, y: number) => x >= 0 && x < w && y >= 0 && set.has(y * w + x);
+  // sample grid in half tiles, one ring of padding
+  const gx0 = x0 * 2 - 2, gy0 = y0 * 2 - 2, gw = (x1 - x0 + 1) * 2 + 5, gh = (y1 - y0 + 1) * 2 + 5;
+  const val = (sx: number, sy: number): number => {
+    const X = gx0 + sx, Y = gy0 + sy; // X, Y in half tiles; odd = tile centre, even = tile edge
+    const xs = X % 2 !== 0 ? [(X - 1) / 2] : [X / 2 - 1, X / 2];
+    const ys = Y % 2 !== 0 ? [(Y - 1) / 2] : [Y / 2 - 1, Y / 2];
+    let n = 0, c = 0;
+    for (const ty of ys) for (const tx of xs) { n++; if (has(tx, ty)) c++; }
+    return c / n;
+  };
+  const field = new Float32Array(gw * gh);
+  for (let sy = 0; sy < gh; sy++) for (let sx = 0; sx < gw; sx++) field[sy * gw + sx] = val(sx, sy);
+  const thr = f.lake ? 0.34 : 0.42;
+  const V = (sx: number, sy: number) => field[sy * gw + sx];
+  // crossing points on cell edges, keyed so neighbouring cells share them
+  const pts = new Map<string, [number, number]>();
+  const adj = new Map<string, string[]>();
+  const point = (ax: number, ay: number, bx: number, by: number): string => {
+    const key = ax < bx || (ax === bx && ay < by) ? `${ax},${ay},${bx},${by}` : `${bx},${by},${ax},${ay}`;
+    if (!pts.has(key)) {
+      const va = V(ax, ay), vb = V(bx, by);
+      const k = (thr - va) / (vb - va);
+      pts.set(key, [(gx0 + ax + (bx - ax) * k) / 2, (gy0 + ay + (by - ay) * k) / 2]);
     }
-    path.moveTo(px + r, py);
-    path.arc(px, py, r, 0, Math.PI * 2);
-    if (set.has(i + 1) && x < w - 1) path.rect(px, py - hw, TILE, hw * 2);
-    if (set.has(i + w)) path.rect(px - hw, py, hw * 2, TILE);
+    return key;
+  };
+  const link = (a: string, b: string) => {
+    (adj.get(a) ?? adj.set(a, []).get(a)!).push(b);
+    (adj.get(b) ?? adj.set(b, []).get(b)!).push(a);
+  };
+  for (let sy = 0; sy < gh - 1; sy++)
+    for (let sx = 0; sx < gw - 1; sx++) {
+      const a = V(sx, sy) > thr, b = V(sx + 1, sy) > thr, c = V(sx + 1, sy + 1) > thr, d = V(sx, sy + 1) > thr;
+      const cs = (a ? 8 : 0) | (b ? 4 : 0) | (c ? 2 : 0) | (d ? 1 : 0);
+      if (cs === 0 || cs === 15) continue;
+      const top = () => point(sx, sy, sx + 1, sy), right = () => point(sx + 1, sy, sx + 1, sy + 1);
+      const bottom = () => point(sx, sy + 1, sx + 1, sy + 1), left = () => point(sx, sy, sx, sy + 1);
+      switch (cs) {
+        case 1: case 14: link(left(), bottom()); break;
+        case 2: case 13: link(bottom(), right()); break;
+        case 3: case 12: link(left(), right()); break;
+        case 4: case 11: link(top(), right()); break;
+        case 6: case 9: link(top(), bottom()); break;
+        case 7: case 8: link(left(), top()); break;
+        case 5: link(left(), top()); link(bottom(), right()); break;
+        case 10: link(top(), right()); link(left(), bottom()); break;
+      }
+    }
+  // walk the loops, round them off, add them to the path
+  const seen = new Set<string>();
+  for (const startKey of adj.keys()) {
+    if (seen.has(startKey)) continue;
+    let loop: [number, number][] = [];
+    let prev = '', cur = startKey;
+    while (cur && !seen.has(cur)) {
+      seen.add(cur);
+      loop.push(pts.get(cur)!);
+      const next = (adj.get(cur) ?? []).find((k) => k !== prev && !seen.has(k)) ?? '';
+      prev = cur;
+      cur = next;
+    }
+    if (loop.length < 3) continue;
+    // an irregular shore: halve the steps, then push each point in or out along its normal by a smooth noise
+    const fine: [number, number][] = [];
+    for (let k = 0; k < loop.length; k++) {
+      const [ax, ay] = loop[k], [bx, by] = loop[(k + 1) % loop.length];
+      fine.push([ax, ay], [(ax + bx) / 2, (ay + by) / 2]);
+    }
+    const amp = f.lake ? 0.2 : 0.09;
+    const seed = fi * 1.37 + 0.5;
+    loop = fine.map(([px, py], k) => {
+      const [ax, ay] = fine[(k - 1 + fine.length) % fine.length], [bx, by] = fine[(k + 1) % fine.length];
+      let nx = by - ay, ny = -(bx - ax);
+      const nl = Math.hypot(nx, ny) || 1;
+      nx /= nl;
+      ny /= nl;
+      const n = Math.sin(px * 1.3 + py * 0.7 + seed) * 0.55 + Math.sin(px * 0.45 - py * 1.1 + seed * 2.1) * 0.45;
+      return [px + nx * n * amp, py + ny * n * amp];
+    });
+    for (let it = 0; it < 3; it++) {
+      const out: [number, number][] = [];
+      for (let k = 0; k < loop.length; k++) {
+        const [ax, ay] = loop[k], [bx, by] = loop[(k + 1) % loop.length];
+        out.push([ax * 0.75 + bx * 0.25, ay * 0.75 + by * 0.25], [ax * 0.25 + bx * 0.75, ay * 0.25 + by * 0.75]);
+      }
+      loop = out;
+    }
+    path.moveTo(loop[0][0] * TILE, loop[0][1] * TILE);
+    for (let k = 1; k < loop.length; k++) path.lineTo(loop[k][0] * TILE, loop[k][1] * TILE);
+    path.closePath();
   }
   // rivers flow from their first tile to their last, lakes drift slowly
   const a = f.tiles[0], b = f.tiles[f.tiles.length - 1];
