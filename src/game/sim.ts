@@ -2426,6 +2426,7 @@ export class Sim {
       b.timer = period;
       b.open = true;
       b.rateT = TIMER_OPEN;
+      (b.lanes ??= [0, 0])[0]++; // openings (panel counter)
     }
     if (b.open !== false) {
       b.rateT = (b.rateT ?? 0) - dt;
@@ -2433,7 +2434,10 @@ export class Sim {
     }
     b.status = b.open !== false ? 'ok' : 'closed';
     const key = Object.keys(b.output ?? {})[0] as ItemId | undefined;
-    if (key && b.open !== false && this.pushDir(b, key, b.dir)) b.output = {};
+    if (key && b.open !== false && this.pushDir(b, key, b.dir)) {
+      b.output = {};
+      (b.lanes ??= [0, 0])[1]++; // let through
+    }
   }
 
   /** Passes items straight through and signals both sides for every item that runs through. */
@@ -3716,6 +3720,8 @@ export class Sim {
         buf.shift();
         b.rr = (phase + 1) % pattern.length;
         b.status = 'ok';
+        (b.lanes ??= [0, 0])[side === 'L' ? 0 : 1]++; // taken per side (panel counter)
+        b.route = side === 'L' ? 0 : 1;
       } else b.status = 'blocked';
       return;
     }

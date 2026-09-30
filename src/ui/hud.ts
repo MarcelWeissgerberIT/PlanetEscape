@@ -2331,14 +2331,6 @@ export class Hud {
     } else if (def.kind === 'logic' || def.kind === 'splitter') {
       const known = ITEM_ORDER.filter((id) => (st.inventory[id] ?? 0) > 0 || st.stats.produced[id] || RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id)) || TERRAIN_ITEM[st.terrain[0]] === id || ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'].includes(id));
       const picker = (label: string) => `<div class="lbl">${label}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('any_item')}</button>${known.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
-      // a routing scheme in the part's own frame: in at the bottom, out straight, left and right
-      const route = (top: string, left: string, right: string, cls = '') => `<div class="rt ${cls}">
-          <div class="rt-out top">${top}</div>
-          <div class="rt-out left">${left}</div>
-          <div class="rt-core"><img src="${buildingUrl(b.type)}" alt=""></div>
-          <div class="rt-out right">${right}</div>
-          <div class="rt-in"><i>↑</i>${t('rt_in')}</div>
-        </div>`;
       if (b.type === 'splitter' || b.type === 'merger' || b.type === 'overflow') {
         // a junction in the part's own frame: the splitter fans one input out to three sides, the merger joins three into one
         const split = b.type !== 'merger';
@@ -2563,10 +2555,22 @@ export class Hud {
         const open = b.open !== false;
         const left = Math.max(0, Math.min(period, b.timer ?? period));
         const R = 34, C = 2 * Math.PI * R;
-        body = `<div class="tm-hero ${open ? 'open' : ''}">
-            <svg class="tm-ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${R}" class="tm-track"/><circle cx="40" cy="40" r="${R}" class="tm-arc" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - left / period)).toFixed(1)}"/></svg>
-            <span class="tm-num"><b>${left.toFixed(1)}</b><small>s</small></span>
-            <span class="tm-text"><small>${t('timer_state')}</small><b><i class="term-led ${open ? 'run' : 'pause'}"></i>${open ? t('switch_on') : t('switch_off')}</b><em>${t('timer_every', { s: period })}</em></span>
+        const [opens, passed] = b.lanes ?? [0, 0];
+        const now = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+        // a dial counting down to the next opening, and the cycle as a time line: the open window at its start, a playhead
+        body = `<div class="tm2 ${open ? 'open' : ''}">
+            <div class="tm2-dial">
+              <svg class="tm-ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${R}" class="tm-track"/><circle cx="40" cy="40" r="${R}" class="tm-arc" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - left / period)).toFixed(1)}"/></svg>
+              <span class="tm-num"><b>${left.toFixed(1)}</b><small>s</small></span>
+              ${now ? `<span class="jn-wait" title="${t('jn_waiting')}">${itemImg(now, 'icon sm')}</span>` : ''}
+            </div>
+            <div class="tm2-info">
+              <span class="vl2-state"><i class="term-led ${open ? 'run' : 'pause'}"></i>${open ? t('switch_on') : t('switch_off')}</span>
+              <span class="tm2-line"><i class="win" style="width:${((0.5 / period) * 100).toFixed(1)}%"></i><i class="head" style="left:${(((period - left) / period) * 100).toFixed(1)}%"></i></span>
+              <span class="tm2-scale"><small>0 s</small><small>${period} s</small></span>
+              <span class="tm2-every">${t('timer_every', { s: period })}</span>
+              <span class="tm2-stats"><span><b>${opens}</b><small>${t('tm_opens')}</small></span><span><b>${passed}</b><small>${t('vl_passed')}</small></span></span>
+            </div>
           </div>
           <div class="lbl">${t('timer_period')}</div>
           <div class="seg">${TIMER_PERIODS.map((p) => `<button class="${period === p ? 'on' : ''}" data-threshold="${p}">${p} s</button>`).join('')}</div>
@@ -2707,16 +2711,32 @@ export class Hud {
           ${dirPicker}${picker(t('watch_item'))}`;
       } else if (b.type === 'mixer') {
         const [l, r] = MIXER_RATIOS[b.ratio ?? 0];
-        const buf = (list: ItemId[] | undefined) => (list?.length ? `<span class="mx-buf">${list.slice(0, 4).map((k) => itemImg(k, 'icon xs')).join('')}${list.length > 4 ? `<small>+${list.length - 4}</small>` : ''}</span>` : `<span class="dim">${t('mix_empty')}</span>`);
-        body = `${statusLine()}${route(
-          `<i>↑</i><b class="mix-ratio">${l}</b><span>:</span><b class="mix-ratio">${r}</b>`,
-          `<i>→</i>${buf(b.bufL)}`,
-          `${buf(b.bufR)}<i>←</i>`,
-          'mix',
-        )}
+        const [nl, nr] = b.lanes ?? [0, 0];
+        const total = nl + nr;
+        const pattern: ('L' | 'R')[] = [...Array(l).fill('L'), ...Array(r).fill('R')];
+        const phase = (b.rr ?? 0) % pattern.length;
+        const buf = (list: ItemId[] | undefined) => (list?.length ? `<span class="mx2-buf">${list.slice(0, 4).map((k) => itemImg(k, 'icon xs')).join('')}${list.length > 4 ? `<small>+${list.length - 4}</small>` : ''}</span>` : `<span class="mx2-buf dim">${t('mix_empty')}</span>`);
+        const L = ((b.dir + 3) & 3) as Dir, Rt = ((b.dir + 1) & 3) as Dir;
+        const linked = [L, Rt].map((d) => !!this.sim.at(b.x + DX[d], b.y + DY[d]));
+        const card = (i: 0 | 1) => {
+          const n = i ? nr : nl, pct = total ? Math.round((n / total) * 100) : 0;
+          return `<div class="jn-lane ${i ? 'l2' : 'l0'} ${b.route === i ? 'lit' : ''} ${linked[i] ? '' : 'none'}">
+            <small><i>${i ? '←' : '→'}</i> ${i ? t('jn_right') : t('jn_left')}</small>
+            <b>${n}</b>
+            <span class="jn-bar"><i style="width:${pct}%"></i></span>
+            ${linked[i] ? buf(i ? b.bufR : b.bufL) : `<em>${t('jn_none')}</em>`}
+          </div>`;
+        };
+        const rail = (i: 0 | 1) => `<path d="M${i ? 150 : 50} 110 C${i ? 150 : 50} 76 100 76 100 48" class="rail ${i ? 'r2' : 'r0'} ${b.route === i ? 'lit' : ''} ${linked[i] ? '' : 'none'}"/>`;
+        body = `${statusLine()}<div class="jn-hero merge mx2">
+            <div class="jn-end"><small>↑ ${t('jn_out')}</small><b>${total}</b><em>${t('jn_items_out')}</em></div>
+            <div class="jn-track"><svg viewBox="0 0 200 110" preserveAspectRatio="none" aria-hidden="true"><path d="M100 48 V0" class="rail trunk ${total ? 'lit' : ''}"/>${rail(0)}${rail(1)}</svg><span class="jn-node ${b.route === 0 ? 'n0' : b.route === 1 ? 'n2' : ''}" style="top:43.6%"></span></div>
+            <div class="jn-cards two">${card(0)}${card(1)}</div>
+          </div>
+          <div class="mx2-seq"><small>${t('mx_seq')}</small>${pattern.map((p, i) => `<span class="${p === 'L' ? 'l' : 'r'} ${i === phase ? 'now' : ''}">${p === 'L' ? t('mx_l') : t('mx_r')}</span>`).join('')}</div>
           <div class="lbl">${t('ratio')}</div>
           <div class="seg">${MIXER_RATIOS.map((q, i) => `<button class="${(b.ratio ?? 0) === i ? 'on' : ''}" data-ratio="${i}">${q[0]} : ${q[1]}</button>`).join('')}</div>
-          ${dirPicker}`;
+          <p class="save-hint clamp2" data-more>${t('mx_hint')}</p>${dirPicker}`;
       } else body = `${statusLine()}${dirPicker}`;
     } else body = dirPicker;
     return body;
