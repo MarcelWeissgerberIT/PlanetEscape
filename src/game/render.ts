@@ -2331,11 +2331,11 @@ export class Renderer {
       ctx.lineJoin = 'round';
       // the bank: a soft dark rim of wet ground around the shore
       ctx.strokeStyle = LIQUID_BANK[l.kind];
-      ctx.globalAlpha = 0.35;
-      ctx.lineWidth = TILE * 0.34;
+      ctx.globalAlpha = 0.18;
+      ctx.lineWidth = TILE * 0.4;
       ctx.stroke(l.path);
-      ctx.globalAlpha = 0.7;
-      ctx.lineWidth = TILE * 0.16;
+      ctx.globalAlpha = 0.4;
+      ctx.lineWidth = TILE * 0.14;
       ctx.stroke(l.path);
       ctx.globalAlpha = 1;
       if (this.lowDetail) {
@@ -2371,6 +2371,19 @@ export class Renderer {
           ctx.globalAlpha = a;
           ctx.lineWidth = TILE * wd;
           ctx.stroke(l.path);
+        }
+        if (sc.biome.id === 'ice') {
+          // a frozen margin: pale ice along the shore with a bright broken edge
+          ctx.globalAlpha = 0.5;
+          ctx.strokeStyle = '#d7ecf7';
+          ctx.lineWidth = TILE * 0.42;
+          ctx.stroke(l.path);
+          ctx.globalAlpha = 0.7;
+          ctx.strokeStyle = '#f5fbff';
+          ctx.lineWidth = TILE * 0.08;
+          ctx.setLineDash([TILE * 1.1, TILE * 0.3, TILE * 0.5, TILE * 0.4]);
+          ctx.stroke(l.path);
+          ctx.setLineDash([]);
         }
         const breathe = 0.5 + 0.5 * Math.sin(this.time * 1.3 + l.feature);
         ctx.globalAlpha = 0.2 + 0.15 * breathe;

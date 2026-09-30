@@ -36,10 +36,13 @@ export interface Biome {
 export const BIOMES: Record<Biome['id'], Biome> = {
   basalt: { id: 'basalt', ground: '#373d45', speckLight: 'rgba(255,255,255,0.04)', speckDark: 'rgba(0,0,0,0.22)', patch: ['#2b4d5a', '#4d3f36'], deco: { pebbles: 4, crystals: 2, crater: 2, plants: 1.2, lava: 0.8, vent: 0.8, bones: 0.4, wreck: 0.5, scrap: 0.6, meteor: 0.4, obelisk: 0.3 }, volcanoes: 0.1, critter: '#5eead4' },
   rust: { id: 'rust', ground: '#4a3b34', speckLight: 'rgba(255,220,190,0.05)', speckDark: 'rgba(30,10,0,0.22)', patch: ['#70412b', '#2f2524'], deco: { pebbles: 4, crater: 3, bones: 1.3, crystals: 1, vent: 0.5, plants: 0.4, scrap: 1.2, wreck: 0.6, meteor: 0.6, obelisk: 0.3 }, volcanoes: 0.05, critter: '#fbbf24' },
-  ice: { id: 'ice', ground: '#3c4855', speckLight: 'rgba(220,240,255,0.06)', speckDark: 'rgba(0,10,30,0.2)', patch: ['#5f7d96', '#2c3845'], deco: { crystals: 3, crater: 2, pebbles: 2, vent: 1.5, bones: 0.4, icespire: 2, wreck: 0.4, meteor: 0.3 }, volcanoes: 0.03, critter: '#93c5fd' },
+  ice: { id: 'ice', ground: '#3c4855', speckLight: 'rgba(220,240,255,0.06)', speckDark: 'rgba(0,10,30,0.2)', patch: ['#5f7d96', '#2c3845'], deco: { icespire: 2.6, pebbles: 3, crater: 2, vent: 1.5, crystals: 0.8, bones: 0.4, wreck: 0.4, meteor: 0.3 }, volcanoes: 0.03, critter: '#93c5fd' },
   moss: { id: 'moss', ground: '#2f3b3a', speckLight: 'rgba(200,255,230,0.05)', speckDark: 'rgba(0,20,10,0.22)', patch: ['#2b5a47', '#46355e'], deco: { plants: 5, crystals: 2, pebbles: 2, bones: 0.8, crater: 1, tree: 2.2, obelisk: 0.6 }, volcanoes: 0.04, critter: '#c084fc' },
   volcanic: { id: 'volcanic', ground: '#352f30', speckLight: 'rgba(255,180,120,0.05)', speckDark: 'rgba(0,0,0,0.28)', patch: ['#5c2718', '#1e1b1f'], deco: { lava: 4, vent: 3, pebbles: 3, crater: 2, bones: 0.3, crystals: 0.5, meteor: 1, scrap: 0.4 }, volcanoes: 0.22, critter: '#fb923c' },
 };
+
+/** Ground colour along rivers and lakes: frost, lush moss, wet dark stone. */
+const SHORE_TINT: Record<Biome['id'], [number, number, number]> = { ice: [150, 178, 200], moss: [36, 92, 62], basalt: [30, 36, 44], rust: [58, 40, 32], volcanic: [26, 22, 24] };
 
 /** Size in tiles per kind (volcanoes stand on rock and reach up past their tile). */
 const SIZE: Record<DecoKind, number> = { volcano: 3.5, crater: 1.05, plants: 0.85, bones: 1.6, vent: 0.8, lava: 1, crystals: 0.62, pebbles: 0.75, wreck: 1.5, obelisk: 1.35, tree: 1.45, icespire: 1.15, meteor: 1, scrap: 0.95 };
@@ -145,7 +148,23 @@ export function buildScenery(s: GameState): Scenery {
     }
     liquids.push(liquidShape(f, fi, w, x0, y0, x1, y1));
   });
-  // ground decoration, weighted by the biome
+  // distance (tiles, up to 3) to the nearest river or lake: the shore gets its own plants and stones
+  const shoreDist = new Uint8Array(w * h).fill(9);
+  features.forEach((f) => {
+    if (f.kind === 'volcano') return;
+    for (const i of f.tiles) {
+      const x = i % w, y = Math.floor(i / w);
+      for (let dy = -3; dy <= 3; dy++) for (let dx = -3; dx <= 3; dx++) {
+        const nx = x + dx, ny = y + dy;
+        if (nx < 0 || ny < 0 || nx >= w || ny >= h) continue;
+        const d = Math.max(Math.abs(dx), Math.abs(dy));
+        if (d < shoreDist[ny * w + nx]) shoreDist[ny * w + nx] = d;
+      }
+    }
+  });
+  const SHORE: Record<Biome['id'], Exclude<DecoKind, 'volcano'>[]> = { ice: ['icespire', 'pebbles', 'icespire', 'pebbles'], moss: ['plants', 'plants', 'tree', 'pebbles'], basalt: ['pebbles', 'plants', 'crystals', 'pebbles'], rust: ['pebbles', 'bones', 'pebbles', 'scrap'], volcanic: ['pebbles', 'vent', 'pebbles', 'crystals'] };
+  // ground decoration, weighted by the biome; it grows in loose groups (a noise field sets the density) and
+  // neighbours tend to be of a kind (the kind follows a second, slower field), the shore has its own set
   const kinds = Object.entries(biome.deco) as [Exclude<DecoKind, 'volcano'>, number][];
   const total = kinds.reduce((a, [, k]) => a + k, 0);
   const taken = new Set<number>();
@@ -153,12 +172,16 @@ export function buildScenery(s: GameState): Scenery {
     for (let x = 0; x < w; x++) {
       if (terrain[y * w + x] !== 'ground') continue;
       if (Math.hypot(x + 0.5 - cx, y + 0.5 - cy) < 6) continue; // the start area stays clear
-      if (hash(x, y, seed) >= density) continue;
+      const shore = shoreDist[y * w + x];
+      const group = Math.max(0, noise(seed + 5, x, y) - 0.38) / 0.62;
+      const local = shore <= 2 ? density * 4 : density * (0.25 + group * 3.2);
+      if (hash(x, y, seed) >= local) continue;
       if (depDist[y * w + x] < 2) continue; // never in or at a mining area
       if (taken.has((y - 1) * w + x - 1) || taken.has((y - 1) * w + x) || taken.has((y - 1) * w + x + 1) || taken.has(y * w + x - 1)) continue; // never two side by side
-      let r = hash(x, y, seed + 17) * total;
-      let kind = kinds[0][0];
+      let r = (noise(seed + 9, x * 1.6, y * 1.6) * 0.65 + hash(x, y, seed + 17) * 0.35) * total;
+      let kind = kinds[kinds.length - 1][0];
       for (const [k, wgt] of kinds) if ((r -= wgt) < 0) { kind = k; break; }
+      if (shore <= 2) kind = SHORE[biome.id][Math.floor(hash(x, y, seed + 71) * 4)];
       if (BIG.has(kind) && depDist[y * w + x] < 3) kind = 'pebbles'; // big things keep a wider berth
       const size = SIZE[kind] * (0.85 + hash(x, y, seed + 29) * 0.3);
       const jx = (hash(x, y, seed + 41) - 0.5) * 0.3, jy = (hash(x, y, seed + 53) - 0.5) * 0.3;
@@ -183,11 +206,18 @@ export function buildScenery(s: GameState): Scenery {
       const v = noise(seed, x, y);
       const hi = v > 0.5;
       const c = hi ? pa : pb;
-      const a = Math.min(1, Math.abs(v - 0.5) * 2.2) * 0.55;
+      let a = Math.min(1, Math.abs(v - 0.5) * 2.2) * 0.55;
+      let col = c;
+      const sd = shoreDist[y * w + x];
+      if (sd <= 1) {
+        // the ground takes on the shore's colour towards the water
+        col = SHORE_TINT[biome.id];
+        a = [0.42, 0.22, 0][sd];
+      }
       const i = (y * w + x) * 4;
-      img.data[i] = c[0];
-      img.data[i + 1] = c[1];
-      img.data[i + 2] = c[2];
+      img.data[i] = col[0];
+      img.data[i + 1] = col[1];
+      img.data[i + 2] = col[2];
       img.data[i + 3] = Math.round(a * 255);
     }
   }
