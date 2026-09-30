@@ -35,7 +35,7 @@ import { challengeRules, medalSummary } from './challenges';
 import { wearHtml, cpuStateHtml } from './panels';
 import { blueprintContent } from './blueprint';
 import { CHIP8_H, CHIP8_W, HIRES_H, HIRES_W } from '../game/chip8';
-import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize, FORK_CAP, FORK_RANGE, REGISTER_MAX } from '../game/data';
+import { CHIP8_PALETTE, CRYSTAL_HZ, MATRIX_SIZES, OSCILLATOR_CRYSTALS, SCREEN_REGION, matrixSize, FORK_CAP, FORK_RANGE, REGISTER_MAX, BELT_SPACING } from '../game/data';
 import { VIDEO_CROPS } from '../game/video';
 import { CHIP8_PROGRAMS } from '../game/chip8programs';
 
@@ -2071,7 +2071,7 @@ export class Hud {
     const statusLine = (extra = '') => {
       const s = b.status === 'idle' ? 'ok' : b.status ?? 'ok'; // idle is no fault: shown like "ready"
       let txt = s === 'ok' ? (b.working ? t('working') : t('idle')) : s === 'starved' ? `${tStatus(s)} ${(b.missing ?? []).map((m) => tItem(m)).join(', ')}` : tStatus(s);
-      if (this.sim.powerRatio < 1 && (def.kind === 'machine' || def.kind === 'miner')) txt += ` · ${t('no_power')}`;
+      if (this.sim.powerRatio < 1 && (def.kind === 'machine' || def.kind === 'miner') && s !== 'low_power') txt += ` · ${t('no_power')}`;
       return `<div class="status ${s === 'ok' ? '' : 'bad'}">${txt}${extra}</div>${wearHtml(this.sim, b)}`;
     };
     const dirPicker = def.rotatable
@@ -2151,7 +2151,8 @@ export class Hud {
       } else {
         head = `<div class="sto-hero">
             <div class="sto-head"><small>${t('stored')}</small>${gauge}</div>
-            <div class="sto-items">${entries.map(([k, n]) => `<span class="sto-item" title="${tItem(k)}">${itemImg(k, 'icon')}<b>${n}</b></span>`).join('') || `<span class="dim">–</span>`}</div>
+            <div class="sto-items">${entries.map(([k, n]) => `<span class="sto-item" title="${tItem(k)}">${itemImg(k, 'icon')}<b>${n}</b></span>`).join('') || `<span class="dim">${t('sto_empty')}</span>`}</div>
+            ${this.outletLine(b)}
           </div>`;
       }
       const filterable = Array.from(new Set([...Object.keys(b.store ?? {}), ...(b.recipe ? [b.recipe] : [])])) as ItemId[];
@@ -2209,9 +2210,25 @@ export class Hud {
     } else if (b.type === 'battery') {
       const frac = Math.min(1, (b.value ?? 0) / BATTERY_CAP);
       const v = Math.round(b.value ?? 0);
-      body = `<div class="bt-hero ${frac < 0.15 ? 'low' : frac > 0.98 ? 'full' : ''}">
-          <span class="bt-cell"><i style="height:${frac * 100}%"></i><b>${Math.round(frac * 100)}%</b></span>
-          <span class="bt-text"><small>${t('battery_charge')}</small><b>${v}<span> / ${BATTERY_CAP}</span></b><em>${t('bt_lasts', { s: Math.floor(v / BATTERY_RATE), p: BATTERY_RATE })}</em></span>
+      const flow = b.rateT ?? 0;
+      const mode = flow > 0.05 ? 'charge' : flow < -0.05 ? 'drain' : 'hold';
+      const eta = mode === 'charge' ? (BATTERY_CAP - (b.value ?? 0)) / flow : mode === 'drain' ? (b.value ?? 0) / -flow : 0;
+      const all = st.buildings.filter((x) => x.type === 'battery' && !x.site);
+      const bank = all.reduce((a, x) => a + (x.value ?? 0), 0);
+      body = `<div class="bt2 ${mode} ${frac < 0.15 ? 'low' : frac > 0.98 ? 'full' : ''}">
+          <span class="bt-cell"><i style="height:${frac * 100}%"></i><b>${Math.round(frac * 100)}%</b>${mode !== 'hold' ? `<em class="bt2-arrow">${mode === 'charge' ? '▲' : '▼'}</em>` : ''}</span>
+          <span class="bt2-info">
+            <small>${t('battery_charge')}</small>
+            <b>${v}<span> / ${BATTERY_CAP}</span></b>
+            <span class="bt2-flow"><i class="term-led ${mode === 'charge' ? 'run' : mode === 'drain' ? 'err' : 'pause'}"></i>${mode === 'charge' ? t('bt_charging', { p: flow.toFixed(1) }) : mode === 'drain' ? t('bt_draining', { p: (-flow).toFixed(1) }) : frac >= 0.98 ? t('bt_full') : t('bt_idle')}</span>
+            <em>${mode === 'charge' ? t('bt_until_full', { t: fmtTime(eta) }) : mode === 'drain' ? t('bt_until_empty', { t: fmtTime(eta) }) : t('bt_lasts', { s: Math.floor(v / BATTERY_RATE), p: BATTERY_RATE })}</em>
+          </span>
+        </div>
+        ${this.gridPlate()}
+        <div class="term-stats fk-stats">
+          <div class="ts"><small>${t('bt_bank')}</small><b>${all.length}</b></div>
+          <div class="ts"><small>${t('bt_bank_stored')}</small><b>${Math.round(bank)}<span>/${all.length * BATTERY_CAP}</span></b></div>
+          <div class="ts"><small>${t('bt_rate')}</small><b>${BATTERY_RATE}<span>/s</span></b></div>
         </div>
         <p class="save-hint clamp2" data-more>${t('battery_hint')}</p>`;
     } else if (b.type === 'wind') {
@@ -2647,9 +2664,28 @@ export class Hud {
       else if (b.type === 'lamp') {
         const item = this.sim.lampItem(b);
         const mode = b.mode ?? 'hold';
-        body = `<div class="lamp-hero ${item ? 'on' : ''}" style="--c:${item ? itemColor(item) : '#334155'}">
-            <span class="lamp-bulb">${item ? itemImg(item, 'icon') : ''}</span>
-            <span class="lamp-text"><small>${t('lamp_state')}</small><b>${item ? tItem(item) : t('lamp_off')}</b></span>
+        // who drives it: a register in line behind it (one bit of its value) or a video receiver's wall
+        let driver = '';
+        for (let d = 0; d < 4 && !driver; d++) {
+          for (let k = 1; k <= 8; k++) {
+            const x = this.sim.at(b.x - DX[d] * k, b.y - DY[d] * k);
+            if (x?.type === 'register' && x.dir === d) {
+              driver = `<img src="${buildingUrl('register')}" alt=""><span>${t('lp_bit', { n: 8 - k })}</span>`;
+              break;
+            }
+            if (x?.type !== 'lamp') break;
+          }
+        }
+        const color = item ? itemColor(item) : '#334155';
+        body = `<div class="lp2 ${item ? 'on' : ''}" style="--c:${color}">
+            <span class="lp2-bulb"><span class="lp2-glass">${item ? itemImg(item, 'icon') : ''}</span></span>
+            <span class="lp2-info">
+              <small>${t('lamp_state')}</small>
+              <b>${item ? tItem(item) : t('lamp_off')}</b>
+              <span class="lp2-hex">${item ? color.toUpperCase() : '—'}</span>
+              <span class="lp2-mode"><i class="term-led ${item ? 'run' : 'pause'}"></i>${mode === 'pass' ? t('lp_pass') : t('lp_hold')}</span>
+              ${driver ? `<span class="lp2-driver">${driver}</span>` : ''}
+            </span>
             ${item ? `<button class="tc" data-act="clear">${icon('close')}<span>${t('lamp_clear')}</span></button>` : ''}
           </div>
           <div class="lbl">${t('lamp_mode')}</div>
@@ -2825,27 +2861,41 @@ export class Hud {
         const idx = b.y * st.width + b.x;
         const term = st.buildings.find((tb) => tb.type === 'terminal' && this.sim.board(tb).tiles.has(idx));
         const link = `<em class="pcb-link ${term ? 'on' : ''}"><i class="term-led ${term ? 'run' : 'err'}"></i>${term ? t('pcb_linked') : t('pcb_unlinked')}</em>`;
+        const bd = term ? this.sim.board(term) : null;
+        const parts = bd ? [...bd.tiles].map((i) => this.sim.at(i % st.width, Math.floor(i / st.width))).filter((x): x is Building => !!x) : [];
+        const count = (ty: BuildingId) => parts.filter((x) => x.type === ty).length;
+        const termHz = term ? this.sim.terminalHz(term) : 0;
         if (b.type === 'oscillator') {
           const q = b.clock ?? 0, g = b.turbo ?? 0;
           const hz = q * CRYSTAL_HZ.quartz + g * CRYSTAL_HZ.glass;
           const slots = Array.from({ length: OSCILLATOR_CRYSTALS }, (_, i) => (i < q ? 'quartz' : i < q + g ? 'glass' : null));
-          body = `<div class="pcb-hero ${hz ? 'on' : ''}">
-              <span class="osc-slots">${slots.map((k) => `<span class="osc-slot ${k ?? 'empty'}">${k ? itemImg(k as ItemId, 'icon') : ''}</span>`).join('')}</span>
-              <span class="pcb-text"><small>${t('pcb_clock')}</small><b>${hz >= 1000 ? (hz / 1000).toFixed(1) + '<span> kHz</span>' : hz + '<span> Hz</span>'}</b>${link}</span>
+          // a square wave: more crystals, more periods on the scope
+          const periods = hz ? Math.min(14, 2 + Math.round(Math.log2(1 + hz / 100) * 2)) : 0;
+          const wave = periods ? Array.from({ length: periods }, (_, i) => { const w = 200 / periods, x = i * w; return `M${x.toFixed(1)} 34 V8 H${(x + w / 2).toFixed(1)} V34 H${(x + w).toFixed(1)}`; }).join(' ') : 'M0 21 H200';
+          const share = termHz ? Math.round((hz / termHz) * 100) : 0;
+          body = `<div class="os2 ${hz ? 'on' : ''}">
+              <div class="os2-scope"><svg viewBox="0 0 200 42" preserveAspectRatio="none" aria-hidden="true"><path d="${wave}" class="wave"/></svg><span class="os2-hz"><b>${hz >= 1000 ? (hz / 1000).toFixed(1) : hz}</b><small>${hz >= 1000 ? 'kHz' : 'Hz'}</small></span></div>
+              <div class="os2-slots">${slots.map((k, i) => `<span class="osc-slot ${k ?? 'empty'}">${k ? itemImg(k as ItemId, 'icon') : `<small>${i + 1}</small>`}</span>`).join('')}</div>
+              <div class="os2-link">${link}${term ? `<span>${t('os_share', { p: share, hz: termHz })}</span>` : ''}</div>
             </div>
             <div class="osc-legend"><span>${itemImg('quartz', 'icon xs')} ${t('pcb_quartz', { hz: CRYSTAL_HZ.quartz })}</span><span>${itemImg('glass', 'icon xs')} ${t('pcb_glass', { hz: CRYSTAL_HZ.glass / 1000 })}</span></div>
             <p class="save-hint clamp2" data-more>${t('oscillator_hint')}</p>`;
         } else {
-          const bd = term ? this.sim.board(term) : null;
-          const traces = bd ? [...bd.tiles].filter((i) => this.sim.at(i % st.width, Math.floor(i / st.width))?.type === 'bus').length : 0;
+          const traces = count('bus');
           const mem = term ? this.sim.terminalMemory(term) : null;
-          body = `<div class="pcb-hero ${term ? 'on' : ''}">
-              <span class="pcb-chip"><img src="${buildingUrl('terminal')}" alt=""></span>
-              <span class="pcb-text"><small>${t('pcb_board')}</small><b>${term ? tBuilding('terminal') : '–'}</b>${link}</span>
+          const running = !!term && !!this.sim.cpu(term) && !this.sim.cpu(term)!.halted && !!term.run;
+          const chip = (ty: BuildingId, n: number) => `<span class="bs-part ${n ? '' : 'none'}"><img src="${buildingUrl(ty)}" alt=""><b>${n}</b><small>${tBuilding(ty)}</small></span>`;
+          body = `<div class="bs2 ${term ? 'on' : ''}">
+              <div class="bs2-board">
+                <span class="bs2-chip"><img src="${buildingUrl('terminal')}" alt="">${term ? `<i class="term-led ${running ? 'run' : 'pause'}"></i>` : ''}</span>
+                <span class="bs2-text"><small>${t('pcb_board')}</small><b>${term ? tBuilding('terminal') : '–'}</b>${link}</span>
+                <span class="bs2-traces"><b>${traces}</b><small>${t('bs_traces')}</small></span>
+              </div>
+              ${term ? `<div class="bs2-parts">${chip('register', count('register'))}${chip('oscillator', count('oscillator'))}${chip('keyboard', count('keyboard'))}${chip('screen', count('screen'))}${chip('speaker', count('speaker'))}</div>` : ''}
             </div>
             ${term && bd && mem ? `<div class="term-stats pcb-stats">
               <div class="ts ${mem.have < mem.need ? 'bad' : ''}"><small>${itemImg('circuit', 'icon xs')} ${t('pcb_ram')}</small><b>${mem.have} B</b><em>${t('pcb_cells', { n: bd.cells.length })}</em></div>
-              <div class="ts ${this.sim.terminalHz(term) ? '' : 'bad'}"><small>${itemImg('quartz', 'icon xs')} ${t('pcb_clock')}</small><b>${this.sim.terminalHz(term)} Hz</b><em>${t('pcb_traces', { n: traces })}</em></div>
+              <div class="ts ${termHz ? '' : 'bad'}"><small>${itemImg('quartz', 'icon xs')} ${t('pcb_clock')}</small><b>${termHz} Hz</b><em>${t('pcb_traces', { n: traces })}</em></div>
             </div>` : ''}
             <p class="save-hint clamp2" data-more>${t('bus_hint')}</p>`;
         }
@@ -2923,8 +2973,33 @@ export class Hud {
           <div class="seg">${MIXER_RATIOS.map((q, i) => `<button class="${(b.ratio ?? 0) === i ? 'on' : ''}" data-ratio="${i}">${q[0]} : ${q[1]}</button>`).join('')}</div>
           <p class="save-hint clamp2" data-more>${t('mx_hint')}</p>${dirPicker}`;
       } else body = `${statusLine()}${dirPicker}`;
+    } else if (b.type === 'conveyor') {
+      // the belt: what is on it, where it comes from and where it goes, how fast
+      const items = b.items ?? [];
+      const speed = 1.6 * this.sim.factor('belt');
+      const back = this.sim.at(b.x - DX[b.dir], b.y - DY[b.dir]);
+      const front = this.sim.at(b.x + DX[b.dir], b.y + DY[b.dir]);
+      const end = (x: Building | null, label: string) => `<span class="cv2-end ${x ? '' : 'none'}"><small>${label}</small>${x ? `<img src="${buildingUrl(x.type)}" alt=""><b>${tBuilding(x.type)}</b>` : `<span class="fk-dot"></span><b>${t('jn_none')}</b>`}</span>`;
+      const bad = b.status === 'jammed' || b.status === 'dead_end';
+      body = `${statusLine()}<div class="cv2 ${bad ? 'bad' : items.length ? 'on' : ''}">
+          ${end(back, `↑ ${t('cv_from')}`)}
+          <span class="cv2-belt"><span class="cv2-lane">${items.map((it) => `<span class="cv2-item" style="bottom:${(it.pos * 100).toFixed(0)}%">${itemImg(it.item, 'icon xs')}</span>`).join('')}</span></span>
+          ${end(front, `↑ ${t('cv_to')}`)}
+        </div>
+        <div class="term-stats fk-stats">
+          <div class="ts"><small>${t('cv_on')}</small><b>${items.length}</b></div>
+          <div class="ts"><small>${t('cv_speed')}</small><b>${speed.toFixed(1)}<span> ${t('cv_tps')}</span></b></div>
+          <div class="ts"><small>${t('cv_rate')}</small><b>${Math.round(speed * 60 / BELT_SPACING)}<span>/min</span></b></div>
+        </div>
+        ${dirPicker}`;
     } else body = dirPicker;
     return body;
+  }
+
+  /** Where a building hands its items: the part in front of its arrow (or nothing). */
+  private outletLine(b: Building): string {
+    const f = this.sim.frontTiles(b).map((p) => this.sim.at(p.x, p.y)).find((x) => x && x !== b);
+    return `<div class="outlet ${f ? '' : 'none'}"><small>${t('cv_to')}</small>${f ? `<img src="${buildingUrl(f.type)}" alt=""><b>${tBuilding(f.type)}</b>` : `<b>${t('jn_none')}</b>`}${b.recipe ? `<em>${t('filter')}: ${itemImg(b.recipe as ItemId, 'icon xs')}</em>` : ''}</div>`;
   }
 
   /** The power grid as a small plate: supply against demand. */

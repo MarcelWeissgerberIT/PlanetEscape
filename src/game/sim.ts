@@ -943,12 +943,14 @@ export class Sim {
       if (surplus > 0 && charge < BATTERY_CAP) {
         const take = Math.min(surplus, BATTERY_RATE);
         b.value = Math.min(BATTERY_CAP, charge + take * dt);
+        b.rateT = take; // flow for the panel: + charging
         surplus -= take;
         b.status = 'ok';
         b.working = true;
       } else if (surplus < 0 && charge > 0) {
         const give = Math.min(-surplus, BATTERY_RATE, charge / dt);
         b.value = Math.max(0, charge - give * dt);
+        b.rateT = -give; // - discharging
         supply += give;
         surplus += give;
         b.status = 'ok';
@@ -956,6 +958,7 @@ export class Sim {
       } else {
         b.status = charge > 0 ? 'ok' : 'idle';
         b.working = false;
+        b.rateT = 0;
       }
     }
     st.powerSupply = Math.round(supply);
