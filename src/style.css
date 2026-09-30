@@ -2642,3 +2642,25 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .rt-out b.mix-ratio { width: auto; height: auto; border-radius: 0; background: none; color: #fff; font-size: 15px; }
 .rt.mix .rt-in { display: none; }
 .mx-buf small { white-space: nowrap; }
+
+/* =====================================================================================
+   Memory cell and arithmetic parts: the operation on a plate, the value on an LCD, tags for
+   the held item, RAM address and queue; the factor as keycaps.
+   ===================================================================================== */
+.ar-hero { display: flex; align-items: stretch; gap: 10px; padding: 10px; margin: 4px 0 8px; border-radius: 14px; background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.ar-op { flex: none; display: grid; place-items: center; width: 52px; border-radius: 12px; font: 700 28px/1 var(--disp); color: var(--accent); text-shadow: 0 0 12px rgba(34, 211, 238, 0.7); background: linear-gradient(180deg, rgba(4, 7, 12, 0.85), rgba(12, 18, 27, 0.85)); border: 1px solid rgba(34, 211, 238, 0.35); }
+.ar-lcd {
+  flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 3px; padding: 8px 12px; border-radius: 10px;
+  background: repeating-linear-gradient(0deg, rgba(0, 0, 0, 0.18) 0 1px, transparent 1px 3px), linear-gradient(180deg, #03110f, #06201c);
+  box-shadow: inset 0 0 0 1px rgba(52, 211, 153, 0.25), inset 0 0 20px rgba(0, 0, 0, 0.7);
+}
+.ar-lcd small { font-family: var(--disp); font-size: 9.5px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(167, 243, 208, 0.6); }
+.ar-lcd b { font-family: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace; font-size: 30px; line-height: 1.05; color: #6ee7b7; text-shadow: 0 0 10px rgba(52, 211, 153, 0.7); font-variant-numeric: tabular-nums; }
+.ar-tags { display: flex; flex-wrap: wrap; gap: 4px; }
+.ar-tags:empty { display: none; }
+.ar-tags i { display: inline-flex; align-items: center; gap: 4px; font-style: normal; font-size: 10.5px; padding: 1px 6px; border-radius: 6px; color: #a7f3d0; background: rgba(52, 211, 153, 0.1); border: 1px solid rgba(52, 211, 153, 0.25); }
+.ar-tags .icon { width: 16px; height: 16px; }
+.ar-hero .tc { flex: none; width: 62px; justify-content: center; }
+.info-panel .ar-keys { grid-template-columns: repeat(9, 1fr); margin-bottom: 6px; }
+.info-panel .ar-keys .key { height: 34px; font-size: 14px; }
+.info-panel .ar-keys .key.on { background: linear-gradient(180deg, #22d3ee, #0e7490) !important; color: #03141a; box-shadow: 0 3px 0 #064e5f, 0 0 12px rgba(34, 211, 238, 0.45) !important; }

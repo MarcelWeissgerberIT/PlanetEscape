@@ -2041,12 +2041,18 @@ export class Hud {
       const val = b.value ?? 0;
       const held = b.recipe ? itemImg(b.recipe as ItemId, 'icon xs') : '';
       const cellOf = b.type === 'register' ? st.buildings.map((tb) => (tb.type === 'terminal' ? { tb, i: this.sim.board(tb).cells.indexOf(b) } : null)).find((c) => c && c.i >= 0) : null;
-      const addr = cellOf ? ` <small>· ${t('ram_cell', { a: '0x' + (0x200 + cellOf.i).toString(16).toUpperCase() })}</small>` : '';
-      const big = b.type === 'register' ? `${held} <b class="num">${val}</b>${addr}` : b.type === 'multiplier' ? `<b class="num">× ${val}</b>` : b.type === 'divider' ? `<b class="num">÷ ${val}</b>` : b.type === 'subtractor' ? `<b class="num">−${b.debt ?? 0}</b> <small>${t('arith_pending')}</small>` : `<b class="num">${b.acc ?? 0}</b> <small>${t('arith_total')}</small>`;
-      const factor = b.type === 'multiplier' || b.type === 'divider' ? `<div class="dirs wrap"><span class="lbl">${t('arith_factor')}</span>${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<button class="chip ${val === k ? 'active' : ''}" data-value="${k}">${k}</button>`).join('')}</div>` : '';
-      body = `<div class="arith-val">${big}${b.bufL?.length ? ` <small>· ${t('arith_queue', { n: b.bufL.length })}</small>` : ''}</div>
-        <p class="save-hint">${t(`arith_${b.type}` as 'arith_register')}</p>${factor}
-        <div class="term-btns"><button class="btn small" data-act="arith-clear">${t('lamp_clear')}</button></div>${dirPicker}`;
+      const op = { register: 'M', adder: '+', subtractor: '−', multiplier: '×', divider: '÷' }[b.type as 'adder'];
+      const shown = b.type === 'register' ? val : b.type === 'subtractor' ? b.debt ?? 0 : b.type === 'adder' ? b.acc ?? 0 : val;
+      const label = b.type === 'register' ? t('ar_value') : b.type === 'subtractor' ? t('arith_pending') : b.type === 'adder' ? t('arith_total') : t('arith_factor');
+      const factor = b.type === 'multiplier' || b.type === 'divider' ? `<div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<button class="key ${val === k ? 'on' : ''}" data-value="${k}">${k}</button>`).join('')}</div>` : '';
+      body = `<div class="ar-hero">
+          <span class="ar-op">${op}</span>
+          <span class="ar-lcd"><small>${label}</small><b>${b.type === 'subtractor' ? '−' : b.type === 'multiplier' ? '×' : b.type === 'divider' ? '÷' : ''}${shown}</b>
+            <span class="ar-tags">${held ? `<i>${held}</i>` : ''}${cellOf ? `<i>${t('ram_cell', { a: '0x' + (0x200 + cellOf.i).toString(16).toUpperCase() })}</i>` : ''}${b.bufL?.length ? `<i>${t('arith_queue', { n: b.bufL.length })}</i>` : ''}</span></span>
+          <button class="tc" data-act="arith-clear">${icon('close')}<span>${t('lamp_clear')}</span></button>
+        </div>
+        ${factor}
+        <p class="save-hint clamp2" data-more>${t(`arith_${b.type}` as 'arith_register')}</p>${dirPicker}`;
     } else if (b.type === 'tunnel') {
       body = `${statusLine()}${dirPicker}`;
     } else if (def.kind === 'logic') {
