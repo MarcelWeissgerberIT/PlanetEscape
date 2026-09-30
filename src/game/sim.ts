@@ -2624,19 +2624,30 @@ export class Sim {
         b.acc = (b.acc ?? 0) + 1;
         return true;
       }
-      case 'adder':
+      case 'adder': {
         out.push(item); // a + b: everything arriving leaves again
         b.acc = (b.acc ?? 0) + 1;
+        const l = (b.lanes ??= [0, 0, 0, 0]);
+        l[fromBack ? 0 : 1]++; // panel: from behind (a) / from the sides (b)
+        if (fromBack) b.mineItem = item;
         return true;
-      case 'subtractor':
+      }
+      case 'subtractor': {
+        const l = (b.lanes ??= [0, 0, 0, 0]);
         if (fromBack) {
-          if ((b.debt ?? 0) > 0) b.debt = b.debt! - 1; // cancelled by a right-hand item
-          else out.push(item);
+          b.mineItem = item;
+          l[0]++;
+          if ((b.debt ?? 0) > 0) {
+            b.debt = b.debt! - 1; // cancelled by a right-hand item
+            l[3] = (l[3] ?? 0) + 1; // panel: cancelled
+          } else out.push(item);
           b.acc = (b.acc ?? 0) + 1;
           return true;
         }
+        l[1]++;
         b.debt = Math.min(255, (b.debt ?? 0) + 1); // each side item cancels one future/back item
         return true;
+      }
       case 'multiplier':
         if (fromBack) {
           const k = Math.max(1, b.value ?? 1);
@@ -2669,7 +2680,7 @@ export class Sim {
     if (!out.length) return;
     if (this.pushDir(b, out[0], b.dir)) {
       out.shift();
-      (b.lanes ??= [0, 0])[1]++; // items sent on (panel)
+      (b.lanes ??= [0, 0, 0, 0])[2]++; // items sent on (panel)
     } else b.status = 'blocked';
   }
 

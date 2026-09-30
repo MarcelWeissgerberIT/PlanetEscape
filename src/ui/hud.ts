@@ -2335,7 +2335,7 @@ export class Hud {
       const k = Math.max(1, b.value ?? 1);
       const last = b.mineItem as ItemId | undefined;
       const q = b.bufL?.length ?? 0;
-      const sent = b.lanes?.[1] ?? 0;
+      const sent = b.lanes?.[2] ?? 0;
       const copies = Math.min(k, 9);
       body = `${statusLine()}<div class="mu-hero ${q ? 'on' : ''}">
           <div class="mu-io in"><small>${t('mu_in')}</small><span class="mu-slot">${last ? itemImg(last, 'icon') : '<b class="sr-q">?</b>'}</span><b>${b.acc ?? 0}</b></div>
@@ -2350,7 +2350,7 @@ export class Hud {
       const k = Math.max(1, b.value ?? 1);
       const last = b.mineItem as ItemId | undefined;
       const rest = (b.acc ?? 0) % k;
-      const sent = b.lanes?.[1] ?? 0;
+      const sent = b.lanes?.[2] ?? 0;
       body = `${statusLine()}<div class="mu-hero dv">
           <div class="mu-io in"><small>${t('mu_in')}</small><span class="mu-stack">${Array.from({ length: Math.min(k, 9) }, (_, i) => `<span style="--i:${i}">${last ? itemImg(last, 'icon xs') : '<i></i>'}</span>`).join('')}</span><b>${b.acc ?? 0}</b></div>
           <div class="mu-dial"><span class="mu-x">÷</span><b>${k}</b><span class="mu-ticks">${Array.from({ length: 9 }, (_, i) => `<i class="${i < k ? 'on' : ''}" style="--a:${i * 40}deg"></i>`).join('')}</span></div>
@@ -2360,18 +2360,23 @@ export class Hud {
         <div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((n) => `<button class="key ${k === n ? 'on' : ''}" data-value="${n}">${n}</button>`).join('')}</div>
         <p class="save-hint clamp2" data-more>${t('dv_hint')}</p>${dirPicker}`;
     } else if (b.type === 'adder' || b.type === 'subtractor') {
-      const val = b.value ?? 0;
-      const held = b.recipe ? itemImg(b.recipe as ItemId, 'icon xs') : '';
-      const op = { adder: '+', subtractor: '−' }[b.type as 'adder'];
-      const shown = b.type === 'subtractor' ? b.debt ?? 0 : b.type === 'adder' ? b.acc ?? 0 : val;
-      const label = b.type === 'subtractor' ? t('arith_pending') : b.type === 'adder' ? t('arith_total') : t('arith_factor');
-      body = `<div class="ar-hero">
-          <span class="ar-op">${op}</span>
-          <span class="ar-lcd"><small>${label}</small><b>${shown}</b>
-            <span class="ar-tags">${held ? `<i>${held}</i>` : ''}${b.bufL?.length ? `<i>${t('arith_queue', { n: b.bufL.length })}</i>` : ''}</span></span>
-          <button class="tc" data-act="arith-clear">${icon('close')}<span>${t('lamp_clear')}</span></button>
+      // the part as an equation: behind (a) plus / minus the sides (b) gives what leaves
+      const sub = b.type === 'subtractor';
+      const [na, nb, nout, cancelled] = [...(b.lanes ?? []), 0, 0, 0, 0] as number[];
+      const last = b.mineItem as ItemId | undefined;
+      const q = b.bufL?.length ?? 0;
+      const debt = b.debt ?? 0;
+      const card = (cls: string, label: string, n: number, img: string) => `<div class="eq-card ${cls}"><small>${label}</small><span class="eq-slot">${img}</span><b>${n}</b></div>`;
+      body = `${statusLine()}<div class="eq-hero ${sub ? 'sub' : 'add'}">
+          ${card('a', `↑ ${t('eq_behind')}`, na, last ? itemImg(last, 'icon sm') : '<b class="sr-q">a</b>')}
+          <span class="eq-op">${sub ? '−' : '+'}</span>
+          ${card('b', `↔ ${t('eq_sides')}`, nb, '<b class="sr-q">b</b>')}
+          <span class="eq-op eq">=</span>
+          ${card('r', sub ? t('eq_left') : t('eq_sum'), nout, `<b class="eq-sym">${sub ? 'a−b' : 'Σ'}</b>`)}
         </div>
-        <p class="save-hint clamp2" data-more>${t(`arith_${b.type}` as 'arith_register')}</p>${dirPicker}`;
+        ${sub ? `<div class="eq-debt"><span><small>${t('eq_debt')}</small><b>${debt}</b></span><span class="dv-segs">${Array.from({ length: 12 }, (_, i) => `<i class="${i < debt ? 'on' : ''}"></i>`).join('')}</span><span><small>${t('eq_cancelled')}</small><b>${cancelled}</b></span></div>` : ''}
+        <div class="mu-queue eq-q"><small>${t('mu_queue')}</small><span class="rf-bar"><i style="width:${Math.min(100, (q / 32) * 100).toFixed(0)}%"></i></span><b>${q}<span>/32</span></b><button class="rg-clear" data-act="arith-clear" ${q || debt ? '' : 'disabled'}>${icon('close', 'sm')}${t('lamp_clear')}</button></div>
+        <p class="save-hint clamp2" data-more>${t(`arith_${b.type}` as 'arith_adder')}</p>${dirPicker}`;
     } else if (b.type === 'road') {
       // the road network this tile belongs to: connected road tiles and the docks and depots along it
       const W = st.width;
