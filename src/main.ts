@@ -11,7 +11,10 @@ import { startVideo, stopVideo, tickVideo, videoHasAudio, videoLive } from './ga
 import { Input } from './game/input';
 import { Renderer } from './game/render';
 import * as Save from './game/save';
-import { setActivity, sfx } from './game/sfx';
+import { setActivity, setBiome, sfx } from './game/sfx';
+import { setMusicActivity, setMusicBiome } from './game/music';
+import { biomeIdFor } from './game/scenery';
+import { wireUiSounds } from './ui/uiSound';
 import { Sim } from './game/sim';
 import type { Blueprint, GameState, TerrainId } from './game/types';
 import { challengeState, chapterState, levelState, newGame } from './game/world';
@@ -248,6 +251,10 @@ function frame(now: number) {
       let working = 0;
       for (const b of sim.state.buildings) if (b.working && b.type !== 'miner') working++;
       setActivity(speed === 0 ? 0 : working);
+      setMusicActivity(speed === 0 ? 0 : working);
+      const biome = biomeIdFor(sim.state.seed);
+      setBiome(biome);
+      setMusicBiome(biome);
     }
     saveTimer += dt;
     if (saveTimer > 8) {
@@ -283,6 +290,7 @@ exposeDebug();
 // waits until the intro ends
 const INTRO_KEY = 'pe_intro_seen';
 installFrame();
+wireUiSounds();
 const intro = introWanted() && (new URLSearchParams(location.search).has('intro') || !kv.get(INTRO_KEY));
 hud.holdMenuVideo = intro;
 hud.showTitle();

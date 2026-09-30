@@ -8,7 +8,9 @@ import { RECYCLER_QUEUE, STORM_SOLAR_FACTOR, BATTERY_RATE, TUNNEL_RANGE, RADIO_Q
 import type { Input, Tool } from '../game/input';
 import { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
-import { ambientEnabled, setAmbient, setSound, sfx, soundEnabled, startAmbient } from '../game/sfx';
+import { ambientEnabled, setAmbient, setSound, setVolume, sfx, soundEnabled, startAmbient, volume } from '../game/sfx';
+import { musicEnabled, setMood, setMusic, setMusicBiome } from '../game/music';
+import { biomeIdFor } from '../game/scenery';
 import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, TerrainId, UpgradeId } from '../game/types';
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
@@ -210,6 +212,7 @@ export class Hud {
   // ---------- Title & story ----------
 
   showTitle() {
+    setMood('menu');
     this.renderTitle();
     this.title.classList.remove('hidden');
     this.menuVideo(!this.holdMenuVideo);
@@ -226,6 +229,8 @@ export class Hud {
 
   hideTitle() {
     startAmbient();
+    setMusicBiome(biomeIdFor(this.sim.state.seed));
+    setMood('game');
     this.title.classList.add('hidden');
     this.menuVideo(false);
     this.top.classList.remove('hidden');
@@ -299,7 +304,7 @@ export class Hud {
   }
 
   private freeOptions: GameOptions = { mode: 'free', mapSize: 'medium', infiniteOre: false, allUnlocked: false, storms: true };
-  private titleView: 'main' | 'free' | 'playground' | 'challenges' = 'main';
+  private titleView: 'main' | 'free' | 'playground' | 'challenges' | 'settings' = 'main';
   private exampleCat: 'all' | 'mega' | 'computer' | 'logic' = 'all';
 
   private renderTitle() {
@@ -321,6 +326,7 @@ export class Hud {
           ${EDITION === 'demo' ? item('demo-locked', `🔒 ${t('mode_free')}`, t('demo_full_only'), 'locked') : item('freeview', t('mode_free'), t('mode_free_desc'))}
           ${item('playview', t('mode_playground'), t('mode_playground_desc'))}
           ${item('challview', `${t('mode_challenge')} ${medalSummary()}`, t('mode_challenge_desc'))}
+          ${item('settingsview', t('settings'), t('set_desc'))}
           ${EDITION === 'demo' && STORE_URL ? item('store', `${t('demo_store')} →`, '', 'accent2') : ''}
         </nav>
         <div class="aaa-foot">
@@ -383,11 +389,12 @@ export class Hud {
         <h1 class="logo"><span>PLANET</span><span class="accent">ESCAPE</span></h1>
         <p class="tagline">${t('tagline')}</p>
         ${main ? mainView : `<button class="page-back sub-back" data-act="back">‹ ${t('back')} <kbd>Esc</kbd></button><section class="aaa-panel">
-          <header class="aaa-panel-head">${this.titleView === 'challenges' ? `<b>${t('mode_challenge')}</b><small>${t('ch_intro')}</small>` : this.titleView === 'playground' ? `<b>${t('mode_playground')}</b><small>${t('mode_playground_desc')}</small>` : `<b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small>`}</header>
-          ${this.titleView === 'playground' ? playView : this.titleView === 'challenges' ? challView : freeView}
+          <header class="aaa-panel-head">${this.titleView === 'settings' ? `<b>${t('settings')}</b><small>${t('set_desc')}</small>` : this.titleView === 'challenges' ? `<b>${t('mode_challenge')}</b><small>${t('ch_intro')}</small>` : this.titleView === 'playground' ? `<b>${t('mode_playground')}</b><small>${t('mode_playground_desc')}</small>` : `<b>${t('mode_free')}</b><small>${t('mode_free_desc')}</small>`}</header>
+          ${this.titleView === 'settings' ? this.settingsHtml() : this.titleView === 'playground' ? playView : this.titleView === 'challenges' ? challView : freeView}
           ${this.titleView === 'free' ? `<p class="save-hint">${t('seed_hint')}</p>` : ''}
         </section>`}
       </div>`;
+    this.wireFaders(this.title);
     this.title.onclick = (e) => {
       const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
       if (!target) return;
@@ -396,6 +403,10 @@ export class Hud {
       if (lang) {
         setLang(lang);
         this.renderAll();
+        return;
+      }
+      if (this.settingsClick(target)) {
+        if (!target.dataset.lang) this.renderTitle();
         return;
       }
       if (target.dataset.excat) {
@@ -444,6 +455,9 @@ export class Hud {
         this.showProgressImport();
       } else if (act === 'ch-code') {
         this.showChallengeCode();
+      } else if (act === 'settingsview') {
+        this.titleView = 'settings';
+        this.renderTitle();
       } else if (act === 'challview') {
         this.titleView = 'challenges';
         this.renderTitle();
@@ -3655,6 +3669,65 @@ export class Hud {
     this.renderTop();
   }
 
+  /** The settings (main menu and pause screen): an audio mixer with a switch and a fader per channel, then display. */
+  private settingsHtml(): string {
+    const lang = getLang();
+    const seg = (key: string, on: boolean) => `<span class="seg"><button class="chip ${on ? 'active' : ''}" data-${key}="on">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-${key}="off">${t('off')}</button></span>`;
+    const chan = (key: 'music' | 'sound' | 'ambient', bus: 'music' | 'sfx' | 'amb', ico: string, on: boolean) => {
+      const v = Math.round(volume(bus) * 100);
+      return `<div class="set-ch ${on ? '' : 'off'}">
+        <span class="set-ico" aria-hidden="true">${ico}</span>
+        <span class="set-name"><b>${t(`set_${key}` as 'set_music')}</b><small>${t(`set_${key}_desc` as 'set_music_desc')}</small></span>
+        ${seg(key, on)}
+        <label class="set-fader"><input type="range" min="0" max="100" step="1" value="${v}" data-vol="${bus}" style="--v:${v}%" aria-label="${t(`set_${key}` as 'set_music')}" ${on ? '' : 'disabled'}><output>${v}</output></label>
+      </div>`;
+    };
+    return `<div class="mset set-panel">
+      <h4 class="pause-h4">${t('set_audio')}</h4>
+      <div class="set-mixer">
+        ${chan('music', 'music', '♫', musicEnabled())}
+        ${chan('sound', 'sfx', '◉', soundEnabled())}
+        ${chan('ambient', 'amb', '≋', ambientEnabled())}
+      </div>
+      <h4 class="pause-h4">${t('set_display')}</h4>
+      <div class="menu-row"><span>${t('language')}</span><span class="seg"><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
+      <div class="menu-row"><span>${t('day_night')}</span>${seg('daynight', Renderer.dayNight)}</div>
+      ${fullscreenAvailable() ? `<div class="menu-row"><span>${t('fullscreen')}</span><span class="seg"><button class="chip" data-act="fullscreen">${icon('fullscreen', 'sm')}</button></span></div>` : ''}
+    </div>`;
+  }
+
+  /** A settings button was pressed: true when it was one (the caller re-renders). */
+  private settingsClick(target: HTMLButtonElement): boolean {
+    const d = target.dataset;
+    if (d.music) setMusic(d.music === 'on');
+    else if (d.sound) setSound(d.sound === 'on');
+    else if (d.ambient) setAmbient(d.ambient === 'on');
+    else if (d.daynight) {
+      Renderer.dayNight = d.daynight === 'on';
+      kv.set('pe_daynight', Renderer.dayNight ? '1' : '0');
+    } else return false;
+    sfx.toggle();
+    return true;
+  }
+
+  /** Faders move the volume live; letting go of the effects fader plays a sample. */
+  private wireFaders(root: HTMLElement) {
+    if (root.dataset.faders) return;
+    root.dataset.faders = '1';
+    root.addEventListener('input', (e) => {
+      const r = e.target as HTMLInputElement;
+      if (!r.dataset?.vol) return;
+      setVolume(r.dataset.vol as 'music' | 'sfx' | 'amb', Number(r.value) / 100);
+      r.style.setProperty('--v', `${r.value}%`);
+      const o = r.nextElementSibling;
+      if (o) o.textContent = r.value;
+    });
+    root.addEventListener('change', (e) => {
+      const r = e.target as HTMLInputElement;
+      if (r.dataset?.vol === 'sfx') sfx.click();
+    });
+  }
+
   private renderPause() {
     const el0 = this.pauseEl!;
     const lang = getLang();
@@ -3668,16 +3741,8 @@ export class Hud {
       `<button class="aaa-item ${cls}" data-act="${act}" style="--i:${n}"><span class="aaa-num">${String(++n).padStart(2, '0')}</span><span class="aaa-label"><b>${title}</b><small>${desc}</small></span><span class="aaa-chev" aria-hidden="true">›</span></button>`;
     const got = Object.keys(earned()).filter((id) => ACHIEVEMENTS.some((a) => a.id === id)).length;
     const produced = Object.entries(st.stats.produced).sort((a, b) => (b[1] ?? 0) - (a[1] ?? 0)).slice(0, 12);
-    const seg = (key: string, on: boolean) => `<span class="seg"><button class="chip ${on ? 'active' : ''}" data-${key}="on">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-${key}="off">${t('off')}</button></span>`;
     const side = this.pauseTab === 'settings'
-      ? `<header class="aaa-panel-head"><b>${t('settings')}</b><small>${t('pause_settings_desc')}</small></header>
-        <div class="mset">
-          <div class="menu-row"><span>${t('language')}</span><span class="seg"><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
-          <div class="menu-row"><span>${t('sound')}</span>${seg('sound', soundEnabled())}</div>
-          <div class="menu-row"><span>${t('ambience')}</span>${seg('ambient', ambientEnabled())}</div>
-          <div class="menu-row"><span>${t('day_night')}</span>${seg('daynight', Renderer.dayNight)}</div>
-          ${fullscreenAvailable() ? `<div class="menu-row"><span>${t('fullscreen')}</span><span class="seg"><button class="chip" data-act="fullscreen">${icon('fullscreen', 'sm')}</button></span></div>` : ''}
-        </div>`
+      ? `<header class="aaa-panel-head"><b>${t('settings')}</b><small>${t('set_desc')}</small></header>${this.settingsHtml()}`
       : `<header class="aaa-panel-head"><b>${t('pause_status')}</b><small>${where}</small></header>
         <div class="pause-stats">
           <div><small>${t('playtime')}</small><b>${fmtTime(st.time)}</b></div>
@@ -3686,7 +3751,7 @@ export class Hud {
           <div><small>${t('seed')}</small><b>${st.seed}</b></div>
         </div>
         ${produced.length ? `<h4 class="pause-h4">${t('produced')}</h4><div class="pause-prod">${produced.map(([k, v]) => `<span>${itemImg(k as ItemId, 'icon sm')}<b>${v}</b><small>${tItem(k as ItemId)}</small></span>`).join('')}</div>` : ''}`;
-    const editorItem = st.options.mode === 'free' || st.options.mode === 'playground'
+    const editorItem = () => st.options.mode === 'free' || st.options.mode === 'playground'
       ? this.editor ? item('edtoggle', t('ed_play'), t('pause_editor_play')) + item('ednote', t('ed_note'), t('pause_ednote')) : item('edtoggle', t('editor'), t('pause_editor'))
       : '';
     el0.innerHTML = `
@@ -3699,10 +3764,10 @@ export class Hud {
         <nav class="aaa-nav">
           ${item('resume', t('resume'), t('pause_resume_desc'), 'primary')}
           ${item('save', t('save_now'), t('save_hint'))}
-          ${item('settings', t('settings'), t('pause_settings_desc'), this.pauseTab === 'settings' ? 'sel' : '')}
+          ${item('settings', t('settings'), t('set_desc'), this.pauseTab === 'settings' ? 'sel' : '')}
           ${item('blueprints', t('blueprints'), t('pause_blueprints'))}
           ${item('achievements', t('achievements'), `${got}/${ACHIEVEMENTS.length}`)}
-          ${editorItem}
+          ${editorItem()}
           ${item('howto', t('how_to'), t('pause_howto'))}
           ${item('new', t('to_main_menu'), t('pause_main_desc'), 'accent2')}
           ${desktop() ? item('quit', t('quit'), t('pause_quit_desc')) : ''}
@@ -3715,6 +3780,7 @@ export class Hud {
         </div>
       </div>
       <aside class="pause-side aaa-panel">${side}</aside>`;
+    this.wireFaders(el0);
     el0.onclick = (e) => {
       const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
       if (!target) return;
@@ -3722,11 +3788,8 @@ export class Hud {
       if (target.dataset.lang) {
         setLang(target.dataset.lang as Lang);
         this.renderAll();
-      } else if (target.dataset.sound) setSound(target.dataset.sound === 'on');
-      else if (target.dataset.ambient) setAmbient(target.dataset.ambient === 'on');
-      else if (target.dataset.daynight) {
-        Renderer.dayNight = target.dataset.daynight === 'on';
-        kv.set('pe_daynight', Renderer.dayNight ? '1' : '0');
+      } else if (this.settingsClick(target)) {
+        /* handled */
       } else if (act === 'resume') return this.resumeGame();
       else if (act === 'settings') this.pauseTab = this.pauseTab === 'settings' ? 'stats' : 'settings';
       else if (act === 'save') {
