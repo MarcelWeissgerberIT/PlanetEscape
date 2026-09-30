@@ -2833,3 +2833,5 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .wear-fix:hover:not([disabled]) { border-color: rgba(103, 232, 249, 0.5); }
 .wear-fix[disabled] { opacity: 0.4; cursor: default; }
 .wear-top b, .info-panel .wear-auto span:first-child { white-space: nowrap; }
+.fab-x { position: absolute; top: -1px; right: -1px; font-style: normal; font-family: var(--disp); font-size: 10px; font-weight: 700; padding: 1px 5px; border-radius: 0 10px 0 8px; color: #03141a; background: var(--accent); box-shadow: 0 0 8px rgba(34, 211, 238, 0.5); }
+.fab-chip.out { padding-right: 18px; }

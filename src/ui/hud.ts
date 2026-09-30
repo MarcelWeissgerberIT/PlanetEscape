@@ -1948,7 +1948,7 @@ export class Hud {
             <i class="fab-arrow">›</i>
             <span class="fab-mach"><img src="${buildingUrl(b.type)}" alt=""><span class="fab-prog"><i style="width:${prog * 100}%"></i></span><small>${r.seconds} s</small></span>
             <i class="fab-arrow">›</i>
-            <span class="fab-chip out">${itemImg(r.output, 'icon')}<b>${b.output?.[r.output] ?? 0}</b></span>
+            <span class="fab-chip out">${itemImg(r.output, 'icon')}<b>${b.output?.[r.output] ?? 0}</b>${r.outputCount > 1 ? `<em class="fab-x">×${r.outputCount}</em>` : ''}</span>
           </div>
           <div class="fab-rate"><span><small>${t('rate')}</small><b>${(b.rate ?? 0).toFixed(1)}</b>/min</span></div>`
         : `<div class="fab-flow empty"><span class="dim">${t('fab_pick')}</span></div>`;
