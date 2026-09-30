@@ -52,6 +52,7 @@ const cbs = {
   onPlacementError: (reason: string) => {
     sfx.error();
     hud.toast(t(reason as 'err_cost'), 1800, 'error');
+    hud.placementError();
   },
   onToolChange: (tool: Input['tool']) => hud.setTool(tool),
   onRotate: (b: Parameters<Sim['remove']>[0]) => {
@@ -220,6 +221,7 @@ function frame(now: number) {
           if (!launchShown) {
             launchShown = true;
             sfx.launch();
+            hud.koraRemark('launch');
             setTimeout(() => hud.showLaunch(), 600);
           }
           break;

@@ -11,6 +11,8 @@ import { Sim, type Problem } from '../game/sim';
 import { ambientEnabled, setAmbient, setSound, setVolume, sfx, soundEnabled, startAmbient, volume } from '../game/sfx';
 import { musicEnabled, setMood, setMusic, setMusicBiome } from '../game/music';
 import { biomeIdFor } from '../game/scenery';
+import { koraChat, koraSpeak, koraVoice, onKoraSpeaking, setKoraChat, setKoraVoice, speechAvailable, stopKora } from '../game/kora';
+import { koraLine, type KoraKind } from '../i18n/koraLines';
 import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, TerrainId, UpgradeId } from '../game/types';
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
@@ -213,6 +215,7 @@ export class Hud {
 
   showTitle() {
     setMood('menu');
+    stopKora();
     this.renderTitle();
     this.title.classList.remove('hidden');
     this.menuVideo(!this.holdMenuVideo);
@@ -237,6 +240,12 @@ export class Hud {
     this.bottom.classList.remove('hidden');
     this.minimapBox.classList.toggle('hidden', !this.minimapOpen);
     if (!this.sim.state.introSeen) this.showStory();
+    else {
+      // a greeting: back to a running game, or a new one outside the story (the story has its slides)
+      const st = this.sim.state;
+      const back = st.time > 10;
+      if (back || st.options.mode === 'free') setTimeout(() => !this.titleOpen && this.koraRemark(back ? 'welcome_back' : 'welcome'), 1800);
+    }
   }
 
   /** The menu's background (a silent looping factory shot) stays in place while the menu itself re-renders. */
@@ -610,6 +619,7 @@ export class Hud {
 
   private achievementToast(id: string) {
     sfx.mission();
+    if (this.koraMay() && Math.random() < 0.5) koraSpeak(koraLine('achievement'), false);
     this.toast(`🏆 ${t('ach_unlocked')}: <b>${t(`ach_${id}` as 'ach_FIRST_PLATE')}</b><br><small>${t(`ach_${id}_desc` as 'ach_FIRST_PLATE_desc')}</small>`, 5000, 'success');
   }
 
@@ -939,10 +949,12 @@ export class Hud {
           <button class="btn primary small" data-act="next">${last ? t('play') : t('next')}</button>
         </div>
       </div>`;
+    koraSpeak(texts[i]);
     this.story.onclick = (e) => {
       const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
       if (!target) return;
       if (target.dataset.act === 'skip' || last) {
+        stopKora();
         this.sim.state.introSeen = true;
         this.story.classList.add('hidden');
         this.cb.onSave();
@@ -1030,6 +1042,10 @@ export class Hud {
     }
     if (st.tutorialStep !== this.lastTutorialStep && st.tutorialStep >= 0 && st.tutorialStep < steps.length) {
       this.lastTutorialStep = st.tutorialStep;
+      if (st.introSeen && this.story.classList.contains('hidden')) {
+        const s0 = steps[st.tutorialStep];
+        koraSpeak(`${s0.title}. ${s0.text}`);
+      }
       this.tutorialPing(st.tutorialStep);
       this.focusTutorial();
     }
@@ -1037,6 +1053,7 @@ export class Hud {
       st.tutorialStep = -1;
       this.renderer.ping = null;
       this.toast(`✓ ${t('tutorial_done')}`, 5000, 'success');
+      this.koraRemark('tutorial_done');
       return;
     }
     this.tutorialPing(st.tutorialStep);
@@ -1243,10 +1260,72 @@ export class Hud {
     }
   }
 
-  koraSay(msg: string, seconds = 8, action: { label: string; run: () => void } | null = null) {
+  /** KORA's card shows the message (and she says it; `spoken` replaces what she says, false keeps her quiet). */
+  koraSay(msg: string, seconds = 8, action: { label: string; run: () => void } | null = null, spoken: string | false = msg) {
     this.koraMsg = msg;
     this.koraMsgT = seconds;
     this.koraAction = action;
+    if (spoken) koraSpeak(spoken);
+  }
+
+  /** Is KORA allowed a remark of her own now (setting, mode, nothing more important on her card)? */
+  private koraMay(): boolean {
+    const st = this.sim.state;
+    if (koraChat() === 'off' || this.editor || this.titleOpen || st.options.mode === 'playground') return false;
+    return koraChat() === 'often' || Math.random() < 0.45;
+  }
+
+  /** A remark of KORA's: on her card unless a hint with an action is showing there, then only spoken. */
+  koraRemark(kind: KoraKind, after = '') {
+    if (!this.koraMay()) return;
+    const line = `${koraLine(kind)}${after ? ` ${after}` : ''}`;
+    if (this.koraMsgT > 0 && this.koraAction) koraSpeak(line);
+    else {
+      this.koraSay(line, 10);
+      this.lastTopHtml = '';
+    }
+  }
+
+  private errorTimes: number[] = [];
+  private lastErrorQuip = -1e9;
+
+  /** A placement failed: after three in a short time KORA comments. */
+  placementError() {
+    const now = performance.now();
+    this.errorTimes = this.errorTimes.filter((t0) => now - t0 < 10000);
+    this.errorTimes.push(now);
+    if (this.errorTimes.length >= 3 && now - this.lastErrorQuip > 60000) {
+      this.lastErrorQuip = now;
+      this.errorTimes = [];
+      this.koraRemark('errors');
+    }
+  }
+
+  private lastInputAt = performance.now();
+  private lastIdleQuip = 0;
+
+  /** Nothing touched for a long while in a running game: KORA asks whether anyone is still there. */
+  private idleWired = false;
+
+  private tickIdle() {
+    if (!this.idleWired) {
+      this.idleWired = true;
+      const seen = () => (this.lastInputAt = performance.now());
+      for (const ev of ['pointerdown', 'keydown', 'wheel']) window.addEventListener(ev, seen, { passive: true, capture: true });
+      // KORA's portraits move while she talks
+      onKoraSpeaking((on) => document.body.classList.toggle('kora-talking', on));
+    }
+    const now = performance.now();
+    const st = this.sim.state;
+    if (this.pauseOpen || !this.modal.classList.contains('hidden') || !st.introSeen || st.tutorialStep >= 0 || st.launched || this.cb.getSpeed() === 0) {
+      this.lastInputAt = Math.max(this.lastInputAt, now - 60000);
+      return;
+    }
+    if (now - this.lastInputAt > 150000 && now - this.lastIdleQuip > 300000) {
+      this.lastIdleQuip = now;
+      this.lastInputAt = now;
+      this.koraRemark('idle');
+    }
   }
 
   private lastIntroAt = -1e9;
@@ -1299,7 +1378,8 @@ export class Hud {
     const st = this.sim.state;
     const now = st.time;
     if (st.tutorialStep >= 0 || !st.introSeen || st.launched) return;
-    const PERSIST = 40, COOLDOWN = 75, REPEAT = 300;
+    const rare = koraChat() === 'rare';
+    const PERSIST = rare ? 60 : 40, COOLDOWN = rare ? 190 : 75, REPEAT = rare ? 600 : 300;
     const seen = new Set<number>();
     for (const p of this.problems) {
       seen.add(p.building.id);
@@ -1310,13 +1390,14 @@ export class Hud {
       if (this.powerLowSince < 0) this.powerLowSince = now;
     } else this.powerLowSince = -1;
     if (this.introHint()) return;
+    if (koraChat() === 'off') return;
     if (now - this.lastHintAt < COOLDOWN || (this.koraMsgT > 0 && !this.koraAction)) return;
     // power first: it slows everything
     if (this.powerLowSince >= 0 && now - this.powerLowSince > PERSIST && now - (this.hintedIds.get(-1) ?? -1e9) > REPEAT) {
       const pct = Math.round((100 * st.powerSupply) / Math.max(1, st.powerDemand));
       this.hintedIds.set(-1, now);
       this.lastHintAt = now;
-      this.koraSay(`⚡ ${t('hint_low_power', { pct })}`, 14, { label: t('upgrades'), run: () => this.showUpgrades() });
+      this.koraSay(`⚡ ${koraLine('hint_low_power')} ${t('hint_low_power', { pct })}`, 14, { label: t('upgrades'), run: () => this.showUpgrades() });
       return;
     }
     // the oldest persistent problem
@@ -1336,7 +1417,8 @@ export class Hud {
     const name = tBuilding(b.type);
     const items = (best.missing ?? []).map((m) => tItem(m)).join(', ');
     const key = (`hint_${best.status}`) as 'hint_starved';
-    const msg = t(key, { b: name, items });
+    const quip = koraLine(key as KoraKind);
+    const msg = `${quip ? `${quip} ` : ''}${t(key, { b: name, items })}`;
     this.hintedIds.set(b.id, now);
     this.lastHintAt = now;
     this.koraSay(`💡 ${msg}`, 16, {
@@ -3708,6 +3790,16 @@ export class Hud {
         ${chan('sound', 'sfx', '◉', soundEnabled())}
         ${chan('ambient', 'amb', '≋', ambientEnabled())}
       </div>
+      <h4 class="pause-h4">KORA</h4>
+      <div class="set-ch kora ${koraVoice() === 'text' ? 'off' : ''}">
+        <span class="set-ico kora-ico" aria-hidden="true"><img src="${uiUrl('kora.webp')}" alt=""></span>
+        <span class="set-name"><b>${t('set_kora')}</b><small>${t('set_kora_desc')}</small></span>
+        <button class="tc set-try" data-act="kora-try" title="${t('set_kora_try')}">▶</button>
+        <span class="seg set-kv">${(['speech', 'radio', 'text'] as const).map((v) => `<button class="chip ${koraVoice() === v ? 'active' : ''}" data-kvoice="${v}">${t(`set_kora_${v}` as 'set_kora_speech')}</button>`).join('')}</span>
+        <label class="set-fader"><input type="range" min="0" max="100" step="1" value="${Math.round(volume('voice') * 100)}" data-vol="voice" style="--v:${Math.round(volume('voice') * 100)}%" aria-label="${t('set_kora')}" ${koraVoice() === 'text' ? 'disabled' : ''}><output>${Math.round(volume('voice') * 100)}</output></label>
+        ${koraVoice() === 'speech' && !speechAvailable() ? `<small class="set-note">${t('set_kora_nospeech')}</small>` : ''}
+      </div>
+      <div class="menu-row"><span>${t('set_kora_chat')}</span><span class="seg">${(['often', 'rare', 'off'] as const).map((c) => `<button class="chip ${koraChat() === c ? 'active' : ''}" data-kchat="${c}">${t(`set_kchat_${c}` as 'set_kchat_often')}</button>`).join('')}</span></div>
       <h4 class="pause-h4">${t('set_display')}</h4>
       <div class="menu-row"><span>${t('language')}</span><span class="seg"><button class="chip ${lang === 'de' ? 'active' : ''}" data-lang="de">DE</button><button class="chip ${lang === 'en' ? 'active' : ''}" data-lang="en">EN</button></span></div>
       <div class="menu-row"><span>${t('day_night')}</span>${seg('daynight', Renderer.dayNight)}</div>
@@ -3721,7 +3813,12 @@ export class Hud {
     if (d.music) setMusic(d.music === 'on');
     else if (d.sound) setSound(d.sound === 'on');
     else if (d.ambient) setAmbient(d.ambient === 'on');
-    else if (d.daynight) {
+    else if (d.kvoice) setKoraVoice(d.kvoice as 'speech' | 'radio' | 'text');
+    else if (d.kchat) setKoraChat(d.kchat as 'often' | 'rare' | 'off');
+    else if (d.act === 'kora-try') {
+      koraSpeak(koraLine(Math.random() < 0.5 ? 'welcome' : 'idle'));
+      return true;
+    } else if (d.daynight) {
       Renderer.dayNight = d.daynight === 'on';
       kv.set('pe_daynight', Renderer.dayNight ? '1' : '0');
     } else return false;
@@ -3736,7 +3833,7 @@ export class Hud {
     root.addEventListener('input', (e) => {
       const r = e.target as HTMLInputElement;
       if (!r.dataset?.vol) return;
-      setVolume(r.dataset.vol as 'music' | 'sfx' | 'amb', Number(r.value) / 100);
+      setVolume(r.dataset.vol as 'music' | 'sfx' | 'amb' | 'voice', Number(r.value) / 100);
       r.style.setProperty('--v', `${r.value}%`);
       const o = r.nextElementSibling;
       if (o) o.textContent = r.value;
@@ -3983,6 +4080,7 @@ export class Hud {
     const next = this.sim.currentMission();
     this.toast(`🚀 ${t('flight_done', { n })}${next ? `<br><small>${t('flight_next')}: ${Object.entries(next.deliver).map(([k, v]) => `${v}× ${tItem(k as ItemId)}`).join(', ')}</small>` : ''}`, 6000, 'success');
     this.renderTop();
+    this.koraRemark('flight');
   }
 
   missionComplete(index: number) {
@@ -4027,6 +4125,8 @@ export class Hud {
           }
         },
       );
+      if (koraChat() !== 'off') koraSpeak(`${koraLine('chapter_done')} ${tChapter(index)}`);
+      else koraSpeak(tChapter(index));
       // the story modal has no close: clicking the backdrop must not dismiss it
       this.modal.onclick = (e) => {
         const target = (e.target as HTMLElement).closest('button') as HTMLButtonElement | null;
@@ -4044,7 +4144,8 @@ export class Hud {
     if (chapter) this.koraSay(chapter, 14);
     if (next) {
       const nt = tMission(next.id);
-      setTimeout(() => this.koraSay(nt.text, 20), chapter ? 14000 : 0);
+      const quip = !chapter && this.koraMay() ? `${koraLine('mission_done')} ` : '';
+      setTimeout(() => this.koraSay(nt.text, 20, null, quip + nt.text), chapter ? 14000 : 0);
     }
   }
 
@@ -4126,7 +4227,7 @@ export class Hud {
       },
     );
     // keep the card open when tapping the backdrop; the decision can also be postponed via the KORA card
-    this.koraSay(`📡 ${t('event_title')}: ${text}`, 60, { label: t('decide'), run: () => this.eventOffer(ev) });
+    this.koraSay(`📡 ${t('event_title')}: ${text}`, 60, { label: t('decide'), run: () => this.eventOffer(ev) }, koraChat() === 'off' ? text : `${koraLine(ev.kind)} ${text}`);
   }
 
   eventDone(ev: GameEvent, choice: 'a' | 'b', auto: boolean) {
@@ -4153,22 +4254,27 @@ export class Hud {
   contractDone() {
     this.toast(`✓ ${t('contract_done')}`, 4000, 'success');
     sfx.mission();
+    this.koraRemark('contract_done');
   }
 
   contractFailed() {
     this.toast(t('contract_failed'), 3000, 'error');
+    this.koraRemark('contract_failed');
   }
 
   storm(on: boolean) {
     this.toast(on ? `🌪 ${t('storm_on')}` : t('storm_off'), 4000, on ? 'error' : '');
+    this.koraRemark(on ? 'storm_on' : 'storm_off');
   }
 
   depleted() {
     this.toast(`∅ ${t('depleted')}`, 3500, 'error');
+    this.koraRemark('depleted');
   }
 
   /** Called ~4x per second. */
   refresh(dt = 0.25) {
+    this.tickIdle();
     for (const id of checkAchievements(this.sim)) this.achievementToast(id);
     // phones: keep the tool chip just above the (variable height) bottom HUD
     if (window.innerWidth < 900) this.toolChip.style.bottom = `${this.bottom.offsetHeight + 8}px`;

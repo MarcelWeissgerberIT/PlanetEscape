@@ -4,10 +4,10 @@
 let ctx: AudioContext | null = null;
 let enabled = true;
 
-type Bus = 'sfx' | 'amb' | 'music';
+type Bus = 'sfx' | 'amb' | 'music' | 'voice';
 let mix: { master: GainNode; buses: Record<Bus, GainNode>; verb: GainNode } | null = null;
-const VOL_KEY: Record<Bus, string> = { sfx: 'pe_vol_sfx', amb: 'pe_vol_amb', music: 'pe_vol_music' };
-const DEFAULT_VOL: Record<Bus, number> = { sfx: 0.8, amb: 0.7, music: 0.6 };
+const VOL_KEY: Record<Bus, string> = { sfx: 'pe_vol_sfx', amb: 'pe_vol_amb', music: 'pe_vol_music', voice: 'pe_vol_voice' };
+const DEFAULT_VOL: Record<Bus, number> = { sfx: 0.8, amb: 0.7, music: 0.6, voice: 0.9 };
 
 /** Stored volume of a bus, 0..1. */
 export function volume(bus: Bus): number {
@@ -61,7 +61,7 @@ function buildMix(c: AudioContext) {
   verb.gain.value = 0.55;
   verb.connect(conv).connect(master);
   const buses = {} as Record<Bus, GainNode>;
-  for (const b of ['sfx', 'amb', 'music'] as Bus[]) {
+  for (const b of ['sfx', 'amb', 'music', 'voice'] as Bus[]) {
     buses[b] = c.createGain();
     buses[b].gain.value = curve(volume(b));
     buses[b].connect(master);
@@ -505,6 +505,76 @@ export function setActivity(working: number) {
   const target = Math.min(0.035, working * 0.0025);
   amb.hum.gain.setTargetAtTime(target, ctx.currentTime, 0.8);
 }
+
+// ---------- KORA's radio: the channel opens and closes, and without speech she talks in chirps ----------
+
+/** A short tone on the voice bus (independent of the effects switch). */
+function vtone(freq: number, dur: number, type: OscillatorType, vol: number, at = 0, slide = 0) {
+  const c = ac();
+  if (!c || !mix) return;
+  const t = c.currentTime + at;
+  const o = c.createOscillator();
+  o.type = type;
+  o.frequency.setValueAtTime(freq, t);
+  if (slide) o.frequency.exponentialRampToValueAtTime(Math.max(40, freq + slide), t + dur);
+  const g = c.createGain();
+  g.gain.setValueAtTime(0, t);
+  g.gain.linearRampToValueAtTime(vol, t + 0.004);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 1800;
+  bp.Q.value = 0.9;
+  o.connect(bp).connect(g).connect(mix.buses.voice);
+  o.start(t);
+  o.stop(t + dur + 0.02);
+}
+
+/** A burst of radio static on the voice bus. */
+function vstatic(dur: number, vol: number, at = 0) {
+  const c = ac();
+  if (!c || !mix) return;
+  const t = c.currentTime + at;
+  const buf = c.createBuffer(1, Math.floor(c.sampleRate * dur), c.sampleRate);
+  const d = buf.getChannelData(0);
+  for (let i = 0; i < d.length; i++) d[i] = (Math.random() * 2 - 1) * (Math.random() < 0.3 ? 1 : 0.3);
+  const src = c.createBufferSource();
+  src.buffer = buf;
+  const bp = c.createBiquadFilter();
+  bp.type = 'bandpass';
+  bp.frequency.value = 2600;
+  bp.Q.value = 0.7;
+  const g = c.createGain();
+  g.gain.setValueAtTime(vol, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
+  src.connect(bp).connect(g).connect(mix.buses.voice);
+  src.start(t);
+}
+
+export const radio = {
+  /** The channel opens: a click of static and a rising two-tone chirp. */
+  open() {
+    vstatic(0.12, 0.05);
+    vtone(1200, 0.06, 'square', 0.03, 0.05);
+    vtone(1800, 0.08, 'square', 0.03, 0.11);
+  },
+  /** Over and out: a falling chirp with a tail of static. */
+  close() {
+    vtone(1600, 0.07, 'square', 0.025, 0, -500);
+    vstatic(0.18, 0.035, 0.06);
+  },
+  /** Talk without words: one chirp per syllable, pitch following vowels, about as long as the sentence would take. */
+  babble(text: string): number {
+    const syl = (text.match(/[aeiouäöüy]+/gi) ?? []).slice(0, 60);
+    const step = 0.075;
+    syl.forEach((v, i) => {
+      const base = 520 + ('aeiouäöüy'.indexOf(v[0].toLowerCase()) + 1) * 70;
+      const f = base * (1 + (Math.random() - 0.5) * 0.25) * (i === syl.length - 1 ? 0.8 : 1);
+      vtone(f, step * 0.8, i % 3 ? 'square' : 'triangle', 0.028, 0.15 + i * step, (Math.random() - 0.5) * 120);
+    });
+    return 0.15 + syl.length * step;
+  },
+};
 
 export const sfx = {
   beep: () => tone(440, 0.09, 'square', 0.05),

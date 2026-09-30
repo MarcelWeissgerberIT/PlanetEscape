@@ -59,7 +59,14 @@ let timer = 0;
 let step = 0;
 let nextAt = 0;
 let unlocked = false;
-let ducked = false;
+let ducked = 0;
+let voiceDuck = false;
+
+/** KORA is talking: the music steps back a little. */
+export function setVoiceDuck(on: boolean) {
+  voiceDuck = on;
+  if (layer) tick();
+}
 
 export function musicEnabled() {
   return on;
@@ -156,12 +163,13 @@ function tick() {
   const a = audio();
   if (!a || !layer) return;
   const { c } = a;
-  // a video with sound (intro, story clip) plays: the music steps back
+  // a video with sound (intro, story clip) silences the music, KORA speaking turns it down
   const video = [...document.querySelectorAll('video')].some((v) => !v.paused && !v.muted && !v.ended);
-  if (video !== ducked) {
-    ducked = video;
+  const duck = video ? 2 : voiceDuck ? 1 : 0;
+  if (duck !== ducked) {
+    ducked = duck;
     layer.out.gain.cancelScheduledValues(c.currentTime);
-    layer.out.gain.setTargetAtTime(video ? 0.0001 : 1, c.currentTime, video ? 0.3 : 1.5);
+    layer.out.gain.setTargetAtTime(duck === 2 ? 0.0001 : duck === 1 ? 0.35 : 1, c.currentTime, duck ? 0.3 : 1.5);
   }
   if (nextAt < c.currentTime) nextAt = c.currentTime + 0.05; // the tab slept: no catching up
   const st = layer.style;
