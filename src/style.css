@@ -2998,3 +2998,10 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .pw-grid b span { font-size: 11px; color: #94a3b8; }
 .pw-grid.bad { border-color: rgba(248, 113, 113, 0.45); }
 .pw-grid.bad .pw-bar i { background: #f87171; box-shadow: 0 0 6px rgba(248, 113, 113, 0.7); }
+/* solar panel: a cell grid that glints, dimmed in a dust storm */
+.sl-panel { position: relative; flex: none; width: 64px; height: 50px; border-radius: 6px; overflow: hidden; border: 2px solid #94a3b8; background: linear-gradient(#1e3a8a 0 0) padding-box; background-image: linear-gradient(rgba(148, 163, 184, 0.5) 1px, transparent 1px), linear-gradient(90deg, rgba(148, 163, 184, 0.5) 1px, transparent 1px), linear-gradient(160deg, #1d4ed8, #0f1f4d); background-size: 15px 12px, 15px 12px, auto; transform: perspective(120px) rotateX(18deg); }
+.sl-panel i { position: absolute; top: -20%; left: -60%; width: 40%; height: 140%; background: linear-gradient(90deg, transparent, rgba(255, 255, 255, 0.45), transparent); transform: rotate(20deg); animation: slglint 3.2s ease-in-out infinite; }
+@keyframes slglint { 0%, 60% { left: -60%; } 100% { left: 130%; } }
+.pw-hero.storm .sl-panel { filter: brightness(0.55) sepia(0.6); }
+.pw-hero.storm .sl-panel i { display: none; }
+.sl-panel svg { position: absolute; inset: 0; margin: auto; width: 26px; height: 26px; color: #fbbf24; }

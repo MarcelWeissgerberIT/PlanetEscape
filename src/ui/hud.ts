@@ -4,7 +4,7 @@ import { fullscreenAvailable, toggleFullscreen } from './fullscreen';
 import { MenuVideo } from './menuVideo';
 import { storyVideoHtml, wireStoryVideos } from './storyVideo';
 import { EXAMPLES } from '../game/examples';
-import { BATTERY_RATE, TUNNEL_RANGE, RADIO_QUEUE, RADIO_RANGE, SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { STORM_SOLAR_FACTOR, BATTERY_RATE, TUNNEL_RANGE, RADIO_QUEUE, RADIO_RANGE, SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -2035,6 +2035,17 @@ export class Hud {
         </div>
         ${this.gridPlate()}
         <p class="save-hint clamp2" data-more>${t('wind_hint')}</p>`;
+    } else if (b.type === 'solar') {
+      const storm = st.storm > 0;
+      const k = storm ? STORM_SOLAR_FACTOR : 1;
+      const out = Math.round(-BUILDINGS.solar.power * this.sim.factor('power') * k * 10) / 10;
+      const n = st.buildings.filter((x) => x.type === 'solar' && !x.site).length;
+      body = `${statusLine()}<div class="pw-hero on ${storm ? 'storm' : ''}">
+          <span class="sl-panel"><i></i>${storm ? icon('storm') : ''}</span>
+          <span class="pw-text"><small>${t('pw_output')}</small><b>+${out}<span> ${t('power')}</span></b><em>${storm ? `${icon('storm', 'sm')} ${t('sl_storm', { p: Math.round(k * 100) })}` : t('sl_clear')}</em></span>
+          <span class="pw-gauge"><small>${t('sl_all')}</small><b>${n}<span>×</span></b><em>+${Math.round(out * n)} ${t('power')}</em></span>
+        </div>
+        ${this.gridPlate()}`;
     } else if (PLANT_FUEL[b.type]) {
       const pf = PLANT_FUEL[b.type]!;
       const fuel = pf.item, units = b.input?.[fuel] ?? 0, sec = Math.ceil(b.fuelSeconds ?? 0);
