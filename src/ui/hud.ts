@@ -2166,23 +2166,35 @@ export class Hud {
       } else if (b.type === 'matrix') {
         const s = matrixSize(b);
         const px = b.px ?? [];
+        const hex = (v: number) => '#' + v.toString(16).padStart(6, '0');
+        const custom = !MX_SWATCHES.includes(this.paintColor);
         const painter = s <= 16
-          ? `<div class="mx-grid" style="grid-template-columns:repeat(${s},1fr);gap:${s > 8 ? 2 : 3}px">${Array.from({ length: s * s }, (_, i) => `<button class="mx-cell" data-px="${i}" style="background:${px[i] ? '#' + px[i].toString(16).padStart(6, '0') : 'rgba(255,255,255,0.08)'}"></button>`).join('')}</div>
-          <div class="dirs"><span class="lbl">${t('mx_color')}</span><input type="color" id="mxcolor" value="${this.paintColor}"><button class="chip" data-act="mx-fill">${t('mx_fill')}</button><button class="chip" data-act="clear">${t('lamp_clear')}</button></div>`
-          : `<p class="save-hint">${t('mx_big')}</p><div class="term-btns"><button class="btn small" data-act="clear">${t('lamp_clear')}</button></div>`;
-        body = `<div class="dirs wrap"><span class="lbl">${t('mx_size')}</span>${MATRIX_SIZES.map((n) => `<button class="chip ${s === n ? 'active' : ''}" data-mxsize="${n}">${n}×${n}</button>`).join('')}</div>
+          ? `<div class="mx-panel"><div class="mx-grid" style="grid-template-columns:repeat(${s},1fr);gap:${s > 8 ? 2 : 4}px">${Array.from({ length: s * s }, (_, i) => `<button class="mx-cell ${px[i] ? 'on' : ''}" data-px="${i}" style="--c:${px[i] ? hex(px[i]) : 'transparent'}"></button>`).join('')}</div></div>
+          <div class="mx-tools">
+            <div class="mx-swatches">${MX_SWATCHES.map((c) => `<button class="mx-sw ${this.paintColor === c ? 'on' : ''}" data-swatch="${c}" style="--c:${c}" aria-label="${c}"></button>`).join('')}<label class="mx-sw custom ${custom ? 'on' : ''}" style="--c:${this.paintColor}" title="${t('mx_color')}"><input type="color" id="mxcolor" value="${this.paintColor}"></label></div>
+            <div class="mx-acts"><button class="tc" data-act="mx-fill">${icon('box')}<span>${t('mx_fill')}</span></button><button class="tc" data-act="clear">${icon('close')}<span>${t('lamp_clear')}</span></button></div>
+          </div>`
+          : `<div class="mx-panel big"><p>${t('mx_big')}</p></div><div class="mx-acts solo"><button class="tc" data-act="clear">${icon('close')}<span>${t('lamp_clear')}</span></button></div>`;
+        body = `<div class="lbl">${t('mx_size')}</div>
+          <div class="seg">${MATRIX_SIZES.map((n) => `<button class="${s === n ? 'on' : ''}" data-mxsize="${n}">${n}×${n}</button>`).join('')}</div>
           ${painter}
-          <p class="save-hint">${t('matrix_hint')}</p>`;
+          <p class="save-hint clamp2" data-more>${t('matrix_hint')}</p>`;
       } else if (b.type === 'oscillator') {
         const q = b.clock ?? 0, g = b.turbo ?? 0;
         body = `${statusLine()}<div class="arith-val">${itemImg('quartz', 'icon xs')} <b class="num">${q}</b> ${itemImg('glass', 'icon xs')} <b class="num">${g}</b> <small>· ${q + g}/${OSCILLATOR_CRYSTALS} · ${q * CRYSTAL_HZ.quartz + g * CRYSTAL_HZ.glass} Hz</small></div><p class="save-hint">${t('oscillator_hint')}</p>`;
       } else if (b.type === 'bus') {
         body = `<p class="save-hint">${t('bus_hint')}</p>`;
       } else if (b.type === 'switch') {
-        body = `<div class="lbl">${b.open === false ? t('switch_off') : t('switch_on')}</div><div class="dirs"><span class="lbl">${t('switch_state')}</span><button class="chip ${b.open !== false ? 'active' : ''}" data-open="1">${t('switch_on')}</button><button class="chip ${b.open === false ? 'active' : ''}" data-open="0">${t('switch_off')}</button></div>
-          <div class="dirs"><span class="lbl">${t('switch_pulse')}</span><button class="chip ${b.mode === 'pulse' ? 'active' : ''}" data-mode="pulse">${t('on')}</button><button class="chip ${b.mode !== 'pulse' ? 'active' : ''}" data-mode="hold">${t('off')}</button></div>
-          <p class="save-hint">${t('switch_hint')}</p>
-          ${st.buildings.some((tb) => tb.type === 'terminal' && this.sim.terminalSwitches(tb).some((x) => x.sw === b)) ? `<div class="dirs wrap"><span class="lbl">${t('switch_key')}</span>${[1, 2, 3, 0xc, 4, 5, 6, 0xd, 7, 8, 9, 0xe, 0xa, 0, 0xb, 0xf].map((k) => `<button class="chip ${b.threshold === k ? 'active' : ''}" data-threshold="${k}">${k.toString(16).toUpperCase()}</button>`).join('')}</div>` : ''}${dirPicker}`;
+        const open = b.open !== false;
+        const onTerminal = st.buildings.some((tb) => tb.type === 'terminal' && this.sim.terminalSwitches(tb).some((x) => x.sw === b));
+        body = `<button class="sw-big ${open ? 'on' : ''}" data-open="${open ? 0 : 1}">
+            <span class="sw-track"><i></i></span>
+            <span class="sw-text"><small>${t('switch_state')}</small><b>${open ? t('switch_on') : t('switch_off')}</b></span>
+            <i class="term-led ${open ? 'run' : 'err'}"></i>
+          </button>
+          <button class="sw-row" data-mode="${b.mode === 'pulse' ? 'hold' : 'pulse'}"><span>${t('switch_pulse')}</span><span class="sw-mini ${b.mode === 'pulse' ? 'on' : ''}"><i></i></span></button>
+          ${onTerminal ? `<div class="lbl">${t('switch_key')}</div><div class="keypad sw-keys">${[1, 2, 3, 0xc, 4, 5, 6, 0xd, 7, 8, 9, 0xe, 0xa, 0, 0xb, 0xf].map((k) => `<button class="key ${b.threshold === k ? 'on' : ''}" data-threshold="${k}">${k.toString(16).toUpperCase()}</button>`).join('')}</div>` : ''}
+          <p class="save-hint clamp2" data-more>${t('switch_hint')}</p>${dirPicker}`;
       }
       else if (b.type === 'valve') {
         const have = b.recipe ? (st.inventory[b.recipe as ItemId] ?? 0) : 0;
@@ -2273,6 +2285,13 @@ export class Hud {
     this.info.addEventListener('pointerup', up);
     this.info.addEventListener('pointercancel', up);
     this.info.addEventListener('pointerleave', up);
+    // LED matrix: a colour from the free picker becomes the paint colour once the picker closes (the panel is
+    // rebuilt when its state changes, which would close a picker that is still open)
+    this.info.addEventListener('change', (e) => {
+      const el = e.target as HTMLInputElement;
+      if (el.id !== 'mxcolor') return;
+      this.paintColor = el.value;
+    });
     // keyboard building: the text field (phones) forwards every key
     // a shortened description opens in full on a tap
     this.info.addEventListener('click', (e) => {
@@ -2670,6 +2689,14 @@ export class Hud {
         this.showInfo(b);
         return;
       }
+      if (b.type === 'matrix' && target.dataset.swatch) {
+        this.paintColor = target.dataset.swatch;
+        const input = this.info.querySelector('#mxcolor') as HTMLInputElement | null;
+        if (input) input.value = this.paintColor;
+        this.info.querySelectorAll('.mx-sw').forEach((el) => el.classList.toggle('on', el === target));
+        sfx.select();
+        return;
+      }
       if (b.type === 'matrix' && (target.dataset.px !== undefined || target.dataset.act === 'mx-fill')) {
         const input = this.info.querySelector('#mxcolor') as HTMLInputElement | null;
         if (input) this.paintColor = input.value;
@@ -2684,7 +2711,11 @@ export class Hud {
         }
         sfx.select();
         const cell = target.dataset.px !== undefined ? (target as HTMLElement) : null;
-        if (cell) cell.style.background = px[Number(cell.dataset.px)] ? this.paintColor : 'rgba(255,255,255,0.08)';
+        if (cell) {
+          const lit = !!px[Number(cell.dataset.px)];
+          cell.classList.toggle('on', lit);
+          cell.style.setProperty('--c', lit ? this.paintColor : 'transparent');
+        }
         else this.showInfo(b);
         return;
       }
@@ -3824,6 +3855,9 @@ export class Hud {
     if (this.minimapOpen) this.renderer.drawMinimap(this.minimap);
   }
 }
+
+/** Colours offered next to the free colour picker of the LED matrix. */
+const MX_SWATCHES = ['#22d3ee', '#34d399', '#a3e635', '#facc15', '#fb923c', '#ef4444', '#e879f9', '#818cf8', '#ffffff'];
 
 function hashSeed(s: string): number {
   if (/^\d+$/.test(s)) return parseInt(s, 10) % 2147483647;
