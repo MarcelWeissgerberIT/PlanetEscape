@@ -530,12 +530,20 @@ export class Renderer {
     const tw = Math.sin(this.time * 2.1 + hash(a, b, 9) * 40);
     if (tw < 0.8) return;
     const k = (tw - 0.8) / 0.2;
-    const r = 8 * k;
+    const r = 7 * k, w = 1.1;
     const { ctx } = this;
-    ctx.fillStyle = color;
     ctx.globalAlpha = k;
-    ctx.fillRect(gxW - r, gyW - 0.8, r * 2, 1.6);
-    ctx.fillRect(gxW - 0.8, gyW - r, 1.6, r * 2);
+    const g = ctx.createRadialGradient(gxW, gyW, 0, gxW, gyW, r * 0.7);
+    g.addColorStop(0, 'rgba(255,255,255,0.55)');
+    g.addColorStop(1, 'rgba(255,255,255,0)');
+    ctx.fillStyle = g;
+    ctx.fillRect(gxW - r, gyW - r, r * 2, r * 2);
+    // a four-pointed star: two thin tapered rays
+    ctx.fillStyle = color;
+    ctx.beginPath();
+    ctx.moveTo(gxW - r, gyW); ctx.lineTo(gxW, gyW - w); ctx.lineTo(gxW + r, gyW); ctx.lineTo(gxW, gyW + w); ctx.closePath();
+    ctx.moveTo(gxW, gyW - r); ctx.lineTo(gxW + w, gyW); ctx.lineTo(gxW, gyW + r); ctx.lineTo(gxW - w, gyW); ctx.closePath();
+    ctx.fill();
     ctx.globalAlpha = 1;
   }
 
@@ -2363,10 +2371,39 @@ export class Renderer {
       ctx.setTransform(this.worldT!);
       const flows = !this.lowDetail && (d.kind === 'lava' || d.kind === 'volcano');
       const sways = !this.lowDetail && (d.kind === 'plants' || d.kind === 'tree');
+      const seed = d.tx * 1.7 + d.ty * 0.9;
+      const lean = sways ? (Math.sin(this.time * (d.kind === 'tree' ? 0.9 : 1.6) + seed) * 0.6 + Math.sin(this.time * 0.37 + d.tx * 0.2) * 0.4) * (d.kind === 'tree' ? 0.05 : 0.08) : 0;
+      const glow = this.lowDetail ? undefined : DECO_GLOW[d.kind];
+      if (glow) {
+        // the glow sits behind the sprite, so it lights the ground around it without washing out its colours
+        const pulse = 0.5 + 0.5 * Math.sin(this.time * glow.speed + d.tx * 1.9 + d.ty * 0.7);
+        const gy = py + sz * glow.dy, r = sz * glow.r;
+        const g = ctx.createRadialGradient(px, gy, 0, px, gy, r);
+        g.addColorStop(0, glow.color.replace('A', String((glow.a * (0.4 + 0.6 * pulse)).toFixed(3))));
+        g.addColorStop(1, glow.color.replace('A', '0'));
+        ctx.globalCompositeOperation = 'lighter';
+        ctx.fillStyle = g;
+        ctx.fillRect(px - r, gy - r, r * 2, r * 2);
+        ctx.globalCompositeOperation = 'source-over';
+      }
+      const shadow = STANDING[d.kind];
+      if (shadow && !this.lowDetail) {
+        // falls to the lower right like the rocks' shadows: the silhouette leaned over from the foot and set off a
+        // little, so it stays attached to the object (also to sprites with a patch of ground of their own)
+        const sh = decoShadow(d.kind, img);
+        if (sh) {
+          const foot = sways ? py + sz / 2 : py + sz * 0.46;
+          ctx.translate(px + sz * 0.06, foot + sz * 0.03);
+          ctx.transform(1, 0, -0.42 + lean, 0.88, 0, 0);
+          if (d.flip) ctx.scale(-1, 1);
+          ctx.globalAlpha = shadow;
+          ctx.drawImage(sh, -sz / 2, sways ? -sz : -sz * 0.96, sz, sz);
+          ctx.globalAlpha = 1;
+          ctx.setTransform(this.worldT!);
+        }
+      }
       if (sways) {
         // plants and trees lean in the wind, anchored at their foot; gusts roll across the map
-        const seed = d.tx * 1.7 + d.ty * 0.9;
-        const lean = (Math.sin(this.time * (d.kind === 'tree' ? 0.9 : 1.6) + seed) * 0.6 + Math.sin(this.time * 0.37 + d.tx * 0.2) * 0.4) * (d.kind === 'tree' ? 0.05 : 0.08);
         ctx.translate(px, py + sz / 2);
         ctx.transform(1, 0, lean, 1, 0, 0);
         if (d.flip) ctx.scale(-1, 1);
@@ -2394,20 +2431,9 @@ export class Renderer {
         ctx.fillRect(px - r, gy - r, r * 2, r * 2);
         ctx.globalCompositeOperation = 'source-over';
       }
-      const glow = DECO_GLOW[d.kind];
-      if (glow && !this.lowDetail) {
+      if (glow?.glint) {
         ctx.setTransform(this.worldT!);
-        const pulse = 0.5 + 0.5 * Math.sin(this.time * glow.speed + d.tx * 1.9 + d.ty * 0.7);
-        const gy = py + sz * glow.dy;
-        const r = sz * glow.r;
-        const g = ctx.createRadialGradient(px, gy, 0, px, gy, r);
-        g.addColorStop(0, glow.color.replace('A', String((glow.a * (0.4 + 0.6 * pulse)).toFixed(3))));
-        g.addColorStop(1, glow.color.replace('A', '0'));
-        ctx.globalCompositeOperation = 'lighter';
-        ctx.fillStyle = g;
-        ctx.fillRect(px - r, gy - r, r * 2, r * 2);
-        ctx.globalCompositeOperation = 'source-over';
-        if (glow.glint) this.glintAt(px + (hash(d.tx, d.ty, 2) - 0.5) * sz * 0.4, gy - sz * 0.1, d.tx, d.ty, glow.glint);
+        this.glintAt(px + (hash(d.tx, d.ty, 2) - 0.5) * sz * 0.4, py + sz * glow.dy - sz * 0.1, d.tx, d.ty, glow.glint);
       }
       if (!live) continue;
       if (d.kind === 'wreck' || d.kind === 'scrap') {
@@ -2614,6 +2640,35 @@ const LIQUID_FLAT: Record<LiquidKind, string> = { lava: '#d9531a', metal: '#6b76
 const LIQUID_BANK: Record<LiquidKind, string> = { lava: '#1e1512', metal: '#343a42', water: '#26303a' };
 
 /** Decorations that glow: colour (A = alpha), strength, radius and height of the glow (share of the sprite), pulse speed, glint colour. */
+/** Decorations that stand up from the ground and cast a shadow, with its strength. */
+const STANDING: Partial<Record<string, number>> = { icespire: 0.42, crystals: 0.38, obelisk: 0.45, tree: 0.4, plants: 0.3, wreck: 0.35, scrap: 0.3, bones: 0.25 };
+
+const shadowCache = new Map<string, HTMLCanvasElement | null>();
+/** The sprite as a soft dark silhouette (once per kind): drawn a few times slightly offset for a cheap blur. */
+function decoShadow(kind: string, img: HTMLImageElement): HTMLCanvasElement | null {
+  if (shadowCache.has(kind)) return shadowCache.get(kind)!;
+  const N = 128;
+  const sil = document.createElement('canvas');
+  sil.width = sil.height = N;
+  const sc = sil.getContext('2d');
+  const out = document.createElement('canvas');
+  out.width = out.height = N;
+  const oc = out.getContext('2d');
+  if (!sc || !oc) {
+    shadowCache.set(kind, null);
+    return null;
+  }
+  sc.drawImage(img, 0, 0, N, N);
+  sc.globalCompositeOperation = 'source-in';
+  sc.fillStyle = '#05070b';
+  sc.fillRect(0, 0, N, N);
+  const taps = [[0, 0], [-2, 0], [2, 0], [0, -2], [0, 2], [-1.5, -1.5], [1.5, 1.5], [1.5, -1.5], [-1.5, 1.5]];
+  oc.globalAlpha = 1 / 3;
+  for (const [dx, dy] of taps) oc.drawImage(sil, dx, dy);
+  shadowCache.set(kind, out);
+  return out;
+}
+
 const DECO_GLOW: Partial<Record<string, { color: string; a: number; r: number; dy: number; speed: number; glint?: string }>> = {
   crystals: { color: 'rgba(192,132,252,A)', a: 0.32, r: 0.5, dy: -0.05, speed: 1.3, glint: '#faf5ff' },
   icespire: { color: 'rgba(125,211,252,A)', a: 0.28, r: 0.5, dy: -0.1, speed: 0.9, glint: '#ffffff' },
