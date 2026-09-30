@@ -5,7 +5,8 @@ let ctx: AudioContext | null = null;
 let enabled = true;
 
 type Bus = 'sfx' | 'amb' | 'music' | 'voice';
-let mix: { master: GainNode; buses: Record<Bus, GainNode>; verb: GainNode } | null = null;
+// every bus has its fader and a hall send behind the same fader (wet), so a fader at zero silences the hall too
+let mix: { master: GainNode; buses: Record<Bus, GainNode>; wet: Record<Bus, GainNode> } | null = null;
 const VOL_KEY: Record<Bus, string> = { sfx: 'pe_vol_sfx', amb: 'pe_vol_amb', music: 'pe_vol_music', voice: 'pe_vol_voice' };
 const DEFAULT_VOL: Record<Bus, number> = { sfx: 0.8, amb: 0.7, music: 0.6, voice: 0.9 };
 
@@ -27,7 +28,10 @@ export function setVolume(bus: Bus, v: number) {
   } catch {
     /* ignore */
   }
-  if (mix && ctx) mix.buses[bus].gain.setTargetAtTime(curve(v), ctx.currentTime, 0.05);
+  if (mix && ctx) {
+    mix.buses[bus].gain.setTargetAtTime(curve(v), ctx.currentTime, 0.05);
+    mix.wet[bus].gain.setTargetAtTime(curve(v), ctx.currentTime, 0.05);
+  }
 }
 
 /** Sliders feel linear when the gain follows a curve. */
@@ -60,21 +64,24 @@ function buildMix(c: AudioContext) {
   const verb = c.createGain();
   verb.gain.value = 0.55;
   verb.connect(conv).connect(master);
-  const buses = {} as Record<Bus, GainNode>;
+  const buses = {} as Record<Bus, GainNode>, wet = {} as Record<Bus, GainNode>;
   for (const b of ['sfx', 'amb', 'music', 'voice'] as Bus[]) {
     buses[b] = c.createGain();
     buses[b].gain.value = curve(volume(b));
     buses[b].connect(master);
+    wet[b] = c.createGain();
+    wet[b].gain.value = curve(volume(b));
+    wet[b].connect(verb);
   }
-  mix = { master, buses, verb };
+  mix = { master, buses, wet };
 }
 
 /** The audio context with its mixer (null while sound is off). */
-export function audio(): { c: AudioContext; bus: (b: Bus) => GainNode; verb: GainNode } | null {
+export function audio(): { c: AudioContext; bus: (b: Bus) => GainNode; verb: (b: Bus) => GainNode } | null {
   const c = ac();
   if (!c || !mix) return null;
   const m = mix;
-  return { c, bus: (b) => m.buses[b], verb: m.verb };
+  return { c, bus: (b) => m.buses[b], verb: (b) => m.wet[b] };
 }
 
 try {
@@ -143,7 +150,7 @@ function out(node: AudioNode, send = 0.15) {
   if (send > 0) {
     const s = ctx.createGain();
     s.gain.value = send;
-    node.connect(s).connect(mix.verb);
+    node.connect(s).connect(mix.wet.sfx);
   }
 }
 
@@ -346,7 +353,7 @@ function startBiomeLayer() {
   out.connect(amb.master);
   const wet = c.createGain();
   wet.gain.value = 0.5;
-  out.connect(wet).connect(mix.verb);
+  out.connect(wet).connect(mix.wet.amb);
   const nodes: AudioScheduledSourceNode[] = [];
   const l = { out, nodes, timer: 0 };
   biomeLayer = l;

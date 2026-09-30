@@ -9,7 +9,7 @@ import type { Input, Tool } from '../game/input';
 import { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
 import { ambientEnabled, setAmbient, setSound, setVolume, sfx, soundEnabled, startAmbient, volume } from '../game/sfx';
-import { musicEnabled, setMood, setMusic, setMusicBiome } from '../game/music';
+import { currentSong, musicEnabled, nextSong, onSongChange, setMood, setMusic, setMusicBiome } from '../game/music';
 import { biomeIdFor } from '../game/scenery';
 import { koraChat, koraSpeak, koraVoice, onKoraSpeaking, setKoraChat, setKoraVoice, speechAvailable, stopKora } from '../game/kora';
 import { koraLine, type KoraKind } from '../i18n/koraLines';
@@ -3843,6 +3843,7 @@ export class Hud {
         <span class="set-name"><b>${t(`set_${key}` as 'set_music')}</b><small>${t(`set_${key}_desc` as 'set_music_desc')}</small></span>
         ${seg(key, on)}
         <label class="set-fader"><input type="range" min="0" max="100" step="1" value="${v}" data-vol="${bus}" style="--v:${v}%" aria-label="${t(`set_${key}` as 'set_music')}" ${on ? '' : 'disabled'}><output>${v}</output></label>
+        ${key === 'music' ? `<div class="set-song"><span class="set-eq" aria-hidden="true"><i></i><i></i><i></i></span><small>${t('set_now')}</small><b>${currentSong()?.name ?? '–'}</b><button class="tc set-try" data-act="music-next" title="${t('set_next')}" ${on ? '' : 'disabled'}>⏭</button></div>` : ''}
       </div>`;
     };
     return `<div class="mset set-panel">
@@ -3877,7 +3878,10 @@ export class Hud {
     else if (d.ambient) setAmbient(d.ambient === 'on');
     else if (d.kvoice) setKoraVoice(d.kvoice as 'speech' | 'radio' | 'text');
     else if (d.kchat) setKoraChat(d.kchat as 'often' | 'rare' | 'off');
-    else if (d.act === 'kora-try') {
+    else if (d.act === 'music-next') {
+      nextSong();
+      return true;
+    } else if (d.act === 'kora-try') {
       koraSpeak(koraLine(Math.random() < 0.5 ? 'welcome' : 'idle'));
       return true;
     } else if (d.daynight) {
@@ -3889,7 +3893,14 @@ export class Hud {
   }
 
   /** Faders move the volume live; letting go of the effects fader plays a sample. */
+  private songWired = false;
+
   private wireFaders(root: HTMLElement) {
+    if (!this.songWired) {
+      this.songWired = true;
+      // the song shown in the settings follows the shuffle
+      onSongChange((sg) => document.querySelectorAll('.set-song b').forEach((e) => (e.textContent = sg?.name ?? '–')));
+    }
     if (root.dataset.faders) return;
     root.dataset.faders = '1';
     root.addEventListener('input', (e) => {

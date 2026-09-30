@@ -3161,3 +3161,14 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .jn-node.n2 { background: #f59e0b; border-color: #fef3c7; box-shadow: 0 0 8px #f59e0b; }
 .jn-hero.merge .jn-node.n0 { background: #22d3ee; border-color: #cffafe; box-shadow: 0 0 8px #22d3ee; }
 .jn-hero.merge .jn-node.n1 { background: #c084fc; border-color: #f3e8ff; box-shadow: 0 0 8px #c084fc; }
+/* settings: the song playing now */
+.set-song { grid-column: 2 / 4; display: flex; align-items: center; gap: 8px; min-width: 0; padding: 6px 8px; border-radius: 9px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(34, 211, 238, 0.18); }
+.set-song small { font-family: var(--disp); font-size: 9px; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; white-space: nowrap; }
+.set-song b { flex: 1; min-width: 0; font-size: 12.5px; color: #e0f2fe; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.set-song .set-try { width: 26px; height: 26px; }
+.set-eq { display: inline-flex; align-items: flex-end; gap: 2px; height: 12px; }
+.set-eq i { width: 3px; background: #22d3ee; border-radius: 1px; animation: seteq 0.9s ease-in-out infinite alternate; }
+.set-eq i:nth-child(2) { animation-delay: -0.3s; }
+.set-eq i:nth-child(3) { animation-delay: -0.6s; }
+@keyframes seteq { from { height: 3px; } to { height: 12px; } }
+.set-ch.off .set-eq i { animation: none; height: 3px; background: #64748b; }
