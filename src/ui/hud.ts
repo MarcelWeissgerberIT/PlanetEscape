@@ -2251,12 +2251,34 @@ export class Hud {
           <p class="save-hint clamp2" data-more>${t('switch_hint')}</p>${dirPicker}`;
       }
       else if (b.type === 'valve') {
-        const have = b.recipe ? (st.inventory[b.recipe as ItemId] ?? 0) : 0;
-        body = `${statusLine(b.recipe ? ` · ${have}/${b.threshold ?? 50}` : '')}${dirPicker}${picker(t('watch_item'))}
-          <div class="dirs"><span class="lbl">${t('threshold')}</span>${VALVE_THRESHOLDS.map((n) => `<button class="chip ${(b.threshold ?? 50) === n ? 'active' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>`;
+        const it = b.recipe as ItemId | undefined;
+        const lim = b.threshold ?? 50;
+        const have = it ? (st.inventory[it] ?? 0) : 0;
+        const closed = !!it && have >= lim;
+        const scale = Math.max(lim * 1.5, have, 1);
+        body = `<div class="vl-hero ${it ? (closed ? 'closed' : 'open') : ''}">
+            <span class="tip-plate vl-item">${it ? itemImg(it, 'icon') : `<span class="dim">?</span>`}</span>
+            <span class="vl-body">
+              <span class="vl-top"><small>${it ? tItem(it) : t('rt_pick')}</small><b><i class="term-led ${!it ? 'pause' : closed ? 'err' : 'run'}"></i>${!it ? '–' : closed ? t('vl_closed') : t('vl_open')}</b></span>
+              <span class="vl-gauge"><i style="width:${Math.min(100, (have / scale) * 100)}%"></i><em style="left:${(lim / scale) * 100}%"></em></span>
+              <span class="vl-nums"><span>${t('vl_core')} <b>${have}</b></span><span>${t('threshold')} <b>${lim}</b></span></span>
+            </span>
+          </div>
+          <div class="lbl">${t('threshold')}</div>
+          <div class="seg">${VALVE_THRESHOLDS.map((n) => `<button class="${lim === n ? 'on' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>
+          ${dirPicker}${picker(t('watch_item'))}`;
       } else if (b.type === 'mixer') {
-        body = `${statusLine()}<div class="bufs"><span class="lbl">◀</span>${(b.bufL ?? []).map((k) => itemImg(k, 'icon sm')).join('') || '–'}<span class="lbl">▶</span>${(b.bufR ?? []).map((k) => itemImg(k, 'icon sm')).join('') || '–'}</div>${dirPicker}
-          <div class="dirs"><span class="lbl">${t('ratio')}</span>${MIXER_RATIOS.map((r, i) => `<button class="chip ${(b.ratio ?? 0) === i ? 'active' : ''}" data-ratio="${i}">${r[0]}:${r[1]}</button>`).join('')}</div>`;
+        const [l, r] = MIXER_RATIOS[b.ratio ?? 0];
+        const buf = (list: ItemId[] | undefined) => (list?.length ? `<span class="mx-buf">${list.slice(0, 4).map((k) => itemImg(k, 'icon xs')).join('')}${list.length > 4 ? `<small>+${list.length - 4}</small>` : ''}</span>` : `<span class="dim">${t('mix_empty')}</span>`);
+        body = `${statusLine()}${route(
+          `<i>↑</i><b class="mix-ratio">${l}</b><span>:</span><b class="mix-ratio">${r}</b>`,
+          `<i>→</i>${buf(b.bufL)}`,
+          `${buf(b.bufR)}<i>←</i>`,
+          'mix',
+        )}
+          <div class="lbl">${t('ratio')}</div>
+          <div class="seg">${MIXER_RATIOS.map((q, i) => `<button class="${(b.ratio ?? 0) === i ? 'on' : ''}" data-ratio="${i}">${q[0]} : ${q[1]}</button>`).join('')}</div>
+          ${dirPicker}`;
       } else body = `${statusLine()}${dirPicker}`;
     } else body = dirPicker;
     return body;

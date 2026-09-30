@@ -2611,3 +2611,34 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .rt-out span { white-space: normal; line-height: 1.2; font-size: 11.5px; }
 .rt-in { white-space: nowrap; }
 .rt-out span { overflow: visible; text-overflow: clip; overflow-wrap: anywhere; hyphens: auto; }
+
+/* =====================================================================================
+   Valve: the watched item, open/closed with its lamp, a gauge of the core's stock with the
+   closing mark. Mixer: the routing scheme with both buffers and the ratio on top.
+   ===================================================================================== */
+.vl-hero { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px; background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.vl-hero.open { border-color: rgba(52, 211, 153, 0.35); }
+.vl-hero.closed { border-color: rgba(248, 113, 113, 0.4); }
+.vl-item .dim { font-family: var(--disp); font-size: 20px; color: #475569; }
+.vl-body { flex: 1; display: flex; flex-direction: column; gap: 7px; min-width: 0; }
+.vl-top { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; }
+.vl-top small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vl-top b { display: inline-flex; align-items: center; gap: 7px; font-family: var(--disp); font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: #94a3b8; }
+.vl-hero.open .vl-top b { color: #a7f3d0; }
+.vl-hero.closed .vl-top b { color: #fca5a5; }
+.vl-gauge { position: relative; display: block; height: 8px; border-radius: 4px; background: rgba(148, 163, 184, 0.18); }
+.vl-gauge i { display: block; height: 100%; border-radius: 4px; background: linear-gradient(90deg, #0891b2, #67e8f9); box-shadow: 0 0 8px rgba(34, 211, 238, 0.6); }
+.vl-hero.closed .vl-gauge i { background: linear-gradient(90deg, #b91c1c, #f87171); box-shadow: 0 0 8px rgba(248, 113, 113, 0.6); }
+.vl-gauge em { position: absolute; top: -4px; bottom: -4px; width: 2px; margin-left: -1px; background: #fde68a; box-shadow: 0 0 6px #facc15; }
+.vl-nums { display: flex; justify-content: space-between; font-size: 11px; color: #94a3b8; }
+.vl-nums b { font-family: var(--disp); color: #fff; margin-left: 3px; }
+.rt.mix .rt-out.top { border-color: rgba(34, 211, 238, 0.6); background: rgba(34, 211, 238, 0.14); gap: 4px; }
+.mix-ratio { font-family: var(--disp); font-size: 15px; color: #fff; }
+.mx-buf { display: inline-flex; align-items: center; gap: 2px; }
+.mx-buf .icon { width: 20px; height: 20px; }
+.mx-buf small { font-size: 10px; color: #94a3b8; margin-left: 2px; }
+.rt.mix .rt-out .dim { font-size: 11px; color: #64748b; }
+.info-panel .seg button { white-space: nowrap; }
+.rt-out b.mix-ratio { width: auto; height: auto; border-radius: 0; background: none; color: #fff; font-size: 15px; }
+.rt.mix .rt-in { display: none; }
+.mx-buf small { white-space: nowrap; }
