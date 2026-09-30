@@ -14,6 +14,7 @@ import { biomeIdFor } from '../game/scenery';
 import { koraChat, koraSpeak, koraVoice, onKoraSpeaking, setKoraChat, setKoraVoice, speechAvailable, stopKora } from '../game/kora';
 import { koraLine, type KoraKind } from '../i18n/koraLines';
 import type { Blueprint, Building, BuildingId, Contract, Dir, GameEvent, GameOptions, GameState, ItemId, TerrainId, UpgradeId } from '../game/types';
+import { DX, DY } from '../game/types';
 import { TILE } from '../game/camera';
 import { getLang, setLang, t, tBuilding, tBuildingDesc, tChapter, tItem, tMission, tStatus, tStory, tTutorial, tUpgrade, type Lang } from '../i18n';
 import { hasSave, migrate as migrateSave, lastDropped, serialize } from '../game/save';
@@ -2013,7 +2014,7 @@ export class Hud {
     const st = this.sim.state;
     let body = '';
     const statusLine = (extra = '') => {
-      const s = b.status ?? 'ok';
+      const s = b.status === 'idle' ? 'ok' : b.status ?? 'ok'; // idle is no fault: shown like "ready"
       let txt = s === 'ok' ? (b.working ? t('working') : t('idle')) : s === 'starved' ? `${tStatus(s)} ${(b.missing ?? []).map((m) => tItem(m)).join(', ')}` : tStatus(s);
       if (this.sim.powerRatio < 1 && (def.kind === 'machine' || def.kind === 'miner')) txt += ` · ${t('no_power')}`;
       return `<div class="status ${s === 'ok' ? '' : 'bad'}">${txt}${extra}</div>${wearHtml(this.sim, b)}`;
@@ -2272,7 +2273,7 @@ export class Hud {
           <span class="tn-under"><i></i><b>${mate ? t('tn_tiles', { n: dist }) : t('tn_none')}</b><small>${t('tn_max', { n: TUNNEL_RANGE })}</small></span>
           ${end(true, !!b.exit)}
         </div>${dirPicker}`;
-    } else if (def.kind === 'logic') {
+    } else if (def.kind === 'logic' || def.kind === 'splitter') {
       const known = ITEM_ORDER.filter((id) => (st.inventory[id] ?? 0) > 0 || st.stats.produced[id] || RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id)) || TERRAIN_ITEM[st.terrain[0]] === id || ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'].includes(id));
       const picker = (label: string) => `<div class="lbl">${label}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('any_item')}</button>${known.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
       // a routing scheme in the part's own frame: in at the bottom, out straight, left and right
@@ -2283,7 +2284,49 @@ export class Hud {
           <div class="rt-out right">${right}</div>
           <div class="rt-in"><i>↑</i>${t('rt_in')}</div>
         </div>`;
-      if (b.type === 'sorter') {
+      if (b.type === 'splitter' || b.type === 'merger') {
+        // a junction in the part's own frame: the splitter fans one input out to three sides, the merger joins three into one
+        const split = b.type === 'splitter';
+        const n = b.lanes ?? [0, 0, 0], total = n[0] + n[1] + n[2];
+        const r = b.route;
+        const L = ((b.dir + 3) & 3) as Dir, R = ((b.dir + 1) & 3) as Dir, B = ((b.dir + 2) & 3) as Dir;
+        // which sides have something attached (a lane without a neighbour is dimmed)
+        const sides: Dir[] = split ? [L, b.dir, R] : [B, L, R];
+        const linked = sides.map((d) => !!this.sim.at(b.x + DX[d], b.y + DY[d]));
+        const outLinked = !!this.sim.at(b.x + DX[split ? B : b.dir], b.y + DY[split ? B : b.dir]);
+        const now = split ? (Object.keys(b.output ?? {})[0] as ItemId | undefined) : undefined;
+        const q = b.merge ?? [null, null, null];
+        const arrows = split ? ['←', '↑', '→'] : ['↑', '→', '←'];
+        const names = split ? [t('jn_left'), t('jn_forward'), t('jn_right')] : [t('jn_back'), t('jn_left'), t('jn_right')];
+        // cards left to right on screen: left, middle, right (the merger's middle card is "behind")
+        const order = split ? [0, 1, 2] : [1, 0, 2];
+        const card = (i: number) => {
+          const pct = total ? Math.round((n[i] / total) * 100) : 0;
+          const wait = !split && q[i] ? itemImg(q[i]!, 'icon sm') : '';
+          return `<div class="jn-lane l${i} ${r === i ? 'lit' : ''} ${linked[i] ? '' : 'none'}">
+            <small><i>${arrows[i]}</i> ${names[i]}</small>
+            <b>${n[i]}</b>
+            <span class="jn-bar"><i style="width:${pct}%"></i></span>
+            <em>${linked[i] ? `${pct}%` : t('jn_none')}</em>
+            ${wait ? `<span class="jn-wait" title="${t('jn_waiting')}">${wait}</span>` : ''}
+          </div>`;
+        };
+        // rails from the node to the three cards (x = 33 / 100 / 167 in the drawing), lit for the lane used last
+        const rail = (i: number) => {
+          const x = [33, 100, 167][order.indexOf(i)];
+          const d = split ? `M100 62 C100 34 ${x} 34 ${x} 0` : `M${x} 110 C${x} 76 100 76 100 48`;
+          return `<path d="${d}" class="rail r${i} ${r === i ? 'lit' : ''} ${linked[i] ? '' : 'none'}"/>`;
+        };
+        const trunk = split ? `<path d="M100 110 V62" class="rail trunk ${total ? 'lit' : ''}"/>` : `<path d="M100 48 V0" class="rail trunk ${total ? 'lit' : ''}"/>`;
+        const node = split ? 62 : 48;
+        const svg = `<svg viewBox="0 0 200 110" preserveAspectRatio="none" aria-hidden="true">${trunk}${[0, 1, 2].map(rail).join('')}</svg><span class="jn-node ${r !== undefined ? `n${r}` : ''}" style="top:${((node / 110) * 100).toFixed(1)}%"></span>`;
+        const endCard = `<div class="jn-end ${outLinked ? '' : 'none'}"><small>${split ? `↑ ${t('rt_in')}` : `↑ ${t('jn_out')}`}</small><b>${total}</b><em>${outLinked ? t(split ? 'jn_items_in' : 'jn_items_out') : t('jn_none')}</em>${now ? `<span class="jn-wait">${itemImg(now, 'icon sm')}</span>` : ''}</div>`;
+        const cards = `<div class="jn-cards">${order.map(card).join('')}</div>`;
+        body = `${statusLine()}<div class="jn-hero ${split ? 'split' : 'merge'}">
+            ${split ? `${cards}<div class="jn-track">${svg}</div>${endCard}` : `${endCard}<div class="jn-track">${svg}</div>${cards}`}
+          </div>
+          <p class="save-hint clamp2" data-more>${t(split ? 'jn_hint_split' : 'jn_hint_merge')}</p>${dirPicker}`;
+      } else if (b.type === 'sorter') {
         const it = b.recipe as ItemId | undefined;
         const now = Object.keys(b.output ?? {})[0] as ItemId | undefined;
         const r = b.route;

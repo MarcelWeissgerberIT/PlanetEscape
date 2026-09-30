@@ -3667,6 +3667,8 @@ export class Sim {
         q[s] = null;
         b.rr = (s + 1) % 3;
         b.status = 'ok';
+        (b.lanes ??= [0, 0, 0])[s]++;
+        b.route = s;
       } else b.status = 'blocked';
       return;
     }
@@ -3685,6 +3687,8 @@ export class Sim {
       if (t && this.accept(t, key, d)) {
         b.rr = (start + i + 1) % 3;
         b.output = {};
+        (b.lanes ??= [0, 0, 0])[(start + i) % 3]++;
+        b.route = (start + i) % 3;
         return;
       }
     }
