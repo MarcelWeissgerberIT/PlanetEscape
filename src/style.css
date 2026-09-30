@@ -2730,3 +2730,30 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .sp-vu i { width: 5px; height: 4px; border-radius: 2px; background: rgba(148, 163, 184, 0.3); }
 .sp-hero.playing .sp-vu i { background: linear-gradient(0deg, #34d399, #facc15 70%, #f87171); animation: spvu 0.5s ease-in-out infinite alternate; animation-delay: calc(var(--i) * -0.13s); }
 @keyframes spvu { 0% { height: 6px; } 50% { height: 30px; } 100% { height: 16px; } }
+
+/* =====================================================================================
+   Oscillator and bus trace: parts of a terminal's mainboard on a green PCB deck.
+   ===================================================================================== */
+.pcb-hero {
+  display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px; border: 1px solid rgba(52, 211, 153, 0.25);
+  background: linear-gradient(rgba(52, 211, 153, 0.07) 1px, transparent 1px) 0 0 / 12px 12px, linear-gradient(90deg, rgba(52, 211, 153, 0.07) 1px, transparent 1px) 0 0 / 12px 12px, linear-gradient(180deg, #0f2a22, #07140f);
+  box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.06);
+}
+.pcb-hero:not(.on) { filter: saturate(0.4); }
+.pcb-text { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pcb-text small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: rgba(167, 243, 208, 0.7); }
+.pcb-text b { font-family: var(--disp); font-size: 24px; line-height: 1.05; color: #fff; }
+.pcb-text b span { font-size: 14px; color: #94a3b8; }
+.pcb-link { display: flex; align-items: center; gap: 6px; font-style: normal; font-size: 11.5px; color: #94a3b8; line-height: 1.3; }
+.pcb-link.on { color: #a7f3d0; }
+.osc-slots { flex: none; display: flex; gap: 5px; }
+.osc-slot { display: grid; place-items: center; width: 36px; height: 44px; border-radius: 8px; background: linear-gradient(180deg, #1a2630, #0a1016); border: 1px solid rgba(148, 163, 184, 0.3); box-shadow: inset 0 2px 5px rgba(0, 0, 0, 0.6); }
+.osc-slot .icon { width: 28px; height: 28px; }
+.osc-slot.empty { border-style: dashed; background: rgba(0, 0, 0, 0.25); }
+.osc-slot.quartz { border-color: rgba(196, 181, 253, 0.6); box-shadow: 0 0 10px rgba(167, 139, 250, 0.35), inset 0 2px 5px rgba(0, 0, 0, 0.5); }
+.osc-slot.glass { border-color: rgba(103, 232, 249, 0.7); box-shadow: 0 0 12px rgba(34, 211, 238, 0.45), inset 0 2px 5px rgba(0, 0, 0, 0.5); }
+.osc-legend { display: flex; flex-wrap: wrap; gap: 6px; margin: 0 0 6px; }
+.osc-legend span { display: inline-flex; align-items: center; gap: 5px; padding: 2px 8px 2px 4px; border-radius: 8px; font-size: 11.5px; color: #cbd5e1; background: rgba(255, 255, 255, 0.05); border: 1px solid rgba(148, 163, 184, 0.14); }
+.pcb-chip { flex: none; display: grid; place-items: center; width: 54px; height: 54px; border-radius: 10px; background: linear-gradient(180deg, #0b1a15, #050c09); border: 1px solid rgba(52, 211, 153, 0.35); }
+.pcb-chip img { width: 42px; height: 42px; }
+.pcb-stats .ts { background: rgba(52, 211, 153, 0.05); border-color: rgba(52, 211, 153, 0.18); }

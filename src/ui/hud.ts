@@ -2264,11 +2264,35 @@ export class Hud {
           <div class="seg">${MATRIX_SIZES.map((n) => `<button class="${s === n ? 'on' : ''}" data-mxsize="${n}">${n}×${n}</button>`).join('')}</div>
           ${painter}
           <p class="save-hint clamp2" data-more>${t('matrix_hint')}</p>`;
-      } else if (b.type === 'oscillator') {
-        const q = b.clock ?? 0, g = b.turbo ?? 0;
-        body = `${statusLine()}<div class="arith-val">${itemImg('quartz', 'icon xs')} <b class="num">${q}</b> ${itemImg('glass', 'icon xs')} <b class="num">${g}</b> <small>· ${q + g}/${OSCILLATOR_CRYSTALS} · ${q * CRYSTAL_HZ.quartz + g * CRYSTAL_HZ.glass} Hz</small></div><p class="save-hint">${t('oscillator_hint')}</p>`;
-      } else if (b.type === 'bus') {
-        body = `<p class="save-hint">${t('bus_hint')}</p>`;
+      } else if (b.type === 'oscillator' || b.type === 'bus') {
+        // the terminal whose mainboard this part belongs to
+        const idx = b.y * st.width + b.x;
+        const term = st.buildings.find((tb) => tb.type === 'terminal' && this.sim.board(tb).tiles.has(idx));
+        const link = `<em class="pcb-link ${term ? 'on' : ''}"><i class="term-led ${term ? 'run' : 'err'}"></i>${term ? t('pcb_linked') : t('pcb_unlinked')}</em>`;
+        if (b.type === 'oscillator') {
+          const q = b.clock ?? 0, g = b.turbo ?? 0;
+          const hz = q * CRYSTAL_HZ.quartz + g * CRYSTAL_HZ.glass;
+          const slots = Array.from({ length: OSCILLATOR_CRYSTALS }, (_, i) => (i < q ? 'quartz' : i < q + g ? 'glass' : null));
+          body = `<div class="pcb-hero ${hz ? 'on' : ''}">
+              <span class="osc-slots">${slots.map((k) => `<span class="osc-slot ${k ?? 'empty'}">${k ? itemImg(k as ItemId, 'icon') : ''}</span>`).join('')}</span>
+              <span class="pcb-text"><small>${t('pcb_clock')}</small><b>${hz >= 1000 ? (hz / 1000).toFixed(1) + '<span> kHz</span>' : hz + '<span> Hz</span>'}</b>${link}</span>
+            </div>
+            <div class="osc-legend"><span>${itemImg('quartz', 'icon xs')} ${t('pcb_quartz', { hz: CRYSTAL_HZ.quartz })}</span><span>${itemImg('glass', 'icon xs')} ${t('pcb_glass', { hz: CRYSTAL_HZ.glass / 1000 })}</span></div>
+            <p class="save-hint clamp2" data-more>${t('oscillator_hint')}</p>`;
+        } else {
+          const bd = term ? this.sim.board(term) : null;
+          const traces = bd ? [...bd.tiles].filter((i) => this.sim.at(i % st.width, Math.floor(i / st.width))?.type === 'bus').length : 0;
+          const mem = term ? this.sim.terminalMemory(term) : null;
+          body = `<div class="pcb-hero ${term ? 'on' : ''}">
+              <span class="pcb-chip"><img src="${buildingUrl('terminal')}" alt=""></span>
+              <span class="pcb-text"><small>${t('pcb_board')}</small><b>${term ? tBuilding('terminal') : '–'}</b>${link}</span>
+            </div>
+            ${term && bd && mem ? `<div class="term-stats pcb-stats">
+              <div class="ts ${mem.have < mem.need ? 'bad' : ''}"><small>${itemImg('circuit', 'icon xs')} ${t('pcb_ram')}</small><b>${mem.have} B</b><em>${t('pcb_cells', { n: bd.cells.length })}</em></div>
+              <div class="ts ${this.sim.terminalHz(term) ? '' : 'bad'}"><small>${itemImg('quartz', 'icon xs')} ${t('pcb_clock')}</small><b>${this.sim.terminalHz(term)} Hz</b><em>${t('pcb_traces', { n: traces })}</em></div>
+            </div>` : ''}
+            <p class="save-hint clamp2" data-more>${t('bus_hint')}</p>`;
+        }
       } else if (b.type === 'switch') {
         const open = b.open !== false;
         const onTerminal = st.buildings.some((tb) => tb.type === 'terminal' && this.sim.terminalSwitches(tb).some((x) => x.sw === b));
