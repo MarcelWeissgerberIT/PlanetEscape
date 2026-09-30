@@ -1029,6 +1029,8 @@ export class Hud {
   }
 
   private lastTutorialStep = -2;
+  /** KORA's remark on the current tutorial step (shown above its text) */
+  private tutQuip = '';
 
   private tickTutorial() {
     const st = this.sim.state;
@@ -1045,7 +1047,8 @@ export class Hud {
       this.lastTutorialStep = st.tutorialStep;
       if (st.introSeen && this.story.classList.contains('hidden')) {
         const s0 = steps[st.tutorialStep];
-        koraSpeak(`${s0.title}. ${s0.text}`);
+        this.tutQuip = st.tutorialStep > 0 && koraChat() !== 'off' ? koraLine('tutorial') : '';
+        koraSpeak(`${s0.title}. ${this.tutQuip} ${s0.text}`);
       }
       this.tutorialPing(st.tutorialStep);
       this.focusTutorial();
@@ -1100,7 +1103,7 @@ export class Hud {
     }
     if (tut) {
       body = `<div class="mtitle"><span class="mnum">${t('tutorial_title')} ${st.tutorialStep + 1}/${steps.length}</span> ${tut.title}</div>
-        <div class="mtext">${tut.text}</div>${mrows}`;
+        ${this.tutQuip ? `<div class="mtext kora-quip">${this.tutQuip}</div>` : ''}<div class="mtext">${tut.text}</div>${mrows}`;
     } else if (m) {
       const mt = this.sim.challenge() ? { title: t(`ch_${m.id}` as 'ch_c_drills'), text: challengeRules(m.id) } : tMission(m.id);
       const num = this.sim.challenge() ? `🏁 ${st.challengeDone !== undefined ? `${MEDALS[challengeMedal(st.challenge!, st.challengeDone)] || '✓'} ${fmtTime(st.challengeDone)}` : `⏱ ${fmtTime(st.time)}`}` : st.launched ? `🚀 ${t('flight')} ${(st.flights ?? 0) + 1}` : `${st.options.mode === 'story' ? t('chapter') : t('mission')} ${st.missionIndex + 1}/${MISSIONS.length}`;
@@ -1287,6 +1290,21 @@ export class Hud {
     }
   }
 
+  private removeTimes: number[] = [];
+  private lastRemoveQuip = -1e9;
+
+  /** A building was removed: five in a short time and KORA wonders what is going on. */
+  noteRemoved() {
+    const now = performance.now();
+    this.removeTimes = this.removeTimes.filter((t0) => now - t0 < 8000);
+    this.removeTimes.push(now);
+    if (this.removeTimes.length >= 5 && now - this.lastRemoveQuip > 90000) {
+      this.lastRemoveQuip = now;
+      this.removeTimes = [];
+      this.koraRemark('remove_spree');
+    }
+  }
+
   private errorTimes: number[] = [];
   private lastErrorQuip = -1e9;
 
@@ -1364,7 +1382,8 @@ export class Hud {
       seen.push(h.id);
       this.lastIntroAt = now;
       this.lastHintAt = Math.max(this.lastHintAt, now - 45); // problem hints wait a little after an explanation
-      this.koraSay(`💡 ${t(`intro_${h.id}` as 'intro_kits')}`, 22, { label: h.label, run: h.run });
+      const quip = koraChat() !== 'off' ? `${koraLine('intro')} ` : '';
+      this.koraSay(`💡 ${quip}${t(`intro_${h.id}` as 'intro_kits')}`, 22, { label: h.label, run: h.run });
       this.lastTopHtml = '';
       return true;
     }
@@ -4260,7 +4279,7 @@ export class Hud {
     const m = MISSIONS[st.missionIndex];
     if (m) {
       const mt = tMission(m.id);
-      this.koraSay(mt.text, 20);
+      this.koraSay(mt.text, 20, null, koraChat() !== 'off' ? `${koraLine('briefing')} ${mt.text}` : mt.text);
     }
     // the story slides (first start) come first and hand over to the briefing themselves
     if (st.options.mode === 'story' && this.story.classList.contains('hidden')) this.showBriefing();

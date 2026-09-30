@@ -43,6 +43,7 @@ const cbs = {
   onRemove: (b: Parameters<Sim['remove']>[0]) => {
     sim.remove(b);
     sfx.remove();
+    hud.noteRemoved();
     if (hud.selected === b) hud.selectBuilding(null);
   },
   onSelect: (b: Parameters<Sim['remove']>[0] | null) => {
@@ -93,6 +94,7 @@ const hud = new Hud(sim, input, renderer, {
   onSave: () => Save.save(sim.state),
   onCenter: () => renderer.centerOnCore(),
   onSpeed: (sp: number) => {
+    if (sp > 1 && speed === 1 && !hud.pauseOpen) hud.koraRemark('fast_forward');
     speed = sp;
     renderer.paused = sp === 0;
   },
