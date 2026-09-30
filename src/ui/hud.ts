@@ -2280,30 +2280,44 @@ export class Hud {
     });
   }
 
-  /** Program editor: assembly source, built-in programs, assemble & run. */
+  /** Program editor: a library of built-in programs on the left, the source with line numbers on the right. */
   showProgramEditor(b: Building) {
     const src = b.prog ?? CHIP8_PROGRAMS[0].source;
     const errs = this.sim.cpuErrorsOf(b);
+    const lines = (text: string) => text.split('\n').length;
+    const lib = CHIP8_PROGRAMS.map((p) => `<button class="pe-prog ${p.source === src ? 'on' : ''}" data-prog="${p.id}"><b>${p.name}</b><small>${t('pe_lines', { n: lines(p.source) })}</small></button>`).join('');
     this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
-      `<h2>✎ ${t('term_program')}</h2>
-      <div class="chips" style="margin-bottom:8px">${CHIP8_PROGRAMS.map((p) => `<button class="chip" data-prog="${p.id}">${p.name}</button>`).join('')}<button class="chip" data-act="term-help">?</button></div>
-      <textarea id="prog-src" class="text-input code" rows="14" spellcheck="false">${src.replace(/</g, '&lt;')}</textarea>
-      <div class="asm-errors ${errs.length ? '' : 'hidden'}" id="asm-errors">${errs.slice(0, 6).map((e) => `<div>${e}</div>`).join('')}</div>
-      <div class="row2"><button class="btn" data-act="close">${t('cancel')}</button><button class="btn primary" data-act="term-assemble">▶ ${t('term_assemble')}</button></div>`,
+      `<h2>${t('term_program')}</h2>
+      <div class="pe-split">
+        <aside class="pe-lib"><h3>${t('pe_library')}</h3><div class="pe-list">${lib}</div></aside>
+        <section class="pe-editor">
+          <div class="pe-head"><span class="pe-file"><i></i><b id="pe-name"></b></span><small id="pe-stats"></small></div>
+          <div class="pe-code"><pre class="pe-gutter" id="pe-gutter" aria-hidden="true"></pre><textarea id="prog-src" rows="18" spellcheck="false" autocapitalize="off" autocomplete="off">${src.replace(/&/g, '&amp;').replace(/</g, '&lt;')}</textarea></div>
+          <div class="asm-errors pe-errors ${errs.length ? '' : 'hidden'}" id="asm-errors">${errs.slice(0, 6).map((e) => `<div>${e}</div>`).join('')}</div>
+          <details class="pr-help pe-help"><summary>${icon('help', 'sm')} ${t('pe_commands')}</summary><p>${t('term_help')}</p></details>
+        </section>
+      </div>
+      <div class="pe-actions"><button class="btn primary" data-act="term-assemble">▶ ${t('term_assemble')}</button><button class="btn ghost" data-act="close">${t('cancel')}</button></div>`,
       (target) => {
         const ta = this.modal.querySelector('#prog-src') as HTMLTextAreaElement;
         if (target.dataset.prog) {
           const p = CHIP8_PROGRAMS.find((x) => x.id === target.dataset.prog);
-          if (p) ta.value = p.source;
-        } else if (target.dataset.act === 'term-help') {
-          this.toast(t('term_help'), 9000);
+          if (p) {
+            ta.value = p.source;
+            ta.scrollTop = 0;
+            bad = new Set();
+            sync();
+            sfx.select();
+          }
         } else if (target.dataset.act === 'term-assemble') {
           const errors = this.sim.setProgram(b, ta.value);
           const box = this.modal.querySelector('#asm-errors') as HTMLElement;
           if (errors.length) {
             box.innerHTML = errors.slice(0, 6).map((e) => `<div>${e}</div>`).join('');
             box.classList.remove('hidden');
+            bad = errorLines(errors);
+            sync();
             sfx.error();
           } else {
             this.closeModal();
@@ -2313,6 +2327,31 @@ export class Hud {
         }
       },
     );
+    this.modal.querySelector('.modal-card')?.classList.add('wide');
+    const ta = this.modal.querySelector('#prog-src') as HTMLTextAreaElement;
+    const gutter = this.modal.querySelector('#pe-gutter') as HTMLElement;
+    const errorLines = (list: string[]) => new Set(list.map((e) => Number(/line (\d+)/.exec(e)?.[1])).filter((n) => n > 0));
+    let bad = errorLines(errs);
+    // line numbers (error lines marked), the name of the loaded program, lines and characters
+    const sync = () => {
+      const n = lines(ta.value);
+      gutter.innerHTML = Array.from({ length: n }, (_, i) => (bad.has(i + 1) ? `<em>${i + 1}</em>` : String(i + 1))).join('\n') + '\n';
+      gutter.scrollTop = ta.scrollTop;
+      const p = CHIP8_PROGRAMS.find((x) => x.source === ta.value);
+      (this.modal.querySelector('#pe-name') as HTMLElement).textContent = p ? p.name : t('pe_own');
+      (this.modal.querySelector('#pe-stats') as HTMLElement).textContent = `${t('pe_lines', { n })} · ${ta.value.length} ${t('pe_chars')}`;
+      this.modal.querySelectorAll<HTMLElement>('.pe-prog').forEach((el) => el.classList.toggle('on', el.dataset.prog === p?.id));
+    };
+    ta.addEventListener('input', sync);
+    ta.addEventListener('scroll', () => (gutter.scrollTop = ta.scrollTop), { passive: true });
+    // Tab indents instead of leaving the field
+    ta.addEventListener('keydown', (e) => {
+      if (e.key !== 'Tab') return;
+      e.preventDefault();
+      ta.setRangeText('  ', ta.selectionStart, ta.selectionEnd, 'end');
+      sync();
+    });
+    sync();
   }
 
 
