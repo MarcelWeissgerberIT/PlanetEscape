@@ -89,9 +89,36 @@ function setSpeaking(on: boolean) {
 }
 
 /** Text for the ear: no emoji, markup, symbols or brackets; units spelled the way they are read. */
+/**
+ * German voices read loan words by German rules ("Montage" like the weekday, "Terminal" with a German a): these
+ * spellings make them say the words the way people do. Only the ear sees them; the text on screen stays as it is.
+ */
+const DE_SAY: [RegExp, string][] = [
+  [/montagewerk/gi, 'Montahsche-Werk'],
+  [/montage/gi, 'Montahsche'],
+  [/recycler/gi, 'Riseikler'],
+  [/recycling/gi, 'Riseikling'],
+  [/solarpanel/gi, 'Solarpännel'],
+  [/terminal/gi, 'Törminel'],
+  [/display/gi, 'Displäi'],
+  [/challenge/gi, 'Tschällensch'],
+  [/stream/gi, 'Strihm'],
+  [/scanner/gi, 'Skänner'],
+  [/\bchip/gi, 'Tschip'],
+  [/\bcode/gi, 'Kohd'],
+  [/upgrade/gi, 'Apgräid'],
+  [/update/gi, 'Apdäit'],
+  [/\blevel/gi, 'Lewwel'],
+  [/blueprint/gi, 'Bluhprint'],
+  [/engine/gi, 'Ändschin'],
+  [/\bservice/gi, 'Sörwiss'],
+];
+
 export function speakable(text: string): string {
   const de = getLang() === 'de';
-  return text
+  let out = text;
+  if (de) for (const [re, say] of DE_SAY) out = out.replace(re, say);
+  return out
     .replace(/<[^>]+>/g, ' ')
     .replace(/&[a-z]+;/g, ' ')
     .replace(/[\u{1F000}-\u{1FFFF}\u{2600}-\u{27BF}\u{2B00}-\u{2BFF}\u{FE0F}\u{200D}]/gu, '')
@@ -100,6 +127,12 @@ export function speakable(text: string): string {
     .replace(/×/g, de ? ' mal ' : ' by ')
     .replace(/(\d+)\s*%/g, de ? '$1 Prozent' : '$1 percent')
     .replace(/\bKORA\b/g, 'Kora')
+    .replace(/(\d)\.(\d)/g, de ? '$1,$2' : '$1.$2')
+    .replace(/\bCH\s*(\d)/g, de ? 'Kanal $1' : 'channel $1')
+    .replace(/(\d)\s*kHz\b/g, de ? '$1 Kilohertz' : '$1 kilohertz')
+    .replace(/(\d)\s*Hz\b/g, de ? '$1 Hertz' : '$1 hertz')
+    .replace(/(\d)\s*px\b/g, de ? '$1 Pixel' : '$1 pixels')
+    .replace(/(\d)\s*s\b/g, de ? '$1 Sekunden' : '$1 seconds')
     .replace(/\s+/g, ' ')
     .trim();
 }
