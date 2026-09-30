@@ -2047,7 +2047,7 @@ export class Hud {
       const factor = b.type === 'multiplier' || b.type === 'divider' ? `<div class="lbl">${t('arith_factor')}</div><div class="keypad ar-keys">${[1, 2, 3, 4, 5, 6, 7, 8, 9].map((k) => `<button class="key ${val === k ? 'on' : ''}" data-value="${k}">${k}</button>`).join('')}</div>` : '';
       body = `<div class="ar-hero">
           <span class="ar-op">${op}</span>
-          <span class="ar-lcd"><small>${label}</small><b>${b.type === 'subtractor' ? '−' : b.type === 'multiplier' ? '×' : b.type === 'divider' ? '÷' : ''}${shown}</b>
+          <span class="ar-lcd"><small>${label}</small><b>${shown}</b>
             <span class="ar-tags">${held ? `<i>${held}</i>` : ''}${cellOf ? `<i>${t('ram_cell', { a: '0x' + (0x200 + cellOf.i).toString(16).toUpperCase() })}</i>` : ''}${b.bufL?.length ? `<i>${t('arith_queue', { n: b.bufL.length })}</i>` : ''}</span></span>
           <button class="tc" data-act="arith-clear">${icon('close')}<span>${t('lamp_clear')}</span></button>
         </div>
