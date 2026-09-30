@@ -24,7 +24,7 @@ import { tutorialStepDone } from '../game/tutorial';
 import { cleanName, decodeResult, encodeResult, resultMedal, shareLink } from '../game/share';
 import { DIR_ARROWS, costHtml, el, fmtTime, itemImg } from './dom';
 import { buildingTipHtml, itemTipHtml } from './tips';
-import { siteLine, printerHtml } from './printer';
+import { siteLine, printerHtml, printerPage } from './printer';
 import { contractText, contractProgress } from './contracts';
 import { challengeRules, medalSummary } from './challenges';
 import { wearHtml, cpuStateHtml } from './panels';
@@ -2292,7 +2292,7 @@ export class Hud {
   openPrinter() {
     this.printerOpen = true;
     this.pageNext = true; // opens as a full page in the menu style
-    this.openModal(printerHtml(this.sim), (target) => {
+    this.openModal(printerPage(this.sim), (target) => {
       const act = target.dataset.act;
       if ((act === 'auto-on' || act === 'auto-off') && !this.sim.challenge()) this.sim.state.autoPrint = act === 'auto-on';
       else if (target.dataset.print) {
@@ -2320,12 +2320,11 @@ export class Hud {
 
   private renderPrinter() {
     if (!this.printerOpen) return;
-    const card = this.modal.querySelector('.modal-card');
-    if (!card) return;
-    const scroll = card.querySelector('.kit-list')?.scrollTop ?? 0;
-    card.innerHTML = printerHtml(this.sim);
-    const list = card.querySelector('.kit-list');
-    if (list) list.scrollTop = scroll;
+    // only the live part: the back link, the folded help and the page scroll stay; no entry animation again
+    const live = this.modal.querySelector('.pr-live');
+    if (!live) return;
+    live.classList.add('still');
+    live.innerHTML = printerHtml(this.sim);
   }
 
 
@@ -3365,18 +3364,22 @@ export class Hud {
     const encoded = 'PE1.' + btoa(unescape(encodeURIComponent(raw)));
     this.pageNext = true; // opens as a full page in the menu style
     this.openModal(
-      `<h2>${icon('transfer', 'sm')} ${t('transfer_short')}</h2>
-      <div class="xcard">
-        <h3>${icon('download', 'sm')} ${t('export')}</h3>
-        <p>${t('export_hint')}</p>
-        <div class="row2"><button class="btn primary" data-act="copy">${icon('copy', 'sm')} ${t('copy_clip')}</button><button class="btn" data-act="download">${icon('download', 'sm')} ${t('download')}</button></div>
-        <div class="xmeta"><span class="mono">${(raw.length / 1024).toFixed(0)} KB</span> · ${this.sim.state.buildings.length} ${t('buildings_n')} · ${this.sim.state.width}×${this.sim.state.height}</div>
-      </div>
-      <div class="xcard" id="importcard">
-        <h3>${icon('upload', 'sm')} ${t('import')}</h3>
-        <p>${t('import_hint')}</p>
-        <textarea id="importbox" rows="3" placeholder="PE1.…  /  { JSON }"></textarea>
-        <div class="row2"><button class="btn primary" data-act="import">${icon('upload', 'sm')} ${t('import')}</button><button class="btn" data-act="pickfile">${t('import_file')}</button><input id="importfile" class="file-hidden" type="file" accept=".json,.txt,application/json,text/plain"></div>
+      `<h2>${t('transfer_short')}</h2>
+      <div class="tr-grid">
+        <section class="tr-card">
+          <span class="tr-ico">${icon('download')}</span>
+          <h3>${t('export')}</h3>
+          <p>${t('export_hint')}</p>
+          <div class="tr-meta"><span><small>${t('tr_size')}</small><b>${(raw.length / 1024).toFixed(0)} KB</b></span><span><small>${t('buildings_n')}</small><b>${this.sim.state.buildings.filter((b) => b.type !== 'core').length}</b></span><span><small>${t('tr_map')}</small><b>${this.sim.state.width}×${this.sim.state.height}</b></span></div>
+          <div class="tr-actions"><button class="btn primary" data-act="copy">${icon('copy', 'sm')} ${t('copy_clip')}</button><button class="btn" data-act="download">${icon('download', 'sm')} ${t('download')}</button></div>
+        </section>
+        <section class="tr-card tr-drop" id="importcard">
+          <span class="tr-ico">${icon('upload')}</span>
+          <h3>${t('import')}</h3>
+          <p>${t('import_hint')}</p>
+          <textarea id="importbox" rows="3" placeholder="PE1.…  /  { JSON }"></textarea>
+          <div class="tr-actions"><button class="btn primary" data-act="import">${icon('upload', 'sm')} ${t('import')}</button><button class="btn" data-act="pickfile">${t('import_file')}</button><input id="importfile" class="file-hidden" type="file" accept=".json,.txt,application/json,text/plain"></div>
+        </section>
       </div>
       <button class="btn ghost" data-act="close">${t('close')}</button>`,
       (target) => {
