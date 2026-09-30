@@ -3317,3 +3317,60 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .ls2-pulse.r { --dx: 8px; }
 .ls2-item { position: absolute; left: 50%; top: 50%; transform: translate(-50%, -50%); padding: 2px; border-radius: 7px; background: #0b1018; border: 1px solid rgba(255, 255, 255, 0.25); }
 .ls2-stats .ts b { display: flex; align-items: center; gap: 6px; font-size: 15px; }
+
+/* kit port: a launch pad charging for the next kit, the next site and the queue */
+.kp-hero { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 14px; align-items: center; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px;
+  background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.kp-hero.on { border-color: rgba(34, 211, 238, 0.35); }
+.kp-hero.bad { border-color: rgba(248, 113, 113, 0.45); }
+.kp-pad, .sv-bay { position: relative; width: 84px; height: 84px; display: grid; place-items: center; border-radius: 50%;
+  background: repeating-conic-gradient(from 0deg, rgba(245, 158, 11, 0.16) 0 15deg, transparent 15deg 30deg), radial-gradient(circle, #111820 55%, #0b1018); }
+.kp-pad svg, .sv-bay svg { position: absolute; inset: 0; width: 100%; height: 100%; }
+.kp-pad img { position: relative; width: 44px; height: 44px; }
+.kp-next { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.kp-next > small, .kp-queue > small, .sv-list > small { font-family: var(--disp); font-size: 9.5px; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; }
+.kp-site { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.kp-site img { width: 38px; height: 38px; flex: none; padding: 3px; border-radius: 9px; background: rgba(0, 0, 0, 0.3); border: 1px dashed rgba(34, 211, 238, 0.45); }
+.kp-site span { display: flex; flex-direction: column; min-width: 0; }
+.kp-site b { font-size: 14px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.kp-site em { font-style: normal; font-size: 11px; color: #94a3b8; }
+.kp-state { display: inline-flex; align-items: center; gap: 7px; font-size: 11.5px; color: #cbd5e1; }
+.kp-queue { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; margin: 0 0 8px; }
+.kp-queue span { position: relative; width: 32px; height: 32px; padding: 3px; border-radius: 8px; background: rgba(0, 0, 0, 0.3); border: 1px dashed rgba(148, 163, 184, 0.3); }
+.kp-queue img { width: 100%; height: 100%; opacity: 0.8; }
+.kp-queue em { position: absolute; right: -4px; bottom: -5px; font-style: normal; font-size: 9px; padding: 0 3px; border-radius: 4px; background: #0b1018; color: #94a3b8; border: 1px solid rgba(148, 163, 184, 0.25); }
+.kp-queue b { font-size: 11px; color: #94a3b8; }
+/* service station: spare part tanks, the repair bay, the most worn machines */
+.sv-hero { display: grid; grid-template-columns: auto 84px minmax(0, 1fr); gap: 14px; align-items: center; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px;
+  background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.sv-hero.busy { border-color: rgba(52, 211, 153, 0.4); }
+.sv-hero.bad { border-color: rgba(248, 113, 113, 0.45); }
+.sv-tanks { display: flex; gap: 8px; }
+.sv-tank { display: flex; flex-direction: column; align-items: center; gap: 3px; }
+.sv-glass { position: relative; width: 22px; height: 58px; border-radius: 6px; background: rgba(0, 0, 0, 0.45); border: 1px solid rgba(148, 163, 184, 0.3); overflow: hidden; }
+.sv-glass i { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, #0891b2, #67e8f9); box-shadow: 0 0 8px rgba(34, 211, 238, 0.5); }
+.sv-tank.low .sv-glass i { background: linear-gradient(0deg, #b91c1c, #f87171); }
+.sv-glass em { position: absolute; left: -2px; right: -2px; height: 2px; background: #fde68a; box-shadow: 0 0 4px #facc15; }
+.sv-tank b { font-family: var(--disp); font-size: 12px; }
+.sv-tank b small { color: #94a3b8; font-size: 9.5px; }
+.sv-bay { background: repeating-conic-gradient(from 0deg, rgba(52, 211, 153, 0.12) 0 15deg, transparent 15deg 30deg), radial-gradient(circle, #111820 55%, #0b1018); }
+.sv-bay .tm-arc { stroke: #34d399; }
+.sv-wrench { position: relative; display: grid; place-items: center; color: #94a3b8; }
+.sv-wrench .ico { width: 30px; height: 30px; }
+.sv-hero.busy .sv-wrench { color: #34d399; animation: svspin 1.2s linear infinite; }
+@keyframes svspin { to { transform: rotate(360deg); } }
+.sv-sum { display: flex; flex-direction: column; gap: 5px; min-width: 0; }
+.sv-sum span { display: flex; align-items: baseline; gap: 6px; min-width: 0; }
+.sv-sum b { font-family: var(--disp); font-size: 17px; }
+.sv-sum small { font-size: 10.5px; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-sum .warn b { color: #fbbf24; }
+.sv-list { display: flex; flex-direction: column; gap: 5px; margin: 0 0 8px; }
+.sv-row { display: grid; grid-template-columns: 24px minmax(0, 1fr) 70px 38px; gap: 8px; align-items: center; font-size: 11.5px; }
+.sv-row img { width: 24px; height: 24px; }
+.sv-row span:nth-child(2) { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.sv-bar { height: 6px; border-radius: 3px; background: rgba(148, 163, 184, 0.18); overflow: hidden; }
+.sv-bar i { display: block; height: 100%; background: linear-gradient(90deg, #34d399, #fbbf24); }
+.sv-row.warn .sv-bar i { background: linear-gradient(90deg, #fbbf24, #f87171); }
+.sv-row b { text-align: right; font-family: var(--disp); font-size: 11.5px; }
+.sv-row.warn b { color: #fca5a5; }
+@media (max-width: 480px) { .sv-hero { grid-template-columns: auto 72px minmax(0, 1fr); gap: 10px; } .sv-bay { width: 72px; height: 72px; } }

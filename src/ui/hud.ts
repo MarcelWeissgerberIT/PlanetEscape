@@ -4,7 +4,7 @@ import { fullscreenAvailable, toggleFullscreen } from './fullscreen';
 import { MenuVideo } from './menuVideo';
 import { storyVideoHtml, wireStoryVideos } from './storyVideo';
 import { EXAMPLES } from '../game/examples';
-import { RECYCLER_QUEUE, STORM_SOLAR_FACTOR, BATTERY_RATE, TUNNEL_RANGE, RADIO_QUEUE, RADIO_RANGE, SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { RECYCLER_QUEUE, STORM_SOLAR_FACTOR, BATTERY_RATE, TUNNEL_RANGE, RADIO_QUEUE, RADIO_RANGE, SERVICE_RANGE, SERVICE_SECONDS, REPAIR_COST, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -2426,8 +2426,36 @@ export class Hud {
           </div>${dirPicker}${picker(t('sort_item'))}`;
       }
       else if (b.type === 'kitport') {
-        const types = Array.from(new Set(this.sim.state.buildings.filter((x) => x.site && x.deliver).map((x) => x.type)));
-        body = `${statusLine(` · ${b.acc ?? 0} ${t('kitport_sent')}`)}<p class="save-hint">${t('kitport_hint')}</p>${dirPicker}
+        // the far sites it serves, nearest first (the same order the kit port sends in)
+        const far = st.buildings
+          .filter((x) => x.site && !x.enroute && (!b.recipe || b.recipe === x.type) && (x.deliver || !this.sim.inReach(x.x, x.y, BUILDINGS[x.type].size)))
+          .map((x) => ({ x, d: Math.abs(x.x - b.x) + Math.abs(x.y - b.y) }))
+          .sort((p, q) => p.d - q.d);
+        const transit = st.buildings.filter((x) => x.site && x.enroute === 'item').length;
+        const next = far[0];
+        const reach = b.status !== 'dead_end';
+        const charge = Math.max(0, Math.min(1, b.rateT ?? 0));
+        const R = 30, C = 2 * Math.PI * R;
+        const stateTxt = !reach ? t('kp_out_of_reach') : !next ? t('kp_nothing') : !next.x.deliver ? t('kp_printing') : b.status === 'blocked' ? t('kp_blocked') : t('kp_sending');
+        const types = Array.from(new Set(st.buildings.filter((x) => x.site && x.deliver).map((x) => x.type)));
+        body = `${statusLine()}<div class="kp-hero ${!reach ? 'bad' : next ? 'on' : ''}">
+            <div class="kp-pad">
+              <svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="${R}" class="tm-track"/><circle cx="36" cy="36" r="${R}" class="tm-arc" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - charge)).toFixed(1)}" transform="rotate(-90 36 36)"/></svg>
+              <img src="${buildingUrl('kitport')}" alt="">
+            </div>
+            <div class="kp-next">
+              <small>${t('kp_next')}</small>
+              ${next ? `<span class="kp-site"><img src="${buildingUrl(next.x.type)}" alt=""><span><b>${tBuilding(next.x.type)}</b><em>${t('kp_tiles', { n: next.d })}</em></span></span>` : `<span class="kp-site empty"><span class="fk-dot"></span><span><b>–</b></span></span>`}
+              <span class="kp-state"><i class="term-led ${!reach ? 'err' : next && next.x.deliver ? 'run' : 'pause'}"></i>${stateTxt}</span>
+            </div>
+          </div>
+          ${far.length > 1 ? `<div class="kp-queue"><small>${t('kp_queue')}</small>${far.slice(1, 9).map((f) => `<span title="${tBuilding(f.x.type)}"><img src="${buildingUrl(f.x.type)}" alt=""><em>${f.d}</em></span>`).join('')}${far.length > 9 ? `<b>+${far.length - 9}</b>` : ''}</div>` : ''}
+          <div class="term-stats fk-stats">
+            <div class="ts"><small>${t('kitport_sent')}</small><b>${b.acc ?? 0}</b></div>
+            <div class="ts"><small>${t('kp_transit')}</small><b>${transit}</b></div>
+            <div class="ts"><small>${t('kp_waiting')}</small><b>${far.length}</b></div>
+          </div>
+          <p class="save-hint clamp2" data-more>${t('kitport_hint')}</p>${dirPicker}
           <div class="lbl">${t('kitport_only')}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-kitfilter="">${t('any_item')}</button>${[...new Set([...(b.recipe ? [b.recipe as BuildingId] : []), ...types])].map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-kitfilter="${k}"><img class="icon" src="${buildingUrl(k)}" alt=""><div class="r-name">${tBuilding(k)}</div></button>`).join('')}</div>`;
       } else if (b.type === 'stacker') {
         const unpack = b.mode === 'unpack', buf = b.bufL ?? [];
@@ -2443,11 +2471,35 @@ export class Hud {
       } else if (b.type === 'service') {
         const store = b.store ?? {};
         const area = this.sim.serviceArea(b);
-        const worn = area.filter((m) => (m.wear ?? 0) >= 0.75).length;
-        body = `${statusLine()}
-          <div class="bufs"><span class="lbl">${t('service_stock')}</span>${Object.entries(SERVICE_STOCK).map(([k, cap]) => `<span class="buf">${itemImg(k as ItemId, 'icon sm')}${store[k as ItemId] ?? 0}<small>/${cap}</small></span>`).join('')}</div>
-          <div class="lbl">${t('service_area', { n: area.length, w: worn, r: SERVICE_RANGE, d: b.acc ?? 0 })}</div>
-          <p class="save-hint">${t('service_hint')}</p>`;
+        const worn = [...area].sort((p, q) => (q.wear ?? 0) - (p.wear ?? 0));
+        const wearing = area.filter((m) => (m.wear ?? 0) >= 0.75).length;
+        const busy = (b.timer ?? 0) > 0;
+        const R = 30, C = 2 * Math.PI * R;
+        const prog = busy ? 1 - (b.timer ?? 0) / SERVICE_SECONDS : 0;
+        const tank = (k: ItemId, cap: number) => {
+          const n = store[k] ?? 0, need = REPAIR_COST[k] ?? 0;
+          return `<div class="sv-tank ${n < need ? 'low' : ''}">
+            <span class="sv-glass"><i style="height:${Math.min(100, (n / cap) * 100).toFixed(0)}%"></i><em style="bottom:${Math.min(100, (need / cap) * 100).toFixed(0)}%"></em></span>
+            ${itemImg(k, 'icon sm')}<b>${n}<small>/${cap}</small></b>
+          </div>`;
+        };
+        body = `${statusLine()}<div class="sv-hero ${busy ? 'busy' : ''} ${b.status === 'starved' ? 'bad' : ''}">
+            <div class="sv-tanks">${Object.entries(SERVICE_STOCK).map(([k, cap]) => tank(k as ItemId, cap!)).join('')}</div>
+            <div class="sv-bay">
+              <svg viewBox="0 0 72 72" aria-hidden="true"><circle cx="36" cy="36" r="${R}" class="tm-track"/><circle cx="36" cy="36" r="${R}" class="tm-arc" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - prog)).toFixed(1)}" transform="rotate(-90 36 36)"/></svg>
+              <span class="sv-wrench">${icon('settings')}</span>
+            </div>
+            <div class="sv-sum">
+              <span><b>${b.acc ?? 0}</b><small>${t('sv_repairs')}</small></span>
+              <span><b>${area.length}</b><small>${t('sv_machines', { r: SERVICE_RANGE })}</small></span>
+              <span class="${wearing ? 'warn' : ''}"><b>${wearing}</b><small>${t('sv_wearing')}</small></span>
+            </div>
+          </div>
+          ${worn.length ? `<div class="sv-list"><small>${t('sv_most_worn')}</small>${worn.slice(0, 4).map((m) => {
+            const w = Math.round((m.wear ?? 0) * 100);
+            return `<div class="sv-row ${w >= 75 ? 'warn' : ''}"><img src="${buildingUrl(m.type)}" alt=""><span>${tBuilding(m.type)}</span><span class="sv-bar"><i style="width:${w}%"></i></span><b>${w}%</b></div>`;
+          }).join('')}</div>` : `<p class="save-hint">${t('sv_none')}</p>`}
+          <p class="save-hint clamp2" data-more>${t('service_hint')}</p>`;
       } else if (b.type === 'recycler') {
         const q = b.bufR ?? [], out = b.bufL ?? [];
         const slots = (list: ItemId[], n: number) => Array.from({ length: n }, (_, i) => `<span class="slot ${list[i] ? '' : 'empty'}">${list[i] ? itemImg(list[i], 'icon sm') : ''}</span>`).join('');
