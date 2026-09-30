@@ -2052,7 +2052,30 @@ export class Hud {
     } else if (def.kind === 'logic') {
       const known = ITEM_ORDER.filter((id) => (st.inventory[id] ?? 0) > 0 || st.stats.produced[id] || RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id)) || TERRAIN_ITEM[st.terrain[0]] === id || ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'].includes(id));
       const picker = (label: string) => `<div class="lbl">${label}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('any_item')}</button>${known.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
-      if (b.type === 'sorter') body = `${statusLine()}${dirPicker}${picker(t('sort_item'))}`;
+      // a routing scheme in the part's own frame: in at the bottom, out straight, left and right
+      const route = (top: string, left: string, right: string, cls = '') => `<div class="rt ${cls}">
+          <div class="rt-out top">${top}</div>
+          <div class="rt-out left">${left}</div>
+          <div class="rt-core"><img src="${buildingUrl(b.type)}" alt=""></div>
+          <div class="rt-out right">${right}</div>
+          <div class="rt-in"><i>↑</i>${t('rt_in')}</div>
+        </div>`;
+      if (b.type === 'sorter') {
+        const it = b.recipe as ItemId | undefined;
+        body = `${statusLine()}${route(
+          `<i>↑</i><span>${t('rt_rest')}</span>`,
+          it ? `<i>←</i>${itemImg(it, 'icon sm')}<span>${tItem(it)}</span>` : `<i>←</i><span class="dim">${t('rt_pick')}</span>`,
+          `<span class="dim">–</span>`,
+          it ? 'set' : '',
+        )}${dirPicker}${picker(t('sort_item'))}`;
+      } else if (b.type === 'overflow') {
+        body = `${statusLine()}${route(
+          `<b>1</b><span>${t('rt_first')}</span>`,
+          `<b>2</b><span>${t('rt_full')}</span>`,
+          `<b>3</b><span>${t('rt_full')}</span>`,
+          'prio',
+        )}${dirPicker}`;
+      }
       else if (b.type === 'kitport') {
         const types = Array.from(new Set(this.sim.state.buildings.filter((x) => x.site && x.deliver).map((x) => x.type)));
         body = `${statusLine(` · ${b.acc ?? 0} ${t('kitport_sent')}`)}<p class="save-hint">${t('kitport_hint')}</p>${dirPicker}
