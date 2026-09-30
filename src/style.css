@@ -2444,3 +2444,54 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 }
 .info-panel .dirbtn:hover { border-color: rgba(103, 232, 249, 0.5) !important; color: #fff; }
 .info-panel .dirbtn.active { color: #ecfeff; border-color: rgba(34, 211, 238, 0.65) !important; background: linear-gradient(180deg, rgba(34, 211, 238, 0.3), rgba(34, 211, 238, 0.08)) !important; box-shadow: 0 0 10px rgba(34, 211, 238, 0.3) !important; }
+
+/* =====================================================================================
+   Lamp and timer panels in the dock style: the lamp as a bulb glowing in its item's colour,
+   the timer as a countdown ring; item pickers in every panel as rounded tiles.
+   ===================================================================================== */
+.lamp-hero, .tm-hero {
+  display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px;
+  background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.lamp-bulb {
+  position: relative; flex: none; display: grid; place-items: center; width: 64px; height: 64px; border-radius: 50%;
+  background: radial-gradient(circle at 38% 32%, #2a3546, #0a0f16 70%); box-shadow: inset 0 2px 6px rgba(0, 0, 0, 0.8), 0 0 0 1px rgba(148, 163, 184, 0.2);
+}
+.lamp-hero.on .lamp-bulb {
+  background: radial-gradient(circle at 38% 32%, #fff 0, var(--c) 40%, color-mix(in srgb, var(--c) 55%, #000) 100%);
+  box-shadow: 0 0 18px var(--c), 0 0 40px color-mix(in srgb, var(--c) 45%, transparent), inset 0 -4px 8px rgba(0, 0, 0, 0.35);
+  animation: bulbglow 2.4s ease-in-out infinite;
+}
+@keyframes bulbglow { 50% { box-shadow: 0 0 12px var(--c), 0 0 26px color-mix(in srgb, var(--c) 35%, transparent), inset 0 -4px 8px rgba(0, 0, 0, 0.35); } }
+.lamp-bulb .icon { width: 34px; height: 34px; filter: drop-shadow(0 2px 3px rgba(0, 0, 0, 0.6)); }
+.lamp-text, .tm-text { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.lamp-text small, .tm-text small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #94a3b8; }
+.lamp-text b, .tm-text b { display: flex; align-items: center; gap: 8px; font-family: var(--disp); font-size: 18px; letter-spacing: 0.06em; text-transform: uppercase; color: #64748b; }
+.lamp-hero.on .lamp-text b { color: #fff; text-shadow: 0 0 12px color-mix(in srgb, var(--c) 70%, transparent); }
+.lamp-hero .tc { width: 62px; flex: none; }
+/* timer */
+.tm-hero { gap: 16px; }
+.tm-ring { position: relative; flex: none; width: 76px; height: 76px; transform: rotate(-90deg); }
+.tm-ring circle { fill: none; stroke-width: 6; }
+.tm-track { stroke: rgba(148, 163, 184, 0.15); }
+.tm-arc { stroke: var(--accent); stroke-linecap: round; filter: drop-shadow(0 0 4px rgba(34, 211, 238, 0.7)); transition: stroke-dashoffset 0.25s linear; }
+.tm-hero.open .tm-arc { stroke: #34d399; filter: drop-shadow(0 0 6px rgba(52, 211, 153, 0.9)); }
+.tm-num { position: absolute; display: flex; align-items: baseline; justify-content: center; width: 76px; font-family: var(--disp); color: #fff; font-variant-numeric: tabular-nums; }
+.tm-hero { position: relative; }
+.tm-num b { font-size: 20px; }
+.tm-num small { font-size: 11px; color: #94a3b8; margin-left: 1px; }
+.tm-hero .tm-num { left: 14px; }
+.tm-text b { color: #fca5a5; }
+.tm-hero.open .tm-text b { color: #a7f3d0; }
+.tm-text em { font-style: normal; font-size: 11.5px; color: #94a3b8; line-height: 1.35; }
+/* item pickers (filters) in every panel */
+.info-panel .recipes { gap: 6px; padding: 2px 0 6px; }
+.info-panel .recipe {
+  clip-path: none !important; border-radius: 12px !important; border: 1px solid rgba(148, 163, 184, 0.14) !important;
+  background: linear-gradient(180deg, rgba(255, 255, 255, 0.07), rgba(255, 255, 255, 0.02)) !important; box-shadow: none !important;
+  transition: background 0.18s, border-color 0.18s, transform 0.18s;
+}
+.info-panel .recipe:hover { border-color: rgba(103, 232, 249, 0.5) !important; transform: translateY(-2px); filter: none; }
+.info-panel .recipe.active { border-color: rgba(34, 211, 238, 0.65) !important; background: linear-gradient(180deg, rgba(34, 211, 238, 0.24), rgba(34, 211, 238, 0.06)) !important; box-shadow: 0 0 12px rgba(34, 211, 238, 0.25) !important; }
+.info-panel .recipe .r-name { font-family: var(--disp); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
+.info-panel .recipe { font-family: var(--disp); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #cbd5e1; line-height: 1.2; }

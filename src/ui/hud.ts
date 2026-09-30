@@ -2098,9 +2098,15 @@ export class Hud {
       }
       else if (b.type === 'lamp') {
         const item = this.sim.lampItem(b);
-        body = `<div class="lbl">${t('lamp_state')}</div><div class="bufs">${item ? `${itemImg(item, 'icon')} <b>${tItem(item)}</b> <button class="btn small" data-act="clear">${t('lamp_clear')}</button>` : `<span class="dim">${t('lamp_off')}</span>`}</div>
-          <div class="dirs"><span class="lbl">${t('lamp_mode')}</span><button class="chip ${(b.mode ?? 'hold') === 'hold' ? 'active' : ''}" data-mode="hold">${t('lamp_hold')}</button><button class="chip ${b.mode === 'pass' ? 'active' : ''}" data-mode="pass">${t('lamp_pass')}</button></div>
-          ${b.mode === 'pass' ? dirPicker : ''}${picker(t('lamp_filter'))}`;
+        const mode = b.mode ?? 'hold';
+        body = `<div class="lamp-hero ${item ? 'on' : ''}" style="--c:${item ? itemColor(item) : '#334155'}">
+            <span class="lamp-bulb">${item ? itemImg(item, 'icon') : ''}</span>
+            <span class="lamp-text"><small>${t('lamp_state')}</small><b>${item ? tItem(item) : t('lamp_off')}</b></span>
+            ${item ? `<button class="tc" data-act="clear">${icon('close')}<span>${t('lamp_clear')}</span></button>` : ''}
+          </div>
+          <div class="lbl">${t('lamp_mode')}</div>
+          <div class="seg"><button class="${mode === 'hold' ? 'on' : ''}" data-mode="hold">${t('lamp_hold')}</button><button class="${mode === 'pass' ? 'on' : ''}" data-mode="pass">${t('lamp_pass')}</button></div>
+          ${mode === 'pass' ? dirPicker : ''}${picker(t('lamp_filter'))}`;
       } else if (b.type === 'screen') {
         const live = this.cb.videoLive(b);
         const r = this.sim.screenRect(b);
@@ -2133,9 +2139,17 @@ export class Hud {
           <p class="save-hint">${t('vid_hint')}</p>`;
       } else if (b.type === 'timer') {
         const period = b.threshold ?? 3;
-        body = `<div class="lbl">${b.open !== false ? `<span class="okline">${t('switch_on')}</span>` : t('switch_off')} · ${t('timer_next', { s: Math.max(0, b.timer ?? period).toFixed(1) })}</div>
-          <div class="dirs wrap"><span class="lbl">${t('timer_period')}</span>${TIMER_PERIODS.map((p) => `<button class="chip ${period === p ? 'active' : ''}" data-threshold="${p}">${p} s</button>`).join('')}</div>
-          <p class="save-hint">${t('timer_hint')}</p>${dirPicker}`;
+        const open = b.open !== false;
+        const left = Math.max(0, Math.min(period, b.timer ?? period));
+        const R = 34, C = 2 * Math.PI * R;
+        body = `<div class="tm-hero ${open ? 'open' : ''}">
+            <svg class="tm-ring" viewBox="0 0 80 80" aria-hidden="true"><circle cx="40" cy="40" r="${R}" class="tm-track"/><circle cx="40" cy="40" r="${R}" class="tm-arc" stroke-dasharray="${C.toFixed(1)}" stroke-dashoffset="${(C * (1 - left / period)).toFixed(1)}"/></svg>
+            <span class="tm-num"><b>${left.toFixed(1)}</b><small>s</small></span>
+            <span class="tm-text"><small>${t('timer_state')}</small><b><i class="term-led ${open ? 'run' : 'pause'}"></i>${open ? t('switch_on') : t('switch_off')}</b><em>${t('timer_every', { s: period })}</em></span>
+          </div>
+          <div class="lbl">${t('timer_period')}</div>
+          <div class="seg">${TIMER_PERIODS.map((p) => `<button class="${period === p ? 'on' : ''}" data-threshold="${p}">${p} s</button>`).join('')}</div>
+          <p class="save-hint clamp2" data-more>${t('timer_hint')}</p>${dirPicker}`;
       } else if (b.type === 'sensor') {
         body = `${statusLine(` · ${b.acc ?? 0} ${t('sensor_count')}`)}<p class="save-hint">${t('sensor_hint')}</p>${dirPicker}`;
       } else if (b.type === 'radio') {
