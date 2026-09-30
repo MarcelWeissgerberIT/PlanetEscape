@@ -3173,3 +3173,35 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 @keyframes seteq { from { height: 3px; } to { height: 12px; } }
 .set-ch.off .set-eq i { animation: none; height: 3px; background: #64748b; }
 .mtext.kora-quip { font-style: italic; color: #a5f3fc; opacity: 0.9; }
+
+/* overflow: priority badges on the junction lanes */
+.jn-prio { display: inline-grid; place-items: center; width: 14px; height: 14px; margin-right: 4px; border-radius: 50%; text-decoration: none; font-family: var(--disp); font-size: 9px; font-weight: 700; color: #06202a; background: var(--c); vertical-align: 1px; }
+/* valve: a pipe with a gate */
+.vl2 { display: grid; grid-template-columns: 84px minmax(0, 1fr); gap: 12px; padding: 12px; margin: 4px 0 8px; border-radius: 14px;
+  background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); --c: #94a3b8; }
+.vl2.open { --c: #34d399; border-color: rgba(52, 211, 153, 0.35); }
+.vl2.closed { --c: #f87171; border-color: rgba(248, 113, 113, 0.4); }
+.vl2-pipe { position: relative; display: grid; place-items: center; padding: 14px 0; border-radius: 12px; background: rgba(0, 0, 0, 0.25); border: 1px solid rgba(148, 163, 184, 0.14); }
+.vl2-pipe svg { width: 56px; height: 124px; overflow: visible; }
+.vl2-pipe .pipe { fill: #111820; stroke: #475569; stroke-width: 2; }
+.vl2-pipe .flow { fill: none; stroke: #334155; stroke-width: 6; stroke-linecap: round; stroke-dasharray: 8 8; }
+.vl2.open .vl2-pipe .flow { stroke: #34d399; filter: drop-shadow(0 0 4px #34d399); animation: vlflow 0.6s linear infinite; }
+@keyframes vlflow { to { stroke-dashoffset: 16; } }
+.vl2-pipe .gate { fill: #2a323d; stroke: #94a3b8; stroke-width: 2; }
+.vl2-pipe .slide { fill: #475569; transition: transform 0.35s, fill 0.35s; transform-box: fill-box; transform-origin: center; }
+.vl2.open .vl2-pipe .slide { fill: #34d399; transform: translateX(-60%) scaleX(0.35); }
+.vl2.closed .vl2-pipe .slide { fill: #f87171; filter: drop-shadow(0 0 4px #f87171); }
+.vl2-now { position: absolute; left: 50%; top: 72%; transform: translate(-50%, -50%); padding: 2px; border-radius: 7px; background: #0b1018; border: 1px solid rgba(255, 255, 255, 0.25); animation: srpulse 0.6s ease-in-out infinite alternate; }
+.vl2-lbl { position: absolute; left: 50%; transform: translateX(-50%); font-family: var(--disp); font-size: 8.5px; letter-spacing: 0.12em; text-transform: uppercase; color: #94a3b8; white-space: nowrap; }
+.vl2-lbl.top { top: 2px; }
+.vl2-lbl.bottom { bottom: 2px; }
+.vl2-info { display: flex; flex-direction: column; gap: 8px; min-width: 0; justify-content: center; }
+.vl2-state { display: inline-flex; align-items: center; gap: 8px; font-family: var(--disp); font-size: 16px; letter-spacing: 0.08em; text-transform: uppercase; color: var(--c); }
+.vl2-item { display: flex; align-items: center; gap: 9px; min-width: 0; }
+.vl2-item > .icon, .vl2-item > .sr-q { flex: none; width: 34px; height: 34px; display: grid; place-items: center; padding: 3px; border-radius: 9px; background: rgba(0, 0, 0, 0.3); border: 1px solid rgba(148, 163, 184, 0.2); }
+.vl2-item span { display: flex; flex-direction: column; min-width: 0; }
+.vl2-item small { font-family: var(--disp); font-size: 9px; letter-spacing: 0.12em; text-transform: uppercase; color: #94a3b8; }
+.vl2-item b { font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.vl2-passed { display: flex; align-items: baseline; gap: 6px; }
+.vl2-passed b { font-family: var(--disp); font-size: 20px; }
+.vl2-passed small { color: #94a3b8; font-size: 11px; }

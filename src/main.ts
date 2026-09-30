@@ -295,6 +295,7 @@ exposeDebug();
 const INTRO_KEY = 'pe_intro_seen';
 installFrame();
 wireUiSounds();
+Hud.wireTwoWay();
 const intro = introWanted() && (new URLSearchParams(location.search).has('intro') || !kv.get(INTRO_KEY));
 hud.holdMenuVideo = intro;
 hud.showTitle();

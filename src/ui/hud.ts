@@ -380,14 +380,14 @@ export class Hud {
           </div>
           <button class="btn ghost" data-act="back">${t('back')}</button>
         </div>`;
-    const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
+    const opt = (key: keyof GameOptions, label: string, on: boolean) => `<div class="menu-row"><span>${label}</span><span class="seg"><button class="chip ${on ? 'active' : ''}" data-opt="${key}" data-val="1">${t('on')}</button><button class="chip ${on ? '' : 'active'}" data-opt="${key}" data-val="0">${t('off')}</button></span></div>`;
     const freeView = `
         <div class="title-buttons">
           <div class="menu-row"><span>${t('map_size')}</span><span>${(['small', 'medium', 'large', 'huge', 'giant'] as const).map((sz) => `<button class="chip ${o.mapSize === sz ? 'active' : ''}" data-size="${sz}">${t(`size_${sz}` as 'size_small').split(' ')[0]}</button>`).join('')}</span></div>
           ${opt('infiniteOre', t('infinite_ore'), o.infiniteOre)}
           ${opt('allUnlocked', t('all_unlocked'), o.allUnlocked)}
           ${opt('storms', t('storms_opt'), o.storms)}
-          <div class="menu-row"><span>${t('difficulty')}</span><span><button class="chip ${(o.difficulty ?? 'normal') === 'normal' ? 'active' : ''}" data-diff="normal">${t('diff_normal')}</button><button class="chip ${o.difficulty === 'hard' ? 'active' : ''}" data-diff="hard">${t('diff_hard')}</button></span></div>
+          <div class="menu-row"><span>${t('difficulty')}</span><span class="seg"><button class="chip ${(o.difficulty ?? 'normal') === 'normal' ? 'active' : ''}" data-diff="normal">${t('diff_normal')}</button><button class="chip ${o.difficulty === 'hard' ? 'active' : ''}" data-diff="hard">${t('diff_hard')}</button></span></div>
           ${o.difficulty === 'hard' ? `<p class="save-hint">${t('diff_hard_hint')}</p>` : ''}
           ${seedInput}
           <button class="btn primary" data-act="free">${t('start_free')}</button>
@@ -1325,6 +1325,26 @@ export class Hud {
 
   /** Nothing touched for a long while in a running game: KORA asks whether anyone is still there. */
   private idleWired = false;
+
+  /** A switch with two options flips with any click: pressing the option already chosen picks the other one. */
+  static wireTwoWay() {
+    document.addEventListener(
+      'click',
+      (e) => {
+        const b = (e.target as HTMLElement).closest?.('button');
+        const grp = b?.parentElement;
+        if (!b || !grp || !grp.matches('.seg, .aaa-lang')) return;
+        const opts = [...grp.children].filter((x): x is HTMLButtonElement => x instanceof HTMLButtonElement);
+        if (opts.length !== 2 || !(b.classList.contains('active') || b.classList.contains('on'))) return;
+        const other = opts.find((x) => x !== b)!;
+        if (other.disabled) return;
+        e.stopPropagation();
+        e.preventDefault();
+        other.click();
+      },
+      true,
+    );
+  }
 
   private tickIdle() {
     if (!this.idleWired) {
@@ -2303,9 +2323,10 @@ export class Hud {
           <div class="rt-out right">${right}</div>
           <div class="rt-in"><i>↑</i>${t('rt_in')}</div>
         </div>`;
-      if (b.type === 'splitter' || b.type === 'merger') {
+      if (b.type === 'splitter' || b.type === 'merger' || b.type === 'overflow') {
         // a junction in the part's own frame: the splitter fans one input out to three sides, the merger joins three into one
-        const split = b.type === 'splitter';
+        const split = b.type !== 'merger';
+        const over = b.type === 'overflow';
         const n = b.lanes ?? [0, 0, 0], total = n[0] + n[1] + n[2];
         const r = b.route;
         const L = ((b.dir + 3) & 3) as Dir, R = ((b.dir + 1) & 3) as Dir, B = ((b.dir + 2) & 3) as Dir;
@@ -2317,13 +2338,15 @@ export class Hud {
         const q = b.merge ?? [null, null, null];
         const arrows = split ? ['←', '↑', '→'] : ['↑', '→', '←'];
         const names = split ? [t('jn_left'), t('jn_forward'), t('jn_right')] : [t('jn_back'), t('jn_left'), t('jn_right')];
+        // the overflow tries forward first, then left, then right
+        const prio = over ? [2, 1, 3] : null;
         // cards left to right on screen: left, middle, right (the merger's middle card is "behind")
         const order = split ? [0, 1, 2] : [1, 0, 2];
         const card = (i: number) => {
           const pct = total ? Math.round((n[i] / total) * 100) : 0;
           const wait = !split && q[i] ? itemImg(q[i]!, 'icon sm') : '';
           return `<div class="jn-lane l${i} ${r === i ? 'lit' : ''} ${linked[i] ? '' : 'none'}">
-            <small><i>${arrows[i]}</i> ${names[i]}</small>
+            <small>${prio ? `<u class="jn-prio">${prio[i]}</u>` : ''}<i>${arrows[i]}</i> ${names[i]}</small>
             <b>${n[i]}</b>
             <span class="jn-bar"><i style="width:${pct}%"></i></span>
             <em>${linked[i] ? `${pct}%` : t('jn_none')}</em>
@@ -2344,7 +2367,7 @@ export class Hud {
         body = `${statusLine()}<div class="jn-hero ${split ? 'split' : 'merge'}">
             ${split ? `${cards}<div class="jn-track">${svg}</div>${endCard}` : `${endCard}<div class="jn-track">${svg}</div>${cards}`}
           </div>
-          <p class="save-hint clamp2" data-more>${t(split ? 'jn_hint_split' : 'jn_hint_merge')}</p>${dirPicker}`;
+          <p class="save-hint clamp2" data-more>${t(over ? 'jn_hint_over' : split ? 'jn_hint_split' : 'jn_hint_merge')}</p>${dirPicker}`;
       } else if (b.type === 'sorter') {
         const it = b.recipe as ItemId | undefined;
         const now = Object.keys(b.output ?? {})[0] as ItemId | undefined;
@@ -2372,13 +2395,6 @@ export class Hud {
               <b>${b.value ?? 0}</b><em>${t('rt_rest')}</em>
             </div>
           </div>${dirPicker}${picker(t('sort_item'))}`;
-      } else if (b.type === 'overflow') {
-        body = `${statusLine()}${route(
-          `<b>1</b><span>${t('rt_first')}</span>`,
-          `<b>2</b><span>${t('rt_full')}</span>`,
-          `<b>3</b><span>${t('rt_full')}</span>`,
-          'prio',
-        )}${dirPicker}`;
       }
       else if (b.type === 'kitport') {
         const types = Array.from(new Set(this.sim.state.buildings.filter((x) => x.site && x.deliver).map((x) => x.type)));
@@ -2646,14 +2662,30 @@ export class Hud {
         const have = it ? (st.inventory[it] ?? 0) : 0;
         const closed = !!it && have >= lim;
         const scale = Math.max(lim * 1.5, have, 1);
-        body = `<div class="vl-hero ${it ? (closed ? 'closed' : 'open') : ''}">
-            <span class="tip-plate vl-item">${it ? itemImg(it, 'icon') : `<span class="dim">?</span>`}</span>
-            <span class="vl-body">
-              <span class="vl-top"><small>${it ? tItem(it) : t('rt_pick')}</small><b><i class="term-led ${!it ? 'pause' : closed ? 'err' : 'run'}"></i>${!it ? '–' : closed ? t('vl_closed') : t('vl_open')}</b></span>
+        const now = Object.keys(b.output ?? {})[0] as ItemId | undefined;
+        const state = !it ? 'idle' : closed ? 'closed' : 'open';
+        // a pipe in the part's own frame with a gate in the middle: open it flows, closed a red slide blocks it
+        body = `${statusLine()}<div class="vl2 ${state}">
+            <div class="vl2-pipe">
+              <svg viewBox="0 0 60 130" aria-hidden="true">
+                <rect x="20" y="0" width="20" height="130" rx="4" class="pipe"/>
+                <path d="M30 128 V2" class="flow"/>
+                <rect x="8" y="55" width="44" height="20" rx="5" class="gate"/>
+                <rect x="14" y="61" width="32" height="8" rx="3" class="slide"/>
+              </svg>
+              ${now ? `<span class="vl2-now">${itemImg(now, 'icon sm')}</span>` : ''}
+              <span class="vl2-lbl top">↑ ${t('jn_out')}</span>
+              <span class="vl2-lbl bottom">↑ ${t('rt_in')}</span>
+            </div>
+            <div class="vl2-info">
+              <span class="vl2-state"><i class="term-led ${!it ? 'pause' : closed ? 'err' : 'run'}"></i>${!it ? t('rt_pick') : closed ? t('vl_closed') : t('vl_open')}</span>
+              <span class="vl2-item">${it ? itemImg(it, 'icon') : '<b class="sr-q">?</b>'}<span><small>${t('watch_item')}</small><b>${it ? tItem(it) : '–'}</b></span></span>
               <span class="vl-gauge"><i style="width:${Math.min(100, (have / scale) * 100)}%"></i><em style="left:${(lim / scale) * 100}%"></em></span>
               <span class="vl-nums"><span>${t('vl_core')} <b>${have}</b></span><span>${t('threshold')} <b>${lim}</b></span></span>
-            </span>
+              <span class="vl2-passed"><b>${b.value ?? 0}</b><small>${t('vl_passed')}</small></span>
+            </div>
           </div>
+          <p class="save-hint clamp2" data-more>${t('vl_hint')}</p>
           <div class="lbl">${t('threshold')}</div>
           <div class="seg">${VALVE_THRESHOLDS.map((n) => `<button class="${lim === n ? 'on' : ''}" data-threshold="${n}">${n}</button>`).join('')}</div>
           ${dirPicker}${picker(t('watch_item'))}`;

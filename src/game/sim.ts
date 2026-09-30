@@ -3759,7 +3759,10 @@ export class Sim {
         b.status = 'closed';
         return;
       }
-      if (this.pushDir(b, key, b.dir)) b.output = {};
+      if (this.pushDir(b, key, b.dir)) {
+        b.output = {};
+        b.value = (b.value ?? 0) + 1; // passed (panel counter)
+      }
       b.status = 'ok';
       return;
     }
@@ -3779,11 +3782,14 @@ export class Sim {
       } else b.status = 'blocked';
       return;
     }
-    // overflow: forward first, then left, then right
+    // overflow: forward first, then left, then right (counted per lane like a splitter: left, forward, right)
     for (const d of [b.dir, left, right] as Dir[]) {
       if (this.pushDir(b, key, d)) {
         b.output = {};
         b.status = 'ok';
+        const lane = d === left ? 0 : d === b.dir ? 1 : 2;
+        (b.lanes ??= [0, 0, 0])[lane]++;
+        b.route = lane;
         return;
       }
     }
