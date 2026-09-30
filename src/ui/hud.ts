@@ -1374,8 +1374,12 @@ export class Hud {
       e.preventDefault();
     }, { passive: false });
     this.barResize?.disconnect();
-    this.barResize = new ResizeObserver(edges);
+    this.barResize = new ResizeObserver(() => {
+      edges();
+      this.root.style.setProperty('--dock-h', `${this.bottom.offsetHeight}px`); // panels above the dock keep clear of it
+    });
     this.barResize.observe(bar);
+    this.barResize.observe(this.bottom);
   }
 
   private renderBottom() {
@@ -1991,34 +1995,43 @@ export class Hud {
       const cpu = this.sim.cpu(b);
       const errs = this.sim.cpuErrorsOf(b);
       const keys = ['1', '2', '3', 'C', '4', '5', '6', 'D', '7', '8', '9', 'E', 'A', '0', 'B', 'F'];
-      const state = errs.length ? `<span class="bad">${t('term_error')}</span>` : cpu?.halted ? `<span class="bad">${t('term_halted')}: ${cpu.halted}</span>` : b.run ? `<span class="okline">${t('term_running')}</span>` : t('term_paused');
+      const led = errs.length || cpu?.halted ? 'err' : b.run ? 'run' : 'pause';
+      const state = errs.length ? t('term_error') : cpu?.halted ? `${t('term_halted')}: ${cpu.halted}` : b.run ? t('term_running') : t('term_paused');
       const switches = this.sim.terminalSwitches(b);
       const items: ItemId[] = ['copper_wire', 'iron_plate', 'copper_plate', 'glass', 'circuit', 'quartz'];
       const mem = this.sim.terminalMemory(b);
       const cr = this.sim.terminalCrystals(b);
       const crystals = cr.quartz + cr.glass;
-      const parts = `<div class="term-parts">
-          <div class="tp"><span>${itemImg('circuit', 'icon xs')} ${t('term_ram')}</span><b class="${mem.have < mem.need ? 'bad' : ''}">${mem.have} B</b><small>${t('term_ram_detail', { c: mem.cells, k: mem.banks, b: mem.need })}</small></div>
-          <div class="tp"><span>${itemImg('quartz', 'icon xs')} ${t('term_clock')}</span><b class="${crystals ? '' : 'bad'}">${this.sim.terminalHz(b)} Hz</b><small>${t('term_clock_detail', { q: cr.quartz, g: cr.glass })} · ${t('term_clock_hint')}</small></div>
-          ${mem.have < mem.need ? `<button class="btn small primary" data-act="term-wire">${icon('plus', 'sm')} ${t('term_wire', { n: mem.need - mem.have })}</button>` : ''}
-          ${this.editor ? `<button class="btn small" data-act="term-install">${t('term_install')}</button>` : ''}
-        </div>`;
-      body = `<canvas class="term-screen" id="term-screen" width="${CHIP8_W * 4}" height="${CHIP8_H * 4}"></canvas>
-        <div class="lbl">${state}</div>
-        ${parts}
-        <div class="term-btns">
-          <button class="btn small ${b.run ? '' : 'primary'}" data-act="term-run">${b.run ? '⏸ ' + t('pause') : '▶ ' + t('term_start')}</button>
-          <button class="btn small" data-act="term-reset">${icon('rotate', 'sm')} ${t('term_reset')}</button>
-          <button class="btn small" data-act="term-edit">✎ ${t('term_program')}</button>
-          <button class="btn small ${b.trace ? 'primary' : ''}" data-act="term-trace">${t('term_trace')}</button>
-          <button class="btn small" data-act="term-step" ${b.run ? 'disabled' : ''}>${t('term_step')}</button>
+      const hz = this.sim.terminalHz(b);
+      const ctl = (act: string, ic: Parameters<typeof icon>[0], label: string, cls = '', extra = '') => `<button class="tc ${cls}" data-act="${act}" ${extra}>${icon(ic)}<span>${label}</span></button>`;
+      body = `<div class="term-crt ${led}">
+          <div class="term-crt-head"><i class="term-led ${led}"></i><b>${state}</b><span>${hz} Hz</span></div>
+          <div class="term-glass"><canvas class="term-screen" id="term-screen" width="${CHIP8_W * 4}" height="${CHIP8_H * 4}"></canvas></div>
         </div>
+        <div class="term-ctl">
+          ${ctl('term-run', b.run ? 'pause' : 'play', b.run ? t('pause') : t('term_start'), b.run ? 'on' : 'go')}
+          ${ctl('term-reset', 'rotate', t('term_reset'))}
+          ${ctl('term-edit', 'pencil', t('term_program'))}
+          ${ctl('term-trace', 'scan', t('term_trace'), b.trace ? 'on' : '')}
+          ${ctl('term-step', 'chevron', t('term_step'), 'step', b.run ? 'disabled' : '')}
+        </div>
+        <div class="term-stats">
+          <div class="ts ${mem.have < mem.need ? 'bad' : ''}"><small>${itemImg('circuit', 'icon xs')} ${t('term_ram')}</small><b>${mem.have} B</b><em class="clamp2" data-more>${t('term_ram_detail', { c: mem.cells, k: mem.banks, b: mem.need })}</em></div>
+          <div class="ts ${crystals ? '' : 'bad'}"><small>${itemImg('quartz', 'icon xs')} ${t('term_clock')}</small><b>${hz} Hz</b><em class="clamp2" data-more>${t('term_clock_detail', { q: cr.quartz, g: cr.glass })} · ${t('term_clock_hint')}</em></div>
+        </div>
+        ${mem.have < mem.need || this.editor ? `<div class="term-btns">${mem.have < mem.need ? `<button class="btn small primary" data-act="term-wire">${icon('plus', 'sm')} ${t('term_wire', { n: mem.need - mem.have })}</button>` : ''}${this.editor ? `<button class="btn small" data-act="term-install">${t('term_install')}</button>` : ''}</div>` : ''}
+        <div class="lbl">CPU</div>
         <div class="cpu-state" id="cpu-state">${cpuStateHtml(this.sim, b)}</div>
-        <div class="keypad">${keys.map((k) => `<button class="key" data-key="${parseInt(k, 16)}">${k}</button>`).join('')}</div>
-        <p class="save-hint">${t('term_keys_hint')}${switches.length ? ` · ${t('term_switches', { n: switches.length })}` : ''}</p>
-        <div class="dirs"><span class="lbl">${t('term_pixel_item')}</span>${items.map((k) => `<button class="chip ${(b.recipe ?? 'copper_wire') === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon xs')}</button>`).join('')}</div>
-        <p class="save-hint">${t('term_display_hint')}</p>
-        <button class="btn small" data-act="term-display">${icon('blueprint', 'sm')} ${t('term_display_bp')}</button>`;
+        <div class="lbl">${t('term_keys')}</div>
+        <div class="term-io">
+          <div class="keypad">${keys.map((k) => `<button class="key" data-key="${parseInt(k, 16)}">${k}</button>`).join('')}</div>
+          <div class="term-side">
+            <small>${t('term_pixel_item')}</small>
+            <div class="term-pix">${items.map((k) => `<button class="${(b.recipe ?? 'copper_wire') === k ? 'active' : ''}" data-filter="${k}" title="${tItem(k)}">${itemImg(k, 'icon sm')}</button>`).join('')}</div>
+            <button class="btn small" data-act="term-display">${icon('blueprint', 'sm')} ${t('term_display_bp')}</button>
+          </div>
+        </div>
+        <p class="save-hint">${t('term_keys_hint')}${switches.length ? ` · ${t('term_switches', { n: switches.length })}` : ''} ${t('term_display_hint')}</p>`;
     } else if (b.type === 'register' || b.type === 'adder' || b.type === 'subtractor' || b.type === 'multiplier' || b.type === 'divider') {
       const val = b.value ?? 0;
       const held = b.recipe ? itemImg(b.recipe as ItemId, 'icon xs') : '';
@@ -2138,7 +2151,7 @@ export class Hud {
         const tm = this.sim.keyboardTerminal(b);
         const rows = ['1234567890', 'QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM.:/'];
         const keyBtn = (ch: string) => `<button class="kb" data-kbc="${ch.charCodeAt(0)}">${ch}</button>`;
-        body = `<div class="lbl">${tm ? `<span class="okline">● ${t('kb_linked')}</span>` : `<span class="bad">○ ${t('kb_unlinked')}</span>`}</div>
+        body = `<div class="kb-status ${tm ? 'on' : 'off'}"><i class="term-led ${tm ? 'run' : 'err'}"></i><span>${tm ? t('kb_linked') : t('kb_unlinked')}</span></div>
           <div class="kbd">${rows.map((r) => `<div class="kbrow">${[...r].map(keyBtn).join('')}</div>`).join('')}
             <div class="kbrow"><button class="kb wide" data-kbc="8">⌫</button><button class="kb space" data-kbc="32">${t('kb_space')}</button><button class="kb wide" data-kbc="13">↵</button></div>
           </div>
@@ -2409,6 +2422,7 @@ export class Hud {
 
   showInfo(b: Building) {
     const def = BUILDINGS[b.type];
+    this.info.classList.toggle('console', b.type === 'terminal' || b.type === 'keyboard');
     this.info.innerHTML = `
       <div class="info-head">
         <img src="${buildingUrl(b.type)}" alt="" draggable="false" data-building="${b.type}" title="${t('bp_title')}">
