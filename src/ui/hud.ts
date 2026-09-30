@@ -4,7 +4,7 @@ import { fullscreenAvailable, toggleFullscreen } from './fullscreen';
 import { MenuVideo } from './menuVideo';
 import { storyVideoHtml, wireStoryVideos } from './storyVideo';
 import { EXAMPLES } from '../game/examples';
-import { RADIO_QUEUE, RADIO_RANGE, SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { BATTERY_RATE, TUNNEL_RANGE, RADIO_QUEUE, RADIO_RANGE, SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -1978,7 +1978,12 @@ export class Hud {
         <p class="save-hint clamp2" data-more>${t('mast_hint')}</p>`;
     } else if (b.type === 'battery') {
       const frac = Math.min(1, (b.value ?? 0) / BATTERY_CAP);
-      body = `<div class="lbl">${t('battery_charge')} ${Math.round(b.value ?? 0)} / ${BATTERY_CAP}</div><div class="pbar big"><div class="pfill" style="width:${frac * 100}%"></div></div><p class="save-hint">${t('battery_hint')}</p>`;
+      const v = Math.round(b.value ?? 0);
+      body = `<div class="bt-hero ${frac < 0.15 ? 'low' : frac > 0.98 ? 'full' : ''}">
+          <span class="bt-cell"><i style="height:${frac * 100}%"></i><b>${Math.round(frac * 100)}%</b></span>
+          <span class="bt-text"><small>${t('battery_charge')}</small><b>${v}<span> / ${BATTERY_CAP}</span></b><em>${t('bt_lasts', { s: Math.floor(v / BATTERY_RATE), p: BATTERY_RATE })}</em></span>
+        </div>
+        <p class="save-hint clamp2" data-more>${t('battery_hint')}</p>`;
     } else if (b.type === 'wind') {
       const w = this.sim.windFactor();
       body = `${statusLine()}<div class="lbl">${t('wind_now', { p: Math.round(w * 100), w: Math.round(-BUILDINGS.wind.power * this.sim.factor('power') * w) })}</div><div class="pbar big"><div class="pfill" style="width:${Math.min(100, w * 100)}%"></div></div><p class="save-hint">${t('wind_hint')}</p>`;
@@ -2054,7 +2059,14 @@ export class Hud {
         ${factor}
         <p class="save-hint clamp2" data-more>${t(`arith_${b.type}` as 'arith_register')}</p>${dirPicker}`;
     } else if (b.type === 'tunnel') {
-      body = `${statusLine()}${dirPicker}`;
+      const mate = b.pair != null ? st.buildings.find((x) => x.id === b.pair) : undefined;
+      const dist = mate ? Math.abs(mate.x - b.x) + Math.abs(mate.y - b.y) - 1 : 0;
+      const end = (exit: boolean, here: boolean) => `<span class="tn-end ${here ? 'here' : ''} ${mate || here ? '' : 'missing'}"><img src="${buildingUrl('tunnel')}" alt=""><small>${exit ? t('tn_exit') : t('tn_entry')}</small>${here ? `<em>${t('tn_here')}</em>` : ''}</span>`;
+      body = `${statusLine()}<div class="tn-hero ${mate ? 'paired' : ''}">
+          ${end(false, !b.exit)}
+          <span class="tn-under"><i></i><b>${mate ? t('tn_tiles', { n: dist }) : t('tn_none')}</b><small>${t('tn_max', { n: TUNNEL_RANGE })}</small></span>
+          ${end(true, !!b.exit)}
+        </div>${dirPicker}`;
     } else if (def.kind === 'logic') {
       const known = ITEM_ORDER.filter((id) => (st.inventory[id] ?? 0) > 0 || st.stats.produced[id] || RECIPES.some((r) => r.output === id && st.unlockedRecipes.includes(r.id)) || TERRAIN_ITEM[st.terrain[0]] === id || ['iron_ore', 'copper_ore', 'quartz', 'ice', 'oil'].includes(id));
       const picker = (label: string) => `<div class="lbl">${label}</div><div class="recipes"><button class="recipe ${!b.recipe ? 'active' : ''}" data-filter="">${t('any_item')}</button>${known.map((k) => `<button class="recipe ${b.recipe === k ? 'active' : ''}" data-filter="${k}">${itemImg(k, 'icon')}<div class="r-name">${tItem(k)}</div></button>`).join('')}</div>`;
