@@ -2495,3 +2495,47 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .info-panel .recipe.active { border-color: rgba(34, 211, 238, 0.65) !important; background: linear-gradient(180deg, rgba(34, 211, 238, 0.24), rgba(34, 211, 238, 0.06)) !important; box-shadow: 0 0 12px rgba(34, 211, 238, 0.25) !important; }
 .info-panel .recipe .r-name { font-family: var(--disp); font-size: 10px; letter-spacing: 0.06em; text-transform: uppercase; }
 .info-panel .recipe { font-family: var(--disp); font-size: 10.5px; font-weight: 700; letter-spacing: 0.06em; text-transform: uppercase; color: #cbd5e1; line-height: 1.2; }
+
+/* =====================================================================================
+   Light barrier, radio mast and radio bridge in the dock style: a beam that flashes for every
+   item with a big counter; radio waves around the part with the network size, range or the
+   items in the air; mode as a segmented control, channels as keycaps.
+   ===================================================================================== */
+.ls-hero, .rf-hero {
+  position: relative; display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px;
+  background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+}
+.ls-hero > .term-led { position: absolute; top: 10px; right: 12px; }
+.ls-beam { position: relative; flex: none; display: flex; align-items: center; width: 92px; height: 56px; }
+.ls-post { flex: none; width: 10px; height: 44px; border-radius: 4px; background: linear-gradient(180deg, #3b4a60, #1a2230); box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.15), 0 2px 4px rgba(0, 0, 0, 0.6); }
+.ls-post::after { content: ''; display: block; width: 6px; height: 6px; margin: 19px auto 0; border-radius: 50%; background: #ef4444; box-shadow: 0 0 6px #ef4444; }
+.ls-ray { flex: 1; height: 2px; background: linear-gradient(90deg, rgba(239, 68, 68, 0.9), rgba(248, 113, 113, 0.6), rgba(239, 68, 68, 0.9)); box-shadow: 0 0 6px rgba(239, 68, 68, 0.8); animation: lsray 1.6s ease-in-out infinite; }
+@keyframes lsray { 50% { opacity: 0.55; } }
+.ls-hero.hit .ls-ray { height: 4px; background: #fde68a; box-shadow: 0 0 12px #facc15, 0 0 24px rgba(250, 204, 21, 0.6); animation: none; }
+.ls-hero.hit .ls-post::after { background: #facc15; box-shadow: 0 0 8px #facc15; }
+.ls-count { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.ls-count b { font-family: var(--disp); font-size: 30px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
+.ls-count small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; }
+/* radio */
+.rf-waves { position: relative; flex: none; display: grid; place-items: center; width: 64px; height: 64px; }
+.rf-waves img { position: relative; width: 40px; height: 40px; filter: drop-shadow(0 3px 6px rgba(0, 0, 0, 0.6)); }
+.rf-waves i { position: absolute; inset: 14px; border-radius: 50%; border: 2px solid rgba(148, 163, 184, 0.35); opacity: 0; }
+.rf-hero.on .rf-waves i { border-color: rgba(34, 211, 238, 0.8); animation: rfwave 2.4s ease-out infinite; }
+.rf-hero.on .rf-waves i:nth-child(2) { animation-delay: 0.8s; }
+.rf-hero.on .rf-waves i:nth-child(3) { animation-delay: 1.6s; }
+.rf-hero:not(.on) .rf-waves i:first-child { opacity: 1; inset: 6px; border-style: dashed; }
+@keyframes rfwave { 0% { inset: 18px; opacity: 1; } 100% { inset: -6px; opacity: 0; } }
+.rf-hero.rx.on .rf-waves i { animation-direction: reverse; }
+.rf-text, .rf-stat { display: flex; flex-direction: column; gap: 2px; min-width: 0; }
+.rf-text { flex: 1; }
+.rf-text small, .rf-stat small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.14em; text-transform: uppercase; color: #94a3b8; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.rf-text b, .rf-stat b { font-family: var(--disp); font-size: 28px; line-height: 1; color: #fff; font-variant-numeric: tabular-nums; }
+.rf-hero:not(.on) .rf-text b { color: #64748b; }
+.rf-stat b span { font-size: 15px; color: #94a3b8; }
+.rf-text em, .rf-stat em { font-style: normal; font-size: 11.5px; color: #94a3b8; line-height: 1.3; }
+.rf-stat { flex: none; align-items: flex-end; text-align: right; padding-left: 12px; border-left: 1px solid rgba(148, 163, 184, 0.14); }
+.rf-bar { display: block; width: 64px; height: 4px; margin-top: 4px; border-radius: 2px; background: rgba(148, 163, 184, 0.2); overflow: hidden; }
+.rf-bar i { display: block; height: 100%; background: var(--accent); box-shadow: 0 0 6px var(--accent); }
+.info-panel .rf-ch { grid-template-columns: repeat(8, 1fr); margin-bottom: 6px; }
+.info-panel .rf-ch .key { height: 34px; font-size: 14px; }
+.info-panel .rf-ch .key.on { background: linear-gradient(180deg, #22d3ee, #0e7490) !important; color: #03141a; box-shadow: 0 3px 0 #064e5f, 0 0 12px rgba(34, 211, 238, 0.45) !important; }

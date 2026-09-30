@@ -4,7 +4,7 @@ import { fullscreenAvailable, toggleFullscreen } from './fullscreen';
 import { MenuVideo } from './menuVideo';
 import { storyVideoHtml, wireStoryVideos } from './storyVideo';
 import { EXAMPLES } from '../game/examples';
-import { SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
+import { RADIO_QUEUE, RADIO_RANGE, SERVICE_RANGE, SERVICE_STOCK, CHALLENGES, CHALLENGE_BY_ID, challengeMedal, PROJECTS, PROJECT_BY_ID, STAR_EFFICIENCY, HALL_SLOT_CAP, isHall, PLANT_FUEL, CRATE_SIZE, itemColor, DEPOT_ROBOTS_MAX, DOCK_CAP, BATTERY_CAP, BUILDINGS, BUILD_GROUPS, BUILD_ORDER, RADIO_CHANNELS, TIMER_PERIODS, ITEM_ORDER, LEVELS, MISSIONS, MIXER_RATIOS, ORE_PER_TILE, RECIPES, RECIPE_BY_ID, SHIP_PARTS, TERRAIN_ITEM, UPGRADES, VALVE_THRESHOLDS, recipesFor } from '../game/data';
 import type { Input, Tool } from '../game/input';
 import { Renderer } from '../game/render';
 import { Sim, type Problem } from '../game/sim';
@@ -1970,7 +1970,12 @@ export class Hud {
     } else if (b.type === 'mast') {
       const net = this.sim.radioNet();
       const n = this.sim.state.buildings.filter((x) => (x.type === 'radio' || x.type === 'mast') && x !== b && net.get(x.id) === net.get(b.id)).length;
-      body = `${statusLine(` · ${t('mast_links', { n })}`)}<p class="save-hint">${t('mast_hint')}</p>`;
+      body = `<div class="rf-hero ${n ? 'on' : ''}">
+          <span class="rf-waves"><i></i><i></i><i></i><img src="${buildingUrl('mast')}" alt=""></span>
+          <span class="rf-text"><small>${t('rf_network')}</small><b>${n}</b><em>${t('mast_links', { n })}</em></span>
+          <span class="rf-stat"><small>${t('rf_range')}</small><b>${RADIO_RANGE}</b><em>${t('rf_tiles')}</em></span>
+        </div>
+        <p class="save-hint clamp2" data-more>${t('mast_hint')}</p>`;
     } else if (b.type === 'battery') {
       const frac = Math.min(1, (b.value ?? 0) / BATTERY_CAP);
       body = `<div class="lbl">${t('battery_charge')} ${Math.round(b.value ?? 0)} / ${BATTERY_CAP}</div><div class="pbar big"><div class="pfill" style="width:${frac * 100}%"></div></div><p class="save-hint">${t('battery_hint')}</p>`;
@@ -2151,16 +2156,28 @@ export class Hud {
           <div class="seg">${TIMER_PERIODS.map((p) => `<button class="${period === p ? 'on' : ''}" data-threshold="${p}">${p} s</button>`).join('')}</div>
           <p class="save-hint clamp2" data-more>${t('timer_hint')}</p>${dirPicker}`;
       } else if (b.type === 'sensor') {
-        body = `${statusLine(` · ${b.acc ?? 0} ${t('sensor_count')}`)}<p class="save-hint">${t('sensor_hint')}</p>${dirPicker}`;
+        const hit = (b.timer ?? 0) > 0;
+        body = `<div class="ls-hero ${hit ? 'hit' : ''}">
+            <span class="ls-beam"><i class="ls-post"></i><i class="ls-ray"></i><i class="ls-post"></i></span>
+            <span class="ls-count"><b>${b.acc ?? 0}</b><small>${t('sensor_count')}</small></span>
+            <i class="term-led ${hit ? 'run' : 'pause'}"></i>
+          </div>
+          <p class="save-hint clamp2" data-more>${t('sensor_hint')}</p>${dirPicker}`;
       } else if (b.type === 'radio') {
         const ch = b.threshold ?? 1, rx = b.mode === 'rx';
         const inFlight = this.sim.radioQueue(ch).length;
         const net = this.sim.radioNet();
         const peers = this.sim.state.buildings.filter((x) => x.type === 'radio' && x !== b && !x.site && (x.threshold ?? 1) === ch && x.mode !== b.mode && net.get(x.id) === net.get(b.id)).length;
-        body = `${statusLine(` · ${t('radio_inflight', { n: inFlight })} · ${t(rx ? 'radio_hears' : 'radio_reaches', { n: peers })}`)}
-          <div class="dirs"><span class="lbl">${t('radio_mode')}</span><button class="chip ${rx ? '' : 'active'}" data-mode="tx">${t('radio_tx')}</button><button class="chip ${rx ? 'active' : ''}" data-mode="rx">${t('radio_rx')}</button></div>
-          <div class="dirs wrap"><span class="lbl">${t('radio_channel')}</span>${Array.from({ length: RADIO_CHANNELS }, (_, i) => i + 1).map((c) => `<button class="chip ${ch === c ? 'active' : ''}" data-threshold="${c}">${c}</button>`).join('')}</div>
-          <p class="save-hint">${t('radio_hint')}</p>${dirPicker}`;
+        body = `<div class="rf-hero ${peers ? 'on' : ''} ${rx ? 'rx' : 'tx'}">
+            <span class="rf-waves"><i></i><i></i><i></i><img src="${buildingUrl('radio')}" alt=""></span>
+            <span class="rf-text"><small>${rx ? t('radio_rx') : t('radio_tx')} · ${t('radio_channel')} ${ch}</small><b>${peers}</b><em>${t(rx ? 'radio_hears' : 'radio_reaches', { n: peers })}</em></span>
+            <span class="rf-stat"><small>${t('rf_air')}</small><b>${inFlight}<span>/${RADIO_QUEUE}</span></b><span class="rf-bar"><i style="width:${Math.round((inFlight / RADIO_QUEUE) * 100)}%"></i></span></span>
+          </div>
+          <div class="lbl">${t('radio_mode')}</div>
+          <div class="seg"><button class="${rx ? '' : 'on'}" data-mode="tx">${t('radio_tx')}</button><button class="${rx ? 'on' : ''}" data-mode="rx">${t('radio_rx')}</button></div>
+          <div class="lbl">${t('radio_channel')}</div>
+          <div class="keypad rf-ch">${Array.from({ length: RADIO_CHANNELS }, (_, i) => i + 1).map((c) => `<button class="key ${ch === c ? 'on' : ''}" data-threshold="${c}">${c}</button>`).join('')}</div>
+          <p class="save-hint clamp2" data-more>${t('radio_hint')}</p>${dirPicker}`;
       } else if (b.type === 'keyboard') {
         const tm = this.sim.keyboardTerminal(b);
         const rows = ['1234567890', 'QWERTYUIOP', 'ASDFGHJKL', 'ZXCVBNM.:/'];
