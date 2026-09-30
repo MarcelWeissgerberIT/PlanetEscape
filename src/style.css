@@ -2958,3 +2958,43 @@ img[data-item], img[data-building] { -webkit-touch-callout: none; -webkit-user-s
 .cr-part em { position: absolute; top: 6px; right: 6px; color: var(--ok); }
 .cr-part em svg { width: 14px; height: 14px; }
 .info-panel .cr-print span { white-space: normal; text-align: center; line-height: 1.15; }
+
+/* =====================================================================================
+   Wind turbine and generator: a turning rotor or a fuel tank, the output, a gauge, and the
+   grid's use against supply.
+   ===================================================================================== */
+.pw-hero { display: flex; align-items: center; gap: 14px; padding: 12px 14px; margin: 4px 0 8px; border-radius: 14px; background: linear-gradient(180deg, #1c2533, #0b1018); border: 1px solid rgba(148, 163, 184, 0.2); box-shadow: 0 10px 24px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.08); }
+.pw-hero.on { border-color: rgba(250, 204, 21, 0.35); }
+.pw-text { flex: 1; display: flex; flex-direction: column; gap: 3px; min-width: 0; }
+.pw-text small, .pw-gauge small { font-family: var(--disp); font-size: 10px; letter-spacing: 0.16em; text-transform: uppercase; color: #94a3b8; }
+.pw-text b { font-family: var(--disp); font-size: 26px; line-height: 1; color: #64748b; }
+.pw-hero.on .pw-text b { color: #fde68a; text-shadow: 0 0 12px rgba(250, 204, 21, 0.5); }
+.pw-text b span { font-size: 13px; color: #94a3b8; text-shadow: none; }
+.pw-text em { display: flex; align-items: center; gap: 6px; font-style: normal; font-size: 11.5px; color: #94a3b8; line-height: 1.3; }
+.pw-text em svg { width: 13px; height: 13px; color: #fbbf24; }
+.pw-gauge { flex: none; display: flex; flex-direction: column; align-items: flex-end; gap: 3px; padding-left: 12px; border-left: 1px solid rgba(148, 163, 184, 0.14); }
+.pw-gauge b { font-family: var(--disp); font-size: 20px; color: #fff; }
+.pw-gauge b span { font-size: 12px; color: #94a3b8; }
+.pw-gauge em { font-style: normal; font-size: 11px; color: #94a3b8; }
+.pw-bar { display: block; width: 64px; height: 4px; border-radius: 2px; background: rgba(148, 163, 184, 0.2); overflow: hidden; }
+.pw-bar i { display: block; height: 100%; background: #facc15; box-shadow: 0 0 6px rgba(250, 204, 21, 0.7); }
+.wt-rotor { position: relative; flex: none; width: 64px; height: 64px; }
+.wt-rotor i { position: absolute; left: 50%; top: 50%; width: 6px; height: 30px; margin-left: -3px; border-radius: 3px 3px 50% 50%; background: linear-gradient(180deg, #e2e8f0, #94a3b8); transform-origin: 50% 0; }
+.wt-rotor i:nth-child(1) { transform: rotate(0deg); }
+.wt-rotor i:nth-child(2) { transform: rotate(120deg); }
+.wt-rotor i:nth-child(3) { transform: rotate(240deg); }
+.wt-rotor b { position: absolute; left: 50%; top: 50%; width: 12px; height: 12px; margin: -6px 0 0 -6px; border-radius: 50%; background: #334155; border: 2px solid #cbd5e1; }
+.pw-hero.on .wt-rotor { animation: wtspin var(--spin) linear infinite; }
+@keyframes wtspin { to { transform: rotate(360deg); } }
+.gn-tank { position: relative; flex: none; display: grid; place-items: center; width: 50px; height: 68px; border-radius: 10px; border: 2px solid rgba(148, 163, 184, 0.4); background: #05080d; overflow: hidden; box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.7); }
+.gn-tank i { position: absolute; left: 0; right: 0; bottom: 0; background: linear-gradient(0deg, rgba(126, 227, 106, 0.55), rgba(126, 227, 106, 0.2)); }
+.gn-tank .icon { position: relative; width: 30px; height: 30px; }
+.pw-hero.on .gn-tank { border-color: rgba(250, 204, 21, 0.55); box-shadow: inset 0 0 12px rgba(0, 0, 0, 0.7), 0 0 14px rgba(250, 204, 21, 0.25); }
+.pw-grid { display: flex; align-items: center; gap: 10px; padding: 8px 12px; margin: 0 0 8px; border-radius: 12px; background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(148, 163, 184, 0.14); }
+.pw-grid small { display: inline-flex; align-items: center; gap: 4px; font-family: var(--disp); font-size: 9.5px; letter-spacing: 0.1em; text-transform: uppercase; color: #94a3b8; white-space: nowrap; }
+.pw-grid small svg { width: 12px; height: 12px; color: #facc15; }
+.pw-grid .pw-bar { flex: 1; width: auto; }
+.pw-grid b { font-family: var(--disp); font-size: 15px; color: #fff; white-space: nowrap; }
+.pw-grid b span { font-size: 11px; color: #94a3b8; }
+.pw-grid.bad { border-color: rgba(248, 113, 113, 0.45); }
+.pw-grid.bad .pw-bar i { background: #f87171; box-shadow: 0 0 6px rgba(248, 113, 113, 0.7); }

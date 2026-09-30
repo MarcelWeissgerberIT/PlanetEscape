@@ -2026,10 +2026,27 @@ export class Hud {
         <p class="save-hint clamp2" data-more>${t('battery_hint')}</p>`;
     } else if (b.type === 'wind') {
       const w = this.sim.windFactor();
-      body = `${statusLine()}<div class="lbl">${t('wind_now', { p: Math.round(w * 100), w: Math.round(-BUILDINGS.wind.power * this.sim.factor('power') * w) })}</div><div class="pbar big"><div class="pfill" style="width:${Math.min(100, w * 100)}%"></div></div><p class="save-hint">${t('wind_hint')}</p>`;
+      const out = Math.round(-BUILDINGS.wind.power * this.sim.factor('power') * w);
+      const storm = st.storm > 0;
+      body = `${statusLine()}<div class="pw-hero ${w > 0.05 ? 'on' : ''}">
+          <span class="wt-rotor" style="--spin:${w > 0.05 ? (2.4 / Math.max(0.2, w)).toFixed(2) : 0}s"><i></i><i></i><i></i><b></b></span>
+          <span class="pw-text"><small>${t('pw_output')}</small><b>+${out}<span> ${t('power')}</span></b><em>${storm ? `${icon('storm', 'sm')} ${t('pw_storm')}` : ''}</em></span>
+          <span class="pw-gauge"><small>${t('pw_wind')}</small><b>${Math.round(w * 100)}%</b><span class="pw-bar"><i style="width:${Math.min(100, w * 100)}%"></i></span></span>
+        </div>
+        ${this.gridPlate()}
+        <p class="save-hint clamp2" data-more>${t('wind_hint')}</p>`;
     } else if (PLANT_FUEL[b.type]) {
-      const fuel = PLANT_FUEL[b.type]!.item;
-      body = `${statusLine()}<div class="bufs"><span class="lbl">${t('fuel_left')}</span><span class="buf">${itemImg(fuel, 'icon sm')}${b.input?.[fuel] ?? 0}</span> <span class="buf">${Math.ceil(b.fuelSeconds ?? 0)}s</span></div>${dirPicker}`;
+      const pf = PLANT_FUEL[b.type]!;
+      const fuel = pf.item, units = b.input?.[fuel] ?? 0, sec = Math.ceil(b.fuelSeconds ?? 0);
+      const running = sec > 0;
+      const out = Math.round(-BUILDINGS[b.type].power * this.sim.factor('power'));
+      const total = sec + units * pf.seconds;
+      body = `${statusLine()}<div class="pw-hero ${running ? 'on' : ''}">
+          <span class="gn-tank"><i style="height:${Math.min(100, (units / 10) * 100)}%"></i>${itemImg(fuel, 'icon')}</span>
+          <span class="pw-text"><small>${t('pw_output')}</small><b>${running ? '+' + out : '0'}<span> ${t('power')}</span></b><em><i class="term-led ${running ? 'run' : 'err'}"></i>${running ? t('pw_burning', { s: sec }) : t('pw_no_fuel')}</em></span>
+          <span class="pw-gauge"><small>${t('fuel_left')}</small><b>${units}<span>×</span></b><em>≈ ${total} s</em></span>
+        </div>
+        ${this.gridPlate()}${dirPicker}`;
     } else if (b.type === 'core') {
       const entries = Object.entries(SHIP_PARTS) as [ItemId, number][];
       const done = entries.filter(([k, n]) => (st.ship[k] ?? 0) >= n).length;
@@ -2436,6 +2453,13 @@ export class Hud {
       } else body = `${statusLine()}${dirPicker}`;
     } else body = dirPicker;
     return body;
+  }
+
+  /** The power grid as a small plate: supply against demand. */
+  private gridPlate(): string {
+    const st = this.sim.state;
+    const ok = st.powerSupply >= st.powerDemand;
+    return `<div class="pw-grid ${ok ? '' : 'bad'}"><small>${icon('bolt', 'sm')} ${t('pw_grid')}</small><span class="pw-bar"><i style="width:${st.powerSupply ? Math.min(100, (st.powerDemand / st.powerSupply) * 100) : 100}%"></i></span><b>${st.powerDemand}<span> / ${st.powerSupply}</span></b></div>`;
   }
 
   /** 64x32 lamps: the display a terminal drives. */
